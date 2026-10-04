@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+  // ===== QUICK EDIT: paste your Discord invite here when it's ready =====
+  window.WELCOME = {
+    discordUrl:   "",   // e.g. "https://discord.gg/abc123". Leave blank and the page shows "invite coming soon"
+    contactEmail: "hello@yourdomain.com",
+    instagramUrl: "https://www.instagram.com/reekthewealthguy"
+  };
+</script>
+<title>You're In | Reek's Credit Mentorship</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#000;--surface:#0c0c0c;--line:#232323;--text:#fff;--muted:#a3a3a3;--dim:#6b6b6b;
+    --head:"Space Grotesk",Inter,system-ui,sans-serif;--body:Inter,system-ui,-apple-system,sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);line-height:1.6;min-height:100vh;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:-30% -40% auto;height:700px;background:radial-gradient(closest-side,rgba(255,255,255,.1),transparent 70%);pointer-events:none;z-index:-1}
+  .wrap{max-width:560px;margin:0 auto;padding:48px 20px 60px;text-align:center}
+  .mark{width:84px;height:84px;border-radius:20px;border:1px solid #333;margin:0 auto 26px;display:block;animation:pop .6s ease}
+  @keyframes pop{0%{transform:scale(.7);opacity:0}100%{transform:none;opacity:1}}
+  .check{display:inline-flex;align-items:center;gap:8px;border:1px solid #333;background:#0d0d0d;border-radius:999px;padding:8px 14px;
+    font:600 .72rem/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:#d4d4d4;margin-bottom:20px}
+  .check svg{width:14px;height:14px;stroke:#fff}
+  h1{font:700 clamp(2.6rem,12vw,4rem)/1 var(--head);letter-spacing:-.045em;margin-bottom:14px}
+  h1 span{color:var(--dim)}
+  .lede{color:var(--muted);font-size:1.05rem;margin-bottom:36px}
+  .steps{list-style:none;text-align:left;display:grid;gap:12px;margin-bottom:28px}
+  .step{display:flex;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px}
+  .num{flex:0 0 40px;height:40px;border-radius:50%;border:1px solid #fff;display:grid;place-items:center;font:700 1rem/1 var(--head)}
+  .step.main .num{background:#fff;color:#000}
+  .step h2{font:700 1.08rem/1.3 var(--head);letter-spacing:-.02em;margin:8px 0 4px}
+  .step p{color:var(--muted);font-size:.93rem}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:14px;background:#fff;color:#000;text-decoration:none;
+    font:700 1.02rem/1 var(--head);padding:18px;border-radius:999px;box-shadow:0 0 22px rgba(255,255,255,.22);min-height:54px}
+  .btn svg{width:20px;height:20px;fill:#000}
+  .pending{margin-top:14px;border:1px dashed #3a3a3a;border-radius:14px;padding:14px;color:#d4d4d4;font-size:.9rem}
+  .pending b{color:#fff}
+  .foot{color:var(--dim);font-size:.82rem}
+  .foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img class="mark" src="data:image/jpeg;base64,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" alt="Reek Wealth Solutions">
+  <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Payment confirmed</div>
+  <h1>You're in. <span>Let's work.</span></h1>
+  <p class="lede">Welcome to Reek's Credit Mentorship. Here's what happens next.</p>
+
+  <ol class="steps">
+    <li class="step">
+      <div class="num">1</div>
+      <div><h2>Check your email</h2><p>Your receipt from Stripe is on the way. Save it for your records.</p></div>
+    </li>
+    <li class="step main">
+      <div class="num">2</div>
+      <div style="flex:1">
+        <h2>Join the private community</h2>
+        <p>This is where the live sessions, Q&amp;A and the 4-Phase Framework live.</p>
+        <div id="discordSlot"></div>
+      </div>
+    </li>
+    <li class="step">
+      <div class="num">3</div>
+      <div><h2>We start your credit repair</h2><p>We'll text you at the number you gave at checkout to get your reports and start your disputes. Keep an eye on your phone.</p></div>
+    </li>
+  </ol>
+
+  <p class="foot">Questions? DM <a id="ig" href="#" target="_blank" rel="noopener">@reekthewealthguy</a></p>
+</div>
+<script>
+(function(){
+  var W = window.WELCOME, slot = document.getElementById('discordSlot');
+  if (W.discordUrl) {
+    slot.innerHTML = '<a class="btn" href="'+W.discordUrl+'" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><path d="M20.3 4.4A19.8 19.8 0 0015.4 3l-.6 1.3a18.4 18.4 0 00-5.6 0L8.6 3a19.7 19.7 0 00-4.9 1.4C.6 9 -.3 13.6.1 18.1a19.9 19.9 0 006 3l1.3-2a12.9 12.9 0 01-2-1l.5-.4a14.2 14.2 0 0012.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.8 19.8 0 006-3c.5-5.2-.8-9.7-3.6-13.7zM8 15.3c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.5 8 10.5s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg>Join the Discord</a>';
+  } else {
+    slot.innerHTML = '<div class="pending"><b>Your invite is coming.</b> We\'re setting up the community right now. You\'ll get your private invite by text and email within 24 hours.</div>';
+  }
+  document.getElementById('ig').href = W.instagramUrl;
+  try { if (window.fbq) fbq('track','Purchase',{value:49,currency:'USD'}); } catch(e){}
+  try { if (window.ttq) ttq.track('CompletePayment',{value:49,currency:'USD'}); } catch(e){}
+})();
+</script>
+</body>
+</html>
