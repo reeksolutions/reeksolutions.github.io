@@ -278,7 +278,7 @@
     <p class="lede reveal">Join the mentorship and get done-for-you credit repair plus the exact playbook to fund yourself.</p>
 
     <div class="video reveal" id="video" role="button" tabindex="0" aria-label="Play intro video">
-      <div class="poster" style="background-image:url('intro-poster.jpg')"></div>
+      <div class="poster" style="background-image:url('intro-poster.jpg?v=4')"></div>
       <div class="play"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></div>
       <div class="label">▶ Watch this first</div>
     </div>
@@ -581,10 +581,7 @@
   var v = document.getElementById('video');
   function play(){
     if (v.dataset.on) return; v.dataset.on = 1;
-    var html;
-    if (C.videoType === 'youtube') html = '<iframe src="https://www.youtube-nocookie.com/embed/'+C.videoSrc+'?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="Intro video"></iframe>';
-    else if (C.videoType === 'vimeo') html = '<iframe src="https://player.vimeo.com/video/'+C.videoSrc+'?autoplay=1&playsinline=1" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="Intro video"></iframe>';
-    else html = '<video src="'+C.videoSrc+'" poster="intro-poster.jpg" controls autoplay playsinline preload="auto"></video>';
+    var html = '<video src="intro.mp4?v=4" poster="intro-poster.jpg?v=4" controls autoplay playsinline preload="auto"></video>';
     v.innerHTML = html; v.style.cursor = 'default';
     try { if (window.fbq) fbq('trackCustom','VideoPlay'); } catch(e){}
   }
