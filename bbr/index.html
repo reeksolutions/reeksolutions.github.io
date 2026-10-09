@@ -59,6 +59,29 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
 .steps li:before{content:counter(s);width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--paper);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
 .steps b{font-weight:800}
 
+
+/* form */
+#start{scroll-margin-top:76px}
+.form{margin-top:18px;display:flex;flex-direction:column;gap:18px}
+.form label{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:15px}
+.form .opt{font-weight:500;color:var(--soft)}
+.form input:not([type=radio]),.form textarea{font:500 17px IT,system-ui,sans-serif;color:var(--ink);background:var(--wash);border:2px solid transparent;border-radius:12px;padding:14px;width:100%}
+.form input:focus,.form textarea:focus{outline:none;border-color:var(--ink);background:#fff}
+.form fieldset{border:0}
+.form legend{font-weight:800;font-size:15px;margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{flex-direction:row;font-weight:500}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips span{display:block;border:2px solid var(--ink);border-radius:999px;padding:9px 15px;font-size:15px;cursor:pointer}
+.chips input:checked+span{background:var(--ink);color:var(--paper)}
+.chips input:focus-visible+span{outline:3px solid var(--ink);outline-offset:3px}
+.hp{position:absolute;left:-9999px;width:1px;height:1px}
+.form button{border:0;cursor:pointer;margin-top:4px;width:100%}
+.form button[disabled]{opacity:.6}
+.msg{font-size:15px;min-height:1.5em}
+.done h3{font-weight:800;font-size:28px;letter-spacing:-.03em}
+.done p{margin-top:8px;color:var(--soft)}
+
 /* footer */
 .more{margin-top:64px;padding:24px 0;border-top:2px solid var(--ink);display:flex;flex-wrap:wrap;gap:10px 24px;font-size:16px}
 .more a{font-weight:800;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:2px}
@@ -75,7 +98,7 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
 
 <div class="top"><div class="page">
  <a class="mark" href="#" aria-label="built by reek, home">bbr.</a>
- <a class="pill" href="https://ig.me/m/builtbyreek">DM "BUILD"</a>
+ <a class="pill" href="#start">Start your build</a>
 </div></div>
 
 <main class="page">
@@ -83,8 +106,8 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
   <h1 class="big" aria-label="built by reek."><span>built</span><span>by</span><span class="end">reek<b></b></span></h1>
   <p class="what">I make the brand, the content, and the systems behind your business.</p>
   <p class="who">Built with AI, checked by me. For barbers, coaches, creators and anyone launching something real.</p>
-  <a class="cta" href="https://ig.me/m/builtbyreek">DM me "BUILD" on Instagram</a>
-  <a class="alt" href="https://ig.me/m/builtbyreek">or ask for a free 15-minute call</a>
+  <a class="cta" href="#start">Start your build</a>
+  <a class="alt" href="https://ig.me/m/builtbyreek">or DM me "BUILD" on Instagram</a>
  </section>
 
  <section class="sec">
@@ -111,11 +134,40 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
  <section class="sec">
   <h2>How it works</h2>
   <ol class="steps">
-   <li><span><b>DM "BUILD"</b> on Instagram.</span></li>
+   <li><span><b>Fill out the form</b> below. Takes a minute.</span></li>
    <li><span><b>15-minute call.</b> You tell me what you're building.</span></li>
    <li><span><b>I build it</b> in your colors and your voice.</span></li>
    <li><span><b>You approve it.</b> One round of changes included.</span></li>
   </ol>
+ </section>
+
+ <section class="sec" id="start">
+  <h2>Start your build</h2>
+  <p class="note">Tell me what you need. I'll reach out within 24 hours.</p>
+  <form id="lead" class="form" novalidate>
+   <label>Your name<input name="name" autocomplete="name" required></label>
+   <label>Your business<input name="business" placeholder="Barbershop, clothing brand, coaching…"></label>
+   <fieldset><legend>What do you need?</legend>
+    <div class="chips">
+     <label><input type="radio" name="need" value="Launch kit"><span>Launch kit</span></label>
+     <label><input type="radio" name="need" value="Content every month"><span>Content every month</span></label>
+     <label><input type="radio" name="need" value="Business on autopilot"><span>Business on autopilot</span></label>
+     <label><input type="radio" name="need" value="Not sure yet"><span>Not sure yet</span></label>
+    </div></fieldset>
+   <fieldset><legend>Rough budget</legend>
+    <div class="chips">
+     <label><input type="radio" name="budget" value="Under $300"><span>Under $300</span></label>
+     <label><input type="radio" name="budget" value="$300–$750"><span>$300–$750</span></label>
+     <label><input type="radio" name="budget" value="$750–$1,500"><span>$750–$1,500</span></label>
+     <label><input type="radio" name="budget" value="$1,500+"><span>$1,500+</span></label>
+    </div></fieldset>
+   <label>Instagram<input name="instagram" placeholder="@yourhandle" autocapitalize="off"></label>
+   <label>Phone or email<input name="contact" autocomplete="email"></label>
+   <label><span>Anything else? <span class="opt">(optional)</span></span><textarea name="details" rows="3"></textarea></label>
+   <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+   <button class="cta" type="submit">Send it</button>
+   <p class="msg" role="status" aria-live="polite"></p>
+  </form>
  </section>
 
  <nav class="more" aria-label="Other Reek brands">
@@ -124,4 +176,26 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
  </nav>
  <p class="foot">A Reek Wealth Solutions brand. Los Angeles.</p>
 </main>
+<script>
+(function(){
+ var f=document.getElementById('lead'), msg=f.querySelector('.msg'), btn=f.querySelector('button');
+ f.addEventListener('submit',function(e){
+  e.preventDefault();
+  var d={}; new FormData(f).forEach(function(v,k){d[k]=v});
+  if(!d.name){msg.textContent='Add your name.';f.name.focus();return}
+  if(!d.contact&&!d.instagram){msg.textContent='Add your Instagram or a phone/email so I can reach you.';return}
+  btn.disabled=true; btn.textContent='Sending…'; msg.textContent='';
+  var slow=setTimeout(function(){msg.textContent='Still sending, waking up the server. Hang tight.'},6000);
+  fetch('https://aria-bot-w6j5.onrender.com/api/lead',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(d)})
+   .then(function(r){return r.json()}).then(function(r){
+     clearTimeout(slow);
+     if(r.ok){f.outerHTML='<div class="done" id="lead"><h3>Got it, '+(d.name.split(' ')[0].replace(/[<>&]/g,''))+'.</h3><p>I\'ll reach out within 24 hours. Want to talk sooner? <a href="https://ig.me/m/builtbyreek">DM me on Instagram</a>.</p></div>'}
+     else{throw new Error(r.error||'')}
+   }).catch(function(err){
+     clearTimeout(slow); btn.disabled=false; btn.textContent='Send it';
+     msg.innerHTML=(err.message||'That didn\'t send.')+' You can also <a href="https://ig.me/m/builtbyreek">DM me "BUILD"</a>.';
+   });
+ });
+})();
+</script>
 </body></html>
