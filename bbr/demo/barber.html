@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fresh Fadez · AI front desk demo</title>
+<meta name="description" content="Text a barbershop's AI front desk. It answers and books for you. A live demo by Built By Reek.">
+<meta property="og:title" content="Text this barbershop's AI. It books you.">
+<meta property="og:description" content="A live demo by built by reek.">
+<meta property="og:image" content="https://reeksolutions.github.io/bbr/og.jpg">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="../favicon.png">
+<style>
+@font-face{font-family:IT;font-weight:800;font-display:swap;src:url(../inter-tight-latin-800-normal.woff2)}
+@font-face{font-family:IT;font-weight:500;font-display:swap;src:url(../inter-tight-latin-500-normal.woff2)}
+:root{--ink:#000;--paper:#fff;--soft:#6b6b6b;--wash:#f1f1f1;--rule:#e4e4e4}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:IT,system-ui,-apple-system,sans-serif;font-weight:500;color:var(--ink);background:var(--paper);display:flex;flex-direction:column;height:100dvh}
+a{color:inherit}
+button,input{font:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.demo{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:var(--ink);color:var(--paper);font-size:13px}
+.demo a{font-weight:800;white-space:nowrap}
+.head{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--rule)}
+.av{width:44px;height:44px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;letter-spacing:-.04em;flex-shrink:0}
+.head b{display:block;font-weight:800;font-size:16px;line-height:1.15}
+.head small{color:var(--soft);font-size:12.5px}
+.feed{flex:1;overflow-y:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:8px;max-width:640px;width:100%;margin:0 auto}
+.b{max-width:80%;padding:10px 14px;border-radius:20px;font-size:15.5px;line-height:1.38;white-space:pre-wrap;word-wrap:break-word;animation:pop .25s ease-out}
+.me{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:6px}
+.ai{align-self:flex-start;background:var(--wash);border-bottom-left-radius:6px}
+.stamp{align-self:center;color:var(--soft);font-size:12px;margin:6px 0}
+.booked{align-self:stretch;border:2.5px solid var(--ink);border-radius:18px;padding:14px 16px;animation:pop .3s ease-out}
+.booked b{font-weight:800;font-size:16px;display:block}
+.booked p{color:#333;font-size:14.5px;margin-top:4px}
+.typing{display:flex;gap:4px;padding:14px}
+.typing i{width:7px;height:7px;border-radius:50%;background:#999;animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.b,.booked{animation:none}.typing i{animation:none}}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:8px 14px;scrollbar-width:none;max-width:640px;width:100%;margin:0 auto}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex-shrink:0;border:2px solid var(--ink);background:var(--paper);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
+form{display:flex;gap:8px;padding:8px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--rule);max-width:640px;width:100%;margin:0 auto}
+form input{flex:1;min-width:0;border:2px solid transparent;background:var(--wash);border-radius:999px;padding:12px 16px;font-size:16px;color:var(--ink)}
+form input:focus{outline:none;border-color:var(--ink);background:var(--paper)}
+form button{border:0;background:var(--ink);color:var(--paper);border-radius:999px;padding:0 18px;font-weight:800;font-size:15px;cursor:pointer}
+form button[disabled]{opacity:.5}
+</style></head><body>
+<div class="demo"><span>Live demo · pretend shop, real AI</span><a href="../#start">Get one for your business</a></div>
+<div class="head"><div class="av">FF</div><div><b>Fresh Fadez Barbershop</b><small>AI front desk · replies instantly</small></div></div>
+<main class="feed" id="feed" aria-live="polite"></main>
+<div class="chips" id="chips">
+ <button type="button">Got any openings today?</button>
+ <button type="button">How much for a fade?</button>
+ <button type="button">Book me a cut + beard Saturday</button>
+ <button type="button">Do y'all cut kids hair?</button>
+</div>
+<form id="f" autocomplete="off"><label for="m" class="sr" style="position:absolute;left:-9999px">Message</label><input id="m" placeholder="Message Fresh Fadez…" maxlength="400"><button id="send">Send</button></form>
+<script>
+(function(){
+ var API='https://aria-bot-w6j5.onrender.com/api/demo-chat';
+ var feed=document.getElementById('feed'), f=document.getElementById('f'), m=document.getElementById('m'), send=document.getElementById('send');
+ var msgs=[], busy=false;
+ function add(cls,text){var d=document.createElement('div');d.className='b '+cls;d.textContent=text;feed.appendChild(d);feed.scrollTop=feed.scrollHeight;return d}
+ function stamp(t){var d=document.createElement('div');d.className='stamp';d.textContent=t;feed.appendChild(d)}
+ function booked(b){var d=document.createElement('div');d.className='booked';
+  d.innerHTML='<b>✅ Appointment booked</b><p></p><p style="color:#6b6b6b;font-size:13px">In a real setup, the shop owner\'s phone just got pinged with this.</p>';
+  d.querySelector('p').textContent=[b.name,b.service,b.when,b.barber?('with '+b.barber):''].filter(Boolean).join(' · ');
+  feed.appendChild(d);feed.scrollTop=feed.scrollHeight}
+ stamp('Today');
+ add('ai',"Hey! 👋 This is Fresh Fadez. Ask me anything or book a cut, I reply instantly.");
+ msgs.push({role:'model',text:"Hey! This is Fresh Fadez. Ask me anything or book a cut, I reply instantly."});
+ function ask(text){
+  if(busy||!text.trim())return; busy=true; send.disabled=true;
+  add('me',text); msgs.push({role:'user',text:text}); m.value='';
+  var t=document.createElement('div');t.className='b ai typing';t.innerHTML='<i></i><i></i><i></i>';feed.appendChild(t);feed.scrollTop=feed.scrollHeight;
+  var wake=setTimeout(function(){stamp('Waking up the demo server, first reply can take ~30s')},7000);
+  fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({demo:'barber',messages:msgs})})
+   .then(function(r){return r.json()}).then(function(r){
+     clearTimeout(wake); t.remove();
+     if(!r.ok) throw new Error(r.error||'');
+     add('ai',r.reply); msgs.push({role:'model',text:r.reply});
+     if(r.booking) booked(r.booking);
+   }).catch(function(e){clearTimeout(wake); t.remove(); add('ai',(e.message||'Connection hiccup.')+' Try that again?');})
+   .finally(function(){busy=false;send.disabled=false;m.focus()});
+ }
+ f.addEventListener('submit',function(e){e.preventDefault();ask(m.value)});
+ document.getElementById('chips').addEventListener('click',function(e){if(e.target.tagName==='BUTTON')ask(e.target.textContent)});
+ // wake the free server as soon as the page opens
+ fetch('https://aria-bot-w6j5.onrender.com/',{mode:'no-cors'}).catch(function(){});
+})();
+</script>
+</body></html>
