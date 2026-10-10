@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>built by reek.</title>
-<meta name="description" content="I build your brand, your content, and the systems behind your business. A Reek Wealth Solutions brand from Los Angeles.">
+<meta name="description" content="AI assistants, websites and content systems for small businesses. Built by Reek in Los Angeles.">
 <meta property="og:title" content="built by reek.">
 <meta property="og:description" content="Brands, content and systems for people building something.">
 <meta property="og:image" content="https://reeksolutions.github.io/bbr/og.jpg">
@@ -87,6 +87,45 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
 .more a{font-weight:800;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:2px}
 .foot{padding:8px 0 48px;color:var(--soft);font-size:13px}
 
+
+/* hero layout */
+.hero{display:grid;gap:28px}
+@media (min-width:900px){.page.wide{max-width:1080px}.hero{grid-template-columns:1.1fr .9fr;align-items:center;gap:56px;padding-top:40px}}
+
+/* live phone demo */
+.phone{justify-self:center;width:min(340px,100%);background:#000;border-radius:44px;padding:12px;box-shadow:0 30px 60px -25px rgba(0,0,0,.45)}
+.screen{background:#fff;border-radius:34px;height:560px;overflow:hidden;display:flex;flex-direction:column}
+.chat-top{display:flex;align-items:center;gap:10px;padding:16px 16px 12px;border-bottom:1px solid var(--rule)}
+.chat-top .av{width:34px;height:34px;border-radius:50%;background:#000;color:#fff;font-weight:800;font-size:11px;letter-spacing:-.05em;display:flex;align-items:center;justify-content:center}
+.chat-top b{display:block;font-weight:800;font-size:15px;line-height:1.1}
+.chat-top small{color:var(--soft);font-size:12px}
+.feed{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:14px 12px;overflow:hidden}
+.b{max-width:82%;padding:10px 13px;border-radius:18px;font-size:14px;line-height:1.35}
+.b.me{align-self:flex-end;background:#000;color:#fff;border-bottom-right-radius:6px}
+.b.bot{align-self:flex-start;background:var(--wash);border-bottom-left-radius:6px}
+.b.ping{align-self:stretch;max-width:none;background:#fff;border:2px solid #000;border-radius:16px;font-weight:800}
+.b.ping span{display:block;font-weight:500;color:var(--soft);font-size:13px;margin-top:2px}
+.voice{display:flex;align-items:center;gap:8px}
+.voice i{display:flex;align-items:center;gap:2px;height:18px}
+.voice i u{display:block;width:3px;border-radius:2px;background:#fff}
+.voice small{font-size:12px;opacity:.75}
+.heard{display:block;font-size:12px;opacity:.7;margin-top:4px}
+.typing{display:flex;gap:4px;padding:13px 14px}
+.typing u{width:7px;height:7px;border-radius:50%;background:#999;animation:blink 1s infinite}
+.typing u:nth-child(2){animation-delay:.15s}.typing u:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.slides{display:flex;gap:6px;margin-top:8px}
+.slides img{width:62px;height:78px;object-fit:cover;border-radius:8px;display:block}
+.demo-note{text-align:center;color:var(--soft);font-size:13px;margin-top:12px}
+.in{animation:pop .35s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.in{animation:none}.typing u{animation:none}}
+
+/* niche callout */
+.niche{margin-top:18px;background:#000;color:#fff;border-radius:22px;padding:22px}
+.niche h3{font-weight:800;font-size:22px;letter-spacing:-.02em}
+.niche p{margin-top:8px;color:#cfcfcf;font-size:16px;max-width:52ch}
+
 /* one load moment */
 @media (prefers-reduced-motion:no-preference){
  .big span{opacity:0;transform:translateY(.25em);animation:up .7s cubic-bezier(.2,.8,.2,1) forwards}
@@ -96,23 +135,34 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
 @media (min-width:640px){.wall img{height:420px}.what{font-size:23px}}
 </style></head><body>
 
-<div class="top"><div class="page">
+<div class="top"><div class="page wide">
  <a class="mark" href="#" aria-label="built by reek, home">bbr.</a>
  <a class="pill" href="#start">Start your build</a>
 </div></div>
 
-<main class="page">
+<main class="page wide">
  <section class="hero">
-  <h1 class="big" aria-label="built by reek."><span>built</span><span>by</span><span class="end">reek<b></b></span></h1>
-  <p class="what">I make the brand, the content, and the systems behind your business.</p>
-  <p class="who">Built with AI, checked by me. For barbers, coaches, creators and anyone launching something real.</p>
-  <a class="cta" href="#start">Start your build</a>
-  <a class="alt" href="https://ig.me/m/builtbyreek">or DM me "BUILD" on Instagram</a>
+  <div>
+   <h1 class="big" aria-label="built by reek."><span>built</span><span>by</span><span class="end">reek<b></b></span></h1>
+   <p class="what">I build AI assistants, websites and content systems for small businesses.</p>
+   <p class="who">This assistant runs my own business. I can build one for yours. Built from my phone in LA.</p>
+   <a class="cta" href="#start">Start your build</a>
+   <a class="alt" href="https://ig.me/m/builtbyreek">or DM me "BUILD" on Instagram</a>
+  </div>
+  <figure>
+   <div class="phone" aria-label="Demo of a business assistant chat">
+    <div class="screen">
+     <div class="chat-top"><div class="av">bbr.</div><div><b>Business assistant</b><small>online</small></div></div>
+     <div class="feed" id="feed" aria-live="off"></div>
+    </div>
+   </div>
+   <figcaption class="demo-note">Demo with sample numbers. Talk to it, it talks back.</figcaption>
+  </figure>
  </section>
 
  <section class="sec">
   <h2>Stuff I built this month</h2>
-  <p class="note">All for my own brand. Swipe through.</p>
+  <p class="note">All for my own brands, made with the same tools I use for clients. Swipe through.</p>
   <div class="wall">
    <figure><img src="work/flyer.jpg" alt="Mentorship flyer listing what members get" loading="lazy" width="272" height="340"><figcaption>Mentorship flyer</figcaption></figure>
    <figure><img src="work/intro.jpg" alt="Intro video cover" loading="lazy" width="191" height="340"><figcaption>Branded intro video</figcaption></figure>
@@ -125,10 +175,12 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
  <section class="sec">
   <h2>What I can build for you</h2>
   <div class="offers">
-   <div class="offer"><h3>Launch kit</h3><p>Your logo and colors, a landing page that takes payments, and a community your customers join after they buy.</p><p class="for">For: anyone starting a paid offer, membership or class.</p></div>
-   <div class="offer"><h3>Content every month</h3><p>Your videos edited in your brand, plus covers, captions, carousels and scripts. You film, I handle the rest.</p><p class="for">For: people who post, or know they should.</p></div>
-   <div class="offer"><h3>Business on autopilot</h3><p>Client forms, a bot that tracks your customers, auto-replies, and a morning text with your numbers.</p><p class="for">For: owners drowning in DMs and paperwork.</p></div>
+   <div class="offer"><h3>An AI assistant for your business</h3><p>Answers your customers' questions, books appointments, tracks your clients, and texts you when something needs you. Works by voice note.</p><p class="for">For: owners drowning in DMs, calls and follow-ups.</p></div>
+   <div class="offer"><h3>Lead forms that ping your phone</h3><p>Someone fills out your form, your phone buzzes with their info. No more leads sitting in an inbox.</p><p class="for">For: anyone who loses customers to slow replies.</p></div>
+   <div class="offer"><h3>A website or link page</h3><p>A clean page in your colors with your services, your work, and a way to book or pay.</p><p class="for">For: businesses that live in their IG bio.</p></div>
+   <div class="offer"><h3>Content every month</h3><p>Videos edited in your brand, plus covers, captions, carousels and ad creatives. You film, I handle the rest.</p><p class="for">For: people who post, or know they should.</p></div>
   </div>
+  <div class="niche"><h3>Run a credit repair business?</h3><p>I built my own: client intake, dispute rounds, results-check reminders and payment pings, all from one chat. I can set up the same for you.</p></div>
  </section>
 
  <section class="sec">
@@ -149,9 +201,10 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
    <label>Your business<input name="business" placeholder="Barbershop, clothing brand, coaching…"></label>
    <fieldset><legend>What do you need?</legend>
     <div class="chips">
-     <label><input type="radio" name="need" value="Launch kit"><span>Launch kit</span></label>
-     <label><input type="radio" name="need" value="Content every month"><span>Content every month</span></label>
-     <label><input type="radio" name="need" value="Business on autopilot"><span>Business on autopilot</span></label>
+     <label><input type="radio" name="need" value="AI assistant"><span>AI assistant</span></label>
+     <label><input type="radio" name="need" value="Lead form + phone pings"><span>Lead form + pings</span></label>
+     <label><input type="radio" name="need" value="Website or link page"><span>Website</span></label>
+     <label><input type="radio" name="need" value="Content every month"><span>Content</span></label>
      <label><input type="radio" name="need" value="Not sure yet"><span>Not sure yet</span></label>
     </div></fieldset>
    <fieldset><legend>Rough budget</legend>
@@ -176,6 +229,33 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset
  </nav>
  <p class="foot">A Reek Wealth Solutions brand. Los Angeles.</p>
 </main>
+<script>
+(function(){
+ var feed=document.getElementById('feed'); if(!feed) return;
+ var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ function wave(){var h=[6,12,16,9,14,7,15,10,5,12,8,14];return '<i>'+h.map(function(x){return '<u style="height:'+x+'px"></u>'}).join('')+'</i>'}
+ var steps=[
+  {c:'me',h:'<span class="voice">&#9654; '+wave()+' <small>0:03</small></span><span class="heard">"How many clients I got?"</span>'},
+  {c:'bot',h:'You got 12 clients. 3 are due for a results check today: Maya, Jordan and Chris.',t:1},
+  {c:'ping',h:'New member joined<span>Jordan just signed up. Active members: 13</span>'},
+  {c:'me',h:'Make me a carousel about paying yourself first'},
+  {c:'bot',h:'Done. 5 slides in your colors, caption included.<div class="slides"><img src="work/carousel.jpg" alt=""><img src="work/result.jpg" alt=""><img src="work/flyer.jpg" alt=""></div>',t:1}
+ ];
+ function add(st){var d=document.createElement('div');d.className='b '+st.c+(reduce?'':' in');d.innerHTML=st.h;feed.appendChild(d);trim();return d}
+ function trim(){while(feed.scrollHeight>feed.clientHeight+2&&feed.children.length>1){feed.removeChild(feed.firstChild)}}
+ if(reduce){steps.forEach(add);return}
+ var i=0;
+ function next(){
+  if(i>=steps.length){setTimeout(function(){feed.innerHTML='';i=0;next()},3500);return}
+  var st=steps[i++];
+  if(st.t){var ty=add({c:'bot typing',h:'<u></u><u></u><u></u>'});setTimeout(function(){feed.removeChild(ty);add(st);setTimeout(next,1600)},1100)}
+  else{add(st);setTimeout(next,st.c==='ping'?2000:1300)}
+ }
+ var started=false;
+ function go(){if(!started){started=true;setTimeout(next,700)}}
+ if('IntersectionObserver' in window){new IntersectionObserver(function(e){if(e[0].isIntersecting)go()}).observe(feed)}else go();
+})();
+</script>
 <script>
 (function(){
  var f=document.getElementById('lead'), msg=f.querySelector('.msg'), btn=f.querySelector('button');
