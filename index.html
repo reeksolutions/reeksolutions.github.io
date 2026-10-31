@@ -26,12 +26,12 @@ window.SITE = {
   handle:      "@reekthewealthguy",
 
   // ---- Prices (placeholders — change to your real prices) ----
-  priceStarter:        "$497",       // one-time setup
-  priceStarterMonthly: "+ $97/mo",
-  priceGrowth:         "$1,497",
-  priceGrowthMonthly:  "+ $197/mo",
-  priceCustom:         "Custom",
-  priceCustomMonthly:  "Quoted after your free call",
+  priceWebsite:        "$497",       // one-time setup
+  priceWebsiteMonthly: "+ $49/mo",    // hosting, updates, support
+  pricePro:            "$997",
+  priceProMonthly:     "+ $97/mo",
+  priceAI:             "$1,497",
+  priceAIMonthly:      "+ $197/mo",
 
   // ---- Contact form (optional) ----
   // Leave "" and the form opens the visitor's email app with their message filled in.
@@ -412,7 +412,7 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
-    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V17h0A2.5 2.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-web" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 6.8h.01M9 6.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M7 13h6M7 16h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol><symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V17h0A2.5 2.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
     <symbol id="i-flow" viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="15" y="14" width="6" height="6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 7h4a3 3 0 0 1 3 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="18" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
@@ -513,21 +513,21 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
 <section class="sec" id="services">
   <div class="wrap">
     <span class="eyebrow rv">What we build</span>
-    <h2 class="rv d1">Your new team that never clocks out.</h2>
-    <p class="sec-sub rv d2">Pick one or stack them together. Every build is set up around how your business already runs.</p>
+    <h2 class="rv d1">A website that books customers. AI that never clocks out.</h2>
+    <p class="sec-sub rv d2">Start with a website that gets you found, then add AI as you grow. Every build is set up around how your business already runs.</p>
 
     <div class="svc-grid">
       <article class="glass spot svc rv">
+        <div class="svc-ic"><svg><use href="#i-web"/></svg></div>
+        <h3>Websites That Get You Booked</h3>
+        <p>A fast, mobile-ready site that shows up on Google and lets customers book you in a few taps. We host it, update it, and handle every change.</p>
+        <div class="tags"><span class="tag">Mobile</span><span class="tag">Online booking</span><span class="tag">Google</span></div>
+      </article>
+      <article class="glass spot svc rv d1">
         <div class="svc-ic"><svg><use href="#i-chat"/></svg></div>
         <h3>AI Chat &amp; Customer Service</h3>
         <p>A smart assistant on your website and DMs that answers questions, handles common requests, and hands off to you when it matters.</p>
         <div class="tags"><span class="tag">Website</span><span class="tag">Instagram DMs</span><span class="tag">SMS</span></div>
-      </article>
-      <article class="glass spot svc rv d1">
-        <div class="svc-ic"><svg><use href="#i-bolt"/></svg></div>
-        <h3>Lead Capture &amp; Instant Follow-Up</h3>
-        <p>Every new lead gets a reply in seconds and a follow-up until they book. No more "sorry, just seeing this."</p>
-        <div class="tags"><span class="tag">Forms</span><span class="tag">Text-back</span><span class="tag">Email</span></div>
       </article>
       <article class="glass spot svc rv d2">
         <div class="svc-ic"><svg><use href="#i-flow"/></svg></div>
@@ -634,54 +634,53 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
   <div class="wrap">
     <div class="center">
       <span class="eyebrow rv">Pricing</span>
-      <h2 class="rv d1">Simple packages. Real results.</h2>
-      <p class="sec-sub rv d2">Start small and add more as you grow. Every package starts with a free call.</p>
+      <h2 class="rv d1">Simple website packages.</h2>
+      <p class="sec-sub rv d2">One setup fee, then a small monthly that covers hosting, updates and support. Every package starts with a free call.</p>
     </div>
     <div class="prices">
       <div class="glass price rv">
-        <h3>Starter</h3>
-        <div class="name">AI Chat Assistant</div>
-        <p class="desc">Never miss a question again.</p>
-        <div class="amt"><small>Starting at</small><strong data-cfg="priceStarter"></strong><span data-cfg="priceStarterMonthly"></span></div>
+        <h3>Website</h3>
+        <div class="name">Get online</div>
+        <p class="desc">Look legit and get found.</p>
+        <div class="amt"><small>Setup</small><strong data-cfg="priceWebsite"></strong><span data-cfg="priceWebsiteMonthly"></span></div>
         <ul>
-          <li><svg><use href="#i-check"/></svg>AI assistant trained on your business</li>
-          <li><svg><use href="#i-check"/></svg>Answers FAQs on your site, 24/7</li>
-          <li><svg><use href="#i-check"/></svg>New leads sent straight to your phone</li>
-          <li><svg><use href="#i-check"/></svg>Setup and testing included</li>
+          <li><svg><use href="#i-check"/></svg>5-page site that works on every phone</li>
+          <li><svg><use href="#i-check"/></svg>Hosting and security included</li>
+          <li><svg><use href="#i-check"/></svg>Small edits every month</li>
+          <li><svg><use href="#i-check"/></svg>Live in about a week</li>
         </ul>
         <a class="btn btn-ghost btn-block" data-book href="#contact">Get Started</a>
       </div>
       <div class="glass price hot rv d1">
         <span class="badge">Most popular</span>
-        <h3>Growth</h3>
-        <div class="name">Lead Machine</div>
-        <p class="desc">Turn more leads into booked customers.</p>
-        <div class="amt"><small>Starting at</small><strong data-cfg="priceGrowth"></strong><span data-cfg="priceGrowthMonthly"></span></div>
+        <h3>Website Pro</h3>
+        <div class="name">Get booked</div>
+        <p class="desc">Turn Google searches into customers.</p>
+        <div class="amt"><small>Setup</small><strong data-cfg="pricePro"></strong><span data-cfg="priceProMonthly"></span></div>
         <ul>
-          <li><svg><use href="#i-check"/></svg>Everything in Starter</li>
-          <li><svg><use href="#i-check"/></svg>Instant text and email follow-up</li>
-          <li><svg><use href="#i-check"/></svg>Books appointments into your calendar</li>
-          <li><svg><use href="#i-check"/></svg>Missed-call text-back</li>
-          <li><svg><use href="#i-check"/></svg>Monthly tune-ups</li>
+          <li><svg><use href="#i-check"/></svg>Everything in Website</li>
+          <li><svg><use href="#i-check"/></svg>Up to 10 pages</li>
+          <li><svg><use href="#i-check"/></svg>Online booking built in</li>
+          <li><svg><use href="#i-check"/></svg>Google Business profile setup</li>
+          <li><svg><use href="#i-check"/></svg>SEO basics so people find you</li>
         </ul>
         <a class="btn btn-primary btn-block" data-book href="#contact">Book a Free Call <svg><use href="#i-arrow"/></svg></a>
       </div>
       <div class="glass price rv d2">
-        <h3>Custom</h3>
-        <div class="name">Full Automation</div>
-        <p class="desc">Your whole back office, on autopilot.</p>
-        <div class="amt"><small>Pricing</small><strong data-cfg="priceCustom"></strong><span data-cfg="priceCustomMonthly"></span></div>
+        <h3>Website + AI</h3>
+        <div class="name">Never miss a customer</div>
+        <p class="desc">Your site answers and books, day or night.</p>
+        <div class="amt"><small>Setup</small><strong data-cfg="priceAI"></strong><span data-cfg="priceAIMonthly"></span></div>
         <ul>
-          <li><svg><use href="#i-check"/></svg>AI receptionist for calls</li>
-          <li><svg><use href="#i-check"/></svg>Custom n8n workflows</li>
-          <li><svg><use href="#i-check"/></svg>Connects all your tools</li>
-          <li><svg><use href="#i-check"/></svg>Custom AI tools and dashboards</li>
-          <li><svg><use href="#i-check"/></svg>Priority support</li>
+          <li><svg><use href="#i-check"/></svg>Everything in Website Pro</li>
+          <li><svg><use href="#i-check"/></svg>AI chat that answers and books 24/7</li>
+          <li><svg><use href="#i-check"/></svg>Missed-call text-back</li>
+          <li><svg><use href="#i-check"/></svg>Monthly tune-ups</li>
         </ul>
-        <a class="btn btn-ghost btn-block" data-book href="#contact">Let's Talk</a>
+        <a class="btn btn-ghost btn-block" data-book href="#contact">Get Started</a>
       </div>
     </div>
-    <p class="price-note">Not sure which fits? Book a free call and we'll tell you honestly.</p>
+    <p class="price-note">Add-ons for any package: AI Receptionist for phone calls, automations, more chat channels, and custom builds. Not sure which fits? Book a free call and we'll tell you honestly.</p>
   </div>
 </section>
 
@@ -728,8 +727,8 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
           <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@business.com" required></div>
           <div class="field"><label>What do you need help with?</label>
             <div class="needs">
+              <label><input type="checkbox" name="needs" value="Website"><span>Website</span></label>
               <label><input type="checkbox" name="needs" value="AI chatbot"><span>AI chatbot</span></label>
-              <label><input type="checkbox" name="needs" value="Lead follow-up"><span>Lead follow-up</span></label>
               <label><input type="checkbox" name="needs" value="AI receptionist / booking"><span>AI receptionist</span></label>
               <label><input type="checkbox" name="needs" value="Automation"><span>Automation</span></label>
               <label><input type="checkbox" name="needs" value="Not sure yet"><span>Not sure yet</span></label>

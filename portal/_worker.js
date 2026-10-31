@@ -95,10 +95,12 @@ async function ensureSchema(env) {
 const CALL_OUTCOMES_SQL = OUTCOMES.map((o) => `'${o}'`).join(',');   // real dials only (not status edits)
 const DEFAULT_COMMISSION_PCT = 20;
 const PACKAGES = [
-  { key: 'starter', name: 'Starter — AI Chat Assistant', amount: 497 },
-  { key: 'growth', name: 'Growth — Lead Machine', amount: 1497 },
+  { key: 'website', name: 'Website', amount: 497 },
+  { key: 'website-pro', name: 'Website Pro', amount: 997 },
+  { key: 'website-ai', name: 'Website + AI', amount: 1497 },
   { key: 'custom', name: 'Custom — Full Automation', amount: 5000 },
   // Upsells / add-ons (log each as its own deal on the client's lead page)
+  { key: 'addon-ai-chat', name: 'Add-on — AI chat', amount: 997 },
   { key: 'addon-receptionist', name: 'Add-on — AI Receptionist', amount: 1997 },
   { key: 'addon-automation', name: 'Add-on — Extra automation', amount: 997 },
   { key: 'addon-channel', name: 'Add-on — Extra chat channel', amount: 497 },
@@ -126,9 +128,9 @@ Can I text it to this number so you can take a look?
 
 [Listen. Write what they say in Notes.]` },
   { kind: 'step', title: 'What we do', body:
-`That's exactly what we fix. Besides the website, we set up an AI assistant that answers every call, text and DM in seconds, day or night, answers the usual questions like prices and hours, and books people straight into your calendar.
+`That's exactly what we fix. We build you a clean website that shows up when people Google you, works on phones, and lets customers book you right from the site. We host it, keep it updated, and handle any changes, so you never have to touch it.
 
-So when you're with a customer, you're not losing the next one.` },
+If you're missing calls or DMs, we can also add an AI assistant that answers questions and books people for you, day or night.` },
   { kind: 'step', title: 'Book the call', body:
 `The best next step is a quick 20-minute call with Marquise, our founder. He'll walk you through the demo and show you what it'd look like for {business}. No pressure.
 
@@ -136,11 +138,11 @@ Does tomorrow morning or tomorrow afternoon work better?
 
 [Lock a day and time → tap Booked and put the time in.]` },
   { kind: 'objection', title: '"How much is it?"', body:
-`Totally fair. Packages start at $497 to set up, plus a small monthly for hosting and support. Exact price depends on what you need, and Marquise lays it all out on the call so there are no surprises.
+`Totally fair. Websites start at $497 to set up, plus a small monthly for hosting, updates and support. Exact price depends on what you need, and Marquise lays it all out on the call so there are no surprises.
 
 Want me to grab you a time?` },
   { kind: 'objection', title: '"I already have a website"', body:
-`Love that. This isn't really about the website. It's about the calls and messages you miss while you're working. The AI answers and books for you 24/7. Worth 20 minutes to see it?` },
+`Love that. Is it getting you booked? Ours is built to show up on Google and get people to book, and we handle every update for you. Take a look at the preview we made and compare. Worth 20 minutes?` },
   { kind: 'objection', title: '"Just send me info"', body:
 `For sure, I'll text you the demo right now. The info only makes sense once you see it set up for {business}, so let's put 20 minutes on the calendar too. What's better, morning or afternoon?` },
   { kind: 'objection', title: '"I\'m busy right now"', body:
@@ -149,8 +151,8 @@ Want me to grab you a time?` },
 [Tap Callback and set the time.]` },
   { kind: 'objection', title: '"Not interested"', body:
 `No problem at all. Can I ask: is it the timing, or you just don't see a need for it? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
-  { kind: 'objection', title: '"Is this a robot / AI thing weird?"', body:
-`Ha, I'm a real person! The AI only handles the repetitive stuff, like "are you open?" and booking. It's trained to sound like your best front-desk person, and anything important comes straight to you.` },
+  { kind: 'objection', title: '"Is this a robot?"', body:
+`Ha, I'm a real person! The website is built by our team. If you add the AI assistant later, it only handles the repetitive stuff like "are you open?" and booking, and anything important comes straight to you.` },
   { kind: 'step', title: 'Voicemail', body:
 `Hey {owner_first}, it's {rep_first} with Reekon Systems. We built a free website preview for {business} and I'd love to send it over. I'll shoot you a text with the link. Talk soon!
 
