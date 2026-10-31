@@ -97,7 +97,11 @@ const DEFAULT_COMMISSION_PCT = 20;
 const PACKAGES = [
   { key: 'starter', name: 'Starter — AI Chat Assistant', amount: 497 },
   { key: 'growth', name: 'Growth — Lead Machine', amount: 1497 },
-  { key: 'custom', name: 'Custom — Full Automation', amount: null },
+  { key: 'custom', name: 'Custom — Full Automation', amount: 5000 },
+  // Upsells / add-ons (log each as its own deal on the client's lead page)
+  { key: 'addon-receptionist', name: 'Add-on — AI Receptionist', amount: 1997 },
+  { key: 'addon-automation', name: 'Add-on — Extra automation', amount: 997 },
+  { key: 'addon-channel', name: 'Add-on — Extra chat channel', amount: 497 },
 ];
 
 const DEFAULT_SCRIPT = [
