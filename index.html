@@ -26,12 +26,12 @@ window.SITE = {
   handle:      "@reekthewealthguy",
 
   // ---- Prices (placeholders — change to your real prices) ----
-  priceWebsite:        "$497",       // one-time setup
-  priceWebsiteMonthly: "+ $49/mo",    // hosting, updates, support
-  pricePro:            "$997",
-  priceProMonthly:     "+ $97/mo",
-  priceAI:             "$1,497",
-  priceAIMonthly:      "+ $197/mo",
+  priceWebsite:        "$997",       // starting setup price
+  priceWebsiteMonthly: "+ $79/mo",    // hosting, updates, support
+  priceAI:             "$2,997",      // starting setup price
+  priceAIMonthly:      "+ $249/mo",
+  foundingWebsite:     "$497",        // founding offer, first 10 clients
+  foundingAI:          "$1,497",
 
   // ---- Contact form (optional) ----
   // Leave "" and the form opens the visitor's email app with their message filled in.
@@ -309,6 +309,11 @@ h2{margin-top:14px;font-size:clamp(32px,8vw,56px);line-height:1.02;letter-spacin
 .price ul{list-style:none;margin:24px 0 28px;display:grid;gap:12px;flex:1}
 .price li{display:flex;gap:12px;font-size:15px;color:#d6d9e3}
 .price li svg{width:18px;height:18px;flex:none;color:var(--accent);margin-top:2px}
+.prices.two{max-width:820px;margin-left:auto;margin-right:auto}
+.founding{max-width:820px;margin:36px auto 0;padding:16px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-color:rgba(61,220,151,.4)}
+.founding b{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;background:var(--ok,#3ddc97);color:#03140c;padding:5px 10px;border-radius:999px;flex:none}
+.founding span{color:var(--muted);font-size:14.5px;flex:1;min-width:220px}
+.founding strong{color:var(--ink,#fff)}
 .price-note{margin-top:20px;text-align:center;color:var(--dim);font-size:13.5px}
 
 /* ---------- faq ---------- */
@@ -392,6 +397,7 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
   .why{grid-template-columns:repeat(4,1fr)}
   .founder{grid-column:1/-1;grid-template-columns:1fr auto;padding:36px 40px}
   .prices{grid-template-columns:repeat(3,1fr);align-items:stretch}
+  .prices.two{grid-template-columns:repeat(2,1fr)}
   .price.hot{transform:translateY(-12px)}
   .contact-grid{grid-template-columns:1fr 1.1fr;gap:56px}
   .contact{padding:72px 64px}
@@ -634,53 +640,42 @@ footer.site{margin-top:40px;border-top:1px solid var(--line);padding:56px 0 calc
   <div class="wrap">
     <div class="center">
       <span class="eyebrow rv">Pricing</span>
-      <h2 class="rv d1">Simple website packages.</h2>
-      <p class="sec-sub rv d2">One setup fee, then a small monthly that covers hosting, updates and support. Every package starts with a free call.</p>
+      <h2 class="rv d1">Simple, honest pricing.</h2>
+      <p class="sec-sub rv d2">One setup fee, then a monthly that covers hosting, updates and support. Like the preview we built you as it is? That's the starting price. Want more? We'll quote it on your free call.</p>
     </div>
-    <div class="prices">
+    <div class="founding glass rv"><b>Founding offer</b><span>Our first 10 clients get their website for <strong data-cfg="foundingWebsite"></strong> (Website + AI for <strong data-cfg="foundingAI"></strong>) in exchange for a review and letting us show off their site.</span></div>
+    <div class="prices two">
       <div class="glass price rv">
         <h3>Website</h3>
-        <div class="name">Get online</div>
-        <p class="desc">Look legit and get found.</p>
-        <div class="amt"><small>Setup</small><strong data-cfg="priceWebsite"></strong><span data-cfg="priceWebsiteMonthly"></span></div>
+        <div class="name">Get found. Get booked.</div>
+        <p class="desc">The site we built for you, live and working.</p>
+        <div class="amt"><small>Starting at</small><strong data-cfg="priceWebsite"></strong><span data-cfg="priceWebsiteMonthly"></span></div>
         <ul>
-          <li><svg><use href="#i-check"/></svg>5-page site that works on every phone</li>
-          <li><svg><use href="#i-check"/></svg>Hosting and security included</li>
-          <li><svg><use href="#i-check"/></svg>Small edits every month</li>
+          <li><svg><use href="#i-check"/></svg>Your custom site, built before you pay</li>
+          <li><svg><use href="#i-check"/></svg>Looks great on every phone</li>
+          <li><svg><use href="#i-check"/></svg>Hosting, security and updates included</li>
+          <li><svg><use href="#i-check"/></svg>Add booking, more pages, a store and more</li>
           <li><svg><use href="#i-check"/></svg>Live in about a week</li>
-        </ul>
-        <a class="btn btn-ghost btn-block" data-book href="#contact">Get Started</a>
-      </div>
-      <div class="glass price hot rv d1">
-        <span class="badge">Most popular</span>
-        <h3>Website Pro</h3>
-        <div class="name">Get booked</div>
-        <p class="desc">Turn Google searches into customers.</p>
-        <div class="amt"><small>Setup</small><strong data-cfg="pricePro"></strong><span data-cfg="priceProMonthly"></span></div>
-        <ul>
-          <li><svg><use href="#i-check"/></svg>Everything in Website</li>
-          <li><svg><use href="#i-check"/></svg>Up to 10 pages</li>
-          <li><svg><use href="#i-check"/></svg>Online booking built in</li>
-          <li><svg><use href="#i-check"/></svg>Google Business profile setup</li>
-          <li><svg><use href="#i-check"/></svg>SEO basics so people find you</li>
         </ul>
         <a class="btn btn-primary btn-block" data-book href="#contact">Book a Free Call <svg><use href="#i-arrow"/></svg></a>
       </div>
-      <div class="glass price rv d2">
+      <div class="glass price hot rv d1">
+        <span class="badge">Never miss a customer</span>
         <h3>Website + AI</h3>
-        <div class="name">Never miss a customer</div>
-        <p class="desc">Your site answers and books, day or night.</p>
-        <div class="amt"><small>Setup</small><strong data-cfg="priceAI"></strong><span data-cfg="priceAIMonthly"></span></div>
+        <div class="name">Your site answers and books, 24/7.</div>
+        <p class="desc">For busy shops that miss calls and DMs.</p>
+        <div class="amt"><small>Starting at</small><strong data-cfg="priceAI"></strong><span data-cfg="priceAIMonthly"></span></div>
         <ul>
-          <li><svg><use href="#i-check"/></svg>Everything in Website Pro</li>
-          <li><svg><use href="#i-check"/></svg>AI chat that answers and books 24/7</li>
+          <li><svg><use href="#i-check"/></svg>Everything in Website, built around you</li>
+          <li><svg><use href="#i-check"/></svg>AI chat that answers questions and books</li>
           <li><svg><use href="#i-check"/></svg>Missed-call text-back</li>
+          <li><svg><use href="#i-check"/></svg>Online booking and Google setup</li>
           <li><svg><use href="#i-check"/></svg>Monthly tune-ups</li>
         </ul>
-        <a class="btn btn-ghost btn-block" data-book href="#contact">Get Started</a>
+        <a class="btn btn-primary btn-block" data-book href="#contact">Book a Free Call <svg><use href="#i-arrow"/></svg></a>
       </div>
     </div>
-    <p class="price-note">Add-ons for any package: AI Receptionist for phone calls, automations, more chat channels, and custom builds. Not sure which fits? Book a free call and we'll tell you honestly.</p>
+    <p class="price-note">Add-ons for any site: AI Receptionist for phone calls, automations, more chat channels, and custom builds. Every quote is upfront, before you pay anything.</p>
   </div>
 </section>
 

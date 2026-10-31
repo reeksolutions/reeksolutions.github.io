@@ -95,12 +95,14 @@ async function ensureSchema(env) {
 const CALL_OUTCOMES_SQL = OUTCOMES.map((o) => `'${o}'`).join(',');   // real dials only (not status edits)
 const DEFAULT_COMMISSION_PCT = 20;
 const PACKAGES = [
-  { key: 'website', name: 'Website', amount: 497 },
-  { key: 'website-pro', name: 'Website Pro', amount: 997 },
-  { key: 'website-ai', name: 'Website + AI', amount: 1497 },
+  { key: 'website', name: 'Website (base)', amount: 997 },
+  { key: 'website-founding', name: 'Website — founding', amount: 497 },
+  { key: 'website-ai', name: 'Website + AI', amount: 2997 },
+  { key: 'website-ai-founding', name: 'Website + AI — founding', amount: 1497 },
+  { key: 'custom-quote', name: 'Custom quote (type the amount)', amount: null },
   { key: 'custom', name: 'Custom — Full Automation', amount: 5000 },
   // Upsells / add-ons (log each as its own deal on the client's lead page)
-  { key: 'addon-ai-chat', name: 'Add-on — AI chat', amount: 997 },
+  { key: 'addon-ai', name: 'Add-on — Add AI to their site', amount: 1997 },
   { key: 'addon-receptionist', name: 'Add-on — AI Receptionist', amount: 1997 },
   { key: 'addon-automation', name: 'Add-on — Extra automation', amount: 997 },
   { key: 'addon-channel', name: 'Add-on — Extra chat channel', amount: 497 },
@@ -138,7 +140,7 @@ Does tomorrow morning or tomorrow afternoon work better?
 
 [Lock a day and time → tap Booked and put the time in.]` },
   { kind: 'objection', title: '"How much is it?"', body:
-`Totally fair. Websites start at $497 to set up, plus a small monthly for hosting, updates and support. Exact price depends on what you need, and Marquise lays it all out on the call so there are no surprises.
+`Totally fair. Websites start at $997 to launch, plus $79 a month for hosting, updates and support, and we have a founding offer for our first 10 clients. Exact price depends on what you want added, and Marquise lays it all out on the call so there are no surprises.
 
 Want me to grab you a time?` },
   { kind: 'objection', title: '"I already have a website"', body:
