@@ -130,6 +130,9 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS ingest_key_time ON ingest_log(key_id, created_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS saved_views (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, filters TEXT NOT NULL, created_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_next ON leads(next_action_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS studio_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, lead_id INTEGER, theme TEXT, data TEXT NOT NULL DEFAULT '{}',
+      messages TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
   ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
@@ -1363,8 +1366,92 @@ async function api(request, env, url) {
   if (path === '/demos' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
     const lead = await loadLead(env, user, +body.lead_id);
-    const theme = DEMO_THEMES[body.theme] ? body.theme : pickTheme(lead.category);
-    const data = cleanDemo(body.data || {}, lead);
+    return json(await saveDemo(env, user, lead, body.theme, body.data || {}, url.origin));
+  }
+
+  /* ---- Stage 4C: Demo Studio ---- */
+  if (path === '/studio' && method === 'GET') {
+    need(user, 'admin', 'rep', 'dev');
+    const leadId = +url.searchParams.get('lead') || null;
+    let lead = null;
+    if (leadId) lead = await loadLead(env, user, leadId);
+    const d = await env.DB.prepare(`SELECT * FROM studio_drafts WHERE user_id = ? AND ${lead ? 'lead_id = ?' : 'lead_id IS NULL'} ORDER BY updated_at DESC LIMIT 1`).bind(...(lead ? [user.id, lead.id] : [user.id])).first();
+    const demo = lead ? await env.DB.prepare('SELECT slug, theme, data FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first() : null;
+    return json({ lead: lead ? studioLead(lead) : null, draft: d ? draftOut(d) : null,
+      demo: demo ? { url: url.origin + '/d/' + demo.slug, theme: demo.theme, data: JSON.parse(demo.data || '{}') } : null, engine: aiEngine(env) });
+  }
+  if (path === '/studio/leads' && method === 'GET') {
+    need(user, 'admin', 'rep', 'dev');
+    const q = str(url.searchParams.get('q'), 60);
+    const where = ["l.status NOT IN ('dnc','lost')"], args = [];
+    if (user.role === 'rep') { where.push('l.assigned_to = ?'); args.push(user.id); }
+    if (q) { where.push('(l.business LIKE ? OR l.city LIKE ? OR l.category LIKE ?)'); const like = '%' + q.replace(/[%_]/g, '') + '%'; args.push(like, like, like); }
+    const { results } = await env.DB.prepare(`SELECT l.id, l.business, l.city, l.category, l.status, l.demo_url, COALESCE(l.heat,'cold') AS heat FROM leads l WHERE ${where.join(' AND ')}
+      ORDER BY CASE WHEN l.demo_url IS NULL OR l.demo_url = '' THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END, l.id DESC LIMIT 30`).bind(...args).all();
+    return json(results);
+  }
+  if (path === '/studio/chat' && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const message = str(body.message, 6000);
+    if (!message) bad('Type a message first');
+    let d = body.draft_id ? await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ? AND user_id = ?').bind(+body.draft_id, user.id).first() : null;
+    let lead = null;
+    const leadId = d ? d.lead_id : (+body.lead_id || null);
+    if (leadId) lead = await loadLead(env, user, leadId);
+    const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM studio_drafts WHERE user_id = ? AND updated_at > ?').bind(user.id, new Date(Date.now() - 60e3).toISOString()).first();
+    if (recent.n >= 8) throw new HttpError(429, 'Slow down a little. Try again in a minute.');
+    let data = d ? JSON.parse(d.data || '{}') : {}, theme = d ? d.theme : null, messages = d ? JSON.parse(d.messages || '[]') : [];
+    if (!d && lead) {
+      const demo = await env.DB.prepare('SELECT theme, data FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
+      if (demo) { data = JSON.parse(demo.data || '{}'); theme = demo.theme; }
+    }
+    const source = [lead ? leadSource(lead) : '', d ? d.source : '', message].filter(Boolean).join('\n\n').slice(-12000);
+    const out = await studioRun(env, { message, data, theme, lead, source, messages, first: !Object.keys(data).length });
+    const clean = cleanDemo(factCheck(out.data, data, source), lead || {});
+    const newTheme = DEMO_THEMES[out.theme] ? out.theme : theme || pickTheme(clean.category);
+    messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
+    const t = now();
+    const newSource = [d ? d.source : '', message].filter(Boolean).join('\n\n').slice(-12000);
+    if (d) {
+      await env.DB.prepare('UPDATE studio_drafts SET theme = ?, data = ?, messages = ?, source = ?, updated_at = ? WHERE id = ?').bind(newTheme, JSON.stringify(clean), JSON.stringify(messages), newSource, t, d.id).run();
+    } else {
+      const r = await env.DB.prepare('INSERT INTO studio_drafts (user_id, lead_id, theme, data, messages, source, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)').bind(user.id, lead ? lead.id : null, newTheme, JSON.stringify(clean), JSON.stringify(messages), newSource, t, t).run();
+      d = { id: r.meta.last_row_id };
+    }
+    return json({ draft_id: d.id, theme: newTheme, data: clean, reply: out.reply, engine: out.engine, messages });
+  }
+  if ((m = path.match(/^\/studio\/(\d+)$/)) && method === 'PATCH') {
+    need(user, 'admin', 'rep', 'dev');
+    const d = await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ? AND user_id = ?').bind(+m[1], user.id).first();
+    if (!d) throw new HttpError(404, 'Draft not found');
+    const data = JSON.parse(d.data || '{}');
+    if (body.accent !== undefined) data.accent = /^#[0-9a-f]{6}$/i.test(String(body.accent)) ? body.accent : '';
+    const theme = DEMO_THEMES[body.theme] ? body.theme : d.theme;
+    let leadId = d.lead_id;
+    if (body.lead_id) { const lead = await loadLead(env, user, +body.lead_id); leadId = lead.id; }
+    if (body.reset) { await env.DB.prepare('DELETE FROM studio_drafts WHERE id = ?').bind(d.id).run(); return json({ ok: true }); }
+    await env.DB.prepare('UPDATE studio_drafts SET theme = ?, data = ?, lead_id = ?, updated_at = ? WHERE id = ?').bind(theme, JSON.stringify(data), leadId, now(), d.id).run();
+    return json({ ok: true, theme, data, lead_id: leadId });
+  }
+  if ((m = path.match(/^\/studio\/(\d+)\/save$/)) && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const d = await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ? AND user_id = ?').bind(+m[1], user.id).first();
+    if (!d) throw new HttpError(404, 'Draft not found');
+    const leadId = +body.lead_id || d.lead_id;
+    if (!leadId) bad('Pick which lead this demo is for');
+    const lead = await loadLead(env, user, leadId);
+    const res = await saveDemo(env, user, lead, d.theme, JSON.parse(d.data || '{}'), url.origin);
+    await env.DB.prepare('UPDATE studio_drafts SET lead_id = ?, updated_at = ? WHERE id = ?').bind(lead.id, now(), d.id).run();
+    return json({ ...res, lead_id: lead.id, business: lead.business });
+  }
+
+  throw new HttpError(404, 'Not found');
+}
+
+async function saveDemo(env, user, lead, themeIn, dataIn, origin) {
+  {
+    const theme = DEMO_THEMES[themeIn] ? themeIn : pickTheme(lead.category);
+    const data = cleanDemo(dataIn || {}, lead);
     const t = now();
     const existing = await env.DB.prepare('SELECT id, slug FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
     let slug;
@@ -1376,15 +1463,175 @@ async function api(request, env, url) {
       slug = base + '-' + hex(crypto.getRandomValues(new Uint8Array(2)));
       await env.DB.prepare('INSERT INTO demos (slug, lead_id, theme, data, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?)').bind(slug, lead.id, theme, JSON.stringify(data), user.id, t, t).run();
     }
-    const demoUrl = url.origin + '/d/' + slug;
+    const demoUrl = origin + '/d/' + slug;
     const to = ['new', 'demo_needed'].includes(lead.status) ? 'demo_ready' : lead.status;
     const stmts = [env.DB.prepare('UPDATE leads SET demo_url = ?, status = ?, updated_at = ? WHERE id = ?').bind(demoUrl, to, t, lead.id)];
     if (to !== lead.status) stmts.push(env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, 'demo_ready', lead.status, to, t));
     await env.DB.batch(stmts);
-    return json({ ok: true, url: demoUrl, slug, status: to });
+    return { ok: true, url: demoUrl, slug, status: to };
   }
+}
 
-  throw new HttpError(404, 'Not found');
+/* ================= Demo Studio AI (Stage 4C) =================
+   The AI writes the content (copy, services, highlights) and picks a theme;
+   the premium themes above do the design. factCheck() drops any phone, price,
+   rating, hours or link the AI wrote that isn't in what the user gave it. */
+const STUDIO_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+function aiEngine(env) {
+  if (env.ANTHROPIC_API_KEY) return 'claude';
+  if (env.AI || env.STUDIO_FAKE_AI === '1') return 'workers-ai';
+  return 'basic';
+}
+function studioLead(l) { return { id: l.id, business: l.business, owner: l.owner, phone: l.phone, email: l.email, city: l.city, category: l.category, address: l.address, rating: l.rating, link: l.link, website: l.website, demo_url: l.demo_url }; }
+function draftOut(d) { return { id: d.id, lead_id: d.lead_id, theme: d.theme, data: JSON.parse(d.data || '{}'), messages: JSON.parse(d.messages || '[]'), updated_at: d.updated_at }; }
+function leadSource(l) {
+  return ['Business: ' + (l.business || ''), l.category && 'Category: ' + l.category, l.city && 'City: ' + l.city, l.phone && 'Phone: ' + l.phone,
+    l.email && 'Email: ' + l.email, l.address && 'Address: ' + l.address, l.rating && 'Google rating: ' + l.rating].filter(Boolean).join('\n');
+}
+
+const STUDIO_SYSTEM = `You design one-page websites for small local businesses (barbers, nail and lash studios, auto detailers, taco spots, trades...).
+You only write the CONTENT as JSON. A design engine turns it into an animated premium site.
+
+Return ONLY one JSON object, no markdown, shaped like:
+{"reply":"1-2 short friendly sentences telling the user what you built or changed",
+ "theme":"noir|glow|drive",
+ "accent":"#rrggbb or empty",
+ "data":{"name":"","tagline":"","category":"","city":"","about":"","cta":"",
+   "services":[{"name":"","price":"","desc":""}],
+   "highlights":[{"title":"","text":""}],
+   "hours":[{"day":"Monday","time":"9 AM - 7 PM"}],
+   "phone":"","email":"","address":"","rating":"","reviews":"","booking":"","instagram":""}}
+
+Themes: noir = dark, gold, luxe (barbers, tattoo, lounges, pros). glow = soft light pink, elegant (nails, lashes, salons, bakeries, florists). drive = dark with neon lime, bold (auto, food, fitness, trades).
+Writing: tagline max 7 words, punchy, no cliches like "Welcome to". about 2-4 short sentences, warm and plain. 3 highlights with a 2-4 word title and one sentence. Service descriptions max 12 words. cta max 5 words.
+HARD RULES:
+- Never invent facts. Phone, email, address, prices, hours, rating, review counts, years in business, awards, staff names, booking and instagram links must come from the BUSINESS INFO. If not given, leave them empty. Never write a made-up price.
+- If no services are listed, you may list 3-5 typical services for that kind of business with an empty price.
+- Highlights and about must not claim numbers or facts that are not in BUSINESS INFO.
+- When the user asks for a change, change only that and return the full updated data.`;
+
+async function studioRun(env, { message, data, theme, lead, source, messages, first }) {
+  const history = messages.slice(-6).map((x) => (x.role === 'user' ? 'User: ' : 'You: ') + x.text).join('\n');
+  const user = `BUSINESS INFO (source of truth):\n${source}\n\nCURRENT SITE (theme ${theme || 'not picked'}):\n${first ? '(nothing yet, build the first version)' : JSON.stringify({ theme, data })}\n\n${history ? 'RECENT CHAT:\n' + history + '\n\n' : ''}REQUEST:\n${message}`;
+  let text = null, engine = aiEngine(env);
+  try {
+    if (engine === 'claude') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: env.ANTHROPIC_MODEL || 'claude-haiku-5-5', max_tokens: 2500, system: STUDIO_SYSTEM, messages: [{ role: 'user', content: user }] }),
+      });
+      if (!r.ok) throw new Error('claude ' + r.status);
+      const j = await r.json();
+      text = (j.content || []).map((c) => c.text || '').join('');
+    } else if (engine === 'workers-ai') {
+      if (env.STUDIO_FAKE_AI === '1') text = fakeAi(message, data, source);
+      else {
+        const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: STUDIO_SYSTEM }, { role: 'user', content: user }], max_tokens: 2200, temperature: 0.4 }, fmt ? { response_format: { type: 'json_object' } } : {}));
+        let r;
+        try { r = await run(true); } catch { r = await run(false); }
+        text = r && (typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
+      }
+    }
+  } catch (e) { console.error('studio ai', e); text = null; }
+  const parsed = text ? parseJsonLoose(text) : null;
+  if (parsed && parsed.data && typeof parsed.data === 'object') {
+    return { reply: str(parsed.reply, 400) || 'Done. Take a look at the preview.', theme: parsed.theme, data: Object.assign({}, data, parsed.data, { photos: data.photos || [] }, parsed.accent !== undefined ? { accent: parsed.accent } : {}), engine };
+  }
+  // no AI (or it failed): basic builder
+  const b = basicBuild(message, data, lead, source, first);
+  return { ...b, engine: 'basic', reply: (engine === 'basic' ? '' : "The AI didn't answer this time, so I used the basic builder. ") + b.reply };
+}
+
+function parseJsonLoose(t) {
+  t = String(t).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+  try { return JSON.parse(t); } catch { /* fall through */ }
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { /* ignore */ } }
+  return null;
+}
+
+// Keep only facts that really appear in what the user pasted (or the lead record).
+function factCheck(d, prev, source) {
+  d = Object.assign({}, d || {});
+  const src = String(source || '').toLowerCase();
+  const digits = src.replace(/\D/g, '');
+  const prevStr = JSON.stringify(prev || {}).toLowerCase();
+  const has = (v) => !v || src.includes(String(v).toLowerCase()) || prevStr.includes(String(v).toLowerCase());
+  const hasDigits = (v) => { const x = String(v || '').replace(/\D/g, ''); return !x || digits.includes(x) || prevStr.replace(/\D/g, '').includes(x); };
+  if (d.phone && (normPhone(d.phone).length < 10 || !hasDigits(normPhone(d.phone)))) d.phone = '';
+  if (d.email && !has(d.email)) d.email = '';
+  if (d.rating && !has(String(d.rating))) d.rating = '';
+  if (d.reviews && !hasDigits(d.reviews)) d.reviews = '';
+  if (d.address) { const num = (/^\s*(\d+)/.exec(d.address) || [])[1]; if (!num || !hasDigits(num)) d.address = ''; }
+  for (const k of ['booking', 'instagram']) {
+    if (!d[k]) continue;
+    const handle = String(d[k]).toLowerCase().replace(/^https?:\/\/(www\.)?/, '').split(/[/?#]/).filter(Boolean).pop() || '';
+    if (!handle || !(src.includes(handle) || prevStr.includes(handle))) d[k] = '';
+  }
+  // every number in a price / hours line must appear as a whole number in the source
+  const srcNums = new Set((src.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => x.replace(',', '.')).concat((prevStr.match(/\d+(?:[.,]\d+)?/g) || []).map((x) => x.replace(',', '.'))));
+  const numsOk = (v) => (String(v || '').replace(/(\d),(\d{3})/g, '$1$2').match(/\d+(?:[.,]\d+)?/g) || []).every((n) => srcNums.has(n.replace(',', '.')) || srcNums.has(String(parseFloat(n))));
+  if (Array.isArray(d.services)) d.services = d.services.map((x) => (x && x.price && !numsOk(x.price) ? { ...x, price: '' } : x));
+  if (d.reviews && !numsOk(d.reviews)) d.reviews = '';
+  if (Array.isArray(d.hours)) d.hours = d.hours.filter((x) => x && /closed/i.test(x.time || '') ? /closed/.test(src) || prevStr.includes('closed') : numsOk(x && x.time));
+  // marketing copy can't claim awards, rankings or years that the source doesn't mention
+  const CLAIM = /\b(award|awarded|voted|best in|#\s?1|number one|no\. ?1|top[- ]rated|certified|licensed|since \d{4}|\d+\s*(?:\+\s*)?(?:years?|yrs)|\d{2,}\s*(?:\+\s*)?(?:clients|customers|cars|cuts|reviews))\b/i;
+  const claimOk = (t) => { const m = CLAIM.exec(String(t || '')); return !m || src.includes(m[0].toLowerCase()); };
+  const scrub = (t) => String(t || '').split(/(?<=[.!?])\s+/).filter(claimOk).join(' ');
+  if (Array.isArray(d.highlights)) d.highlights = d.highlights.filter((x) => x && claimOk(x.title) && claimOk(x.text));
+  for (const k of ['about', 'tagline', 'cta']) if (d[k]) d[k] = scrub(d[k]);
+  if (Array.isArray(d.services)) d.services = d.services.map((x) => (x && !claimOk(x.desc) ? { ...x, desc: '' } : x));
+  return d;
+}
+
+// Works with no AI at all: pulls facts out of the pasted text and handles simple tweaks.
+function basicBuild(message, data, lead, source, first) {
+  const d = Object.assign({}, data);
+  const m = message.toLowerCase();
+  let theme = null;
+  const notes = [];
+  if (/\b(noir|dark|gold|luxe|black)\b/.test(m)) theme = 'noir';
+  if (/\b(glow|pink|soft|light|girly|elegant)\b/.test(m)) theme = 'glow';
+  if (/\b(drive|lime|neon|bold|loud|sporty)\b/.test(m)) theme = 'drive';
+  const hexm = /#([0-9a-f]{6})\b/i.exec(message); if (hexm) d.accent = '#' + hexm[1];
+  const tl = /(?:tagline|headline)\s*(?:to|:|=)?\s*["“]?([^"\n”]{3,70})/i.exec(message); if (tl) { d.tagline = tl[1].trim(); notes.push('headline'); }
+  const text = message;
+  const phone = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.exec(text); if (phone) d.phone = phone[0].trim();
+  const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(text); if (email) d.email = email[0];
+  const rating = /\b([1-5][.,]\d)\s*(?:★|stars?|\(|\s)\s*\(?([\d,]{1,6})?\)?/i.exec(text); if (rating) { d.rating = rating[1].replace(',', '.'); if (rating[2]) d.reviews = rating[2].replace(/,/g, ''); }
+  const lines = text.split('\n').map((x) => x.trim()).filter(Boolean);
+  const svc = [], hrs = [], about = [];
+  const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const dm = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*[:,-]?\s*(.*)$/i.exec(l);
+    if (dm) { let time = dm[2]; if (!time && lines[i + 1] && /\d|closed/i.test(lines[i + 1])) time = lines[++i]; if (time) hrs.push({ day: DAYS.find((x) => x.startsWith(dm[1].toLowerCase())).replace(/^./, (c) => c.toUpperCase()), time }); continue; }
+    const pm = /\$\s?\d[\d,.]*\+?/.exec(l);
+    if (pm && l.length < 140) { const name = l.slice(0, pm.index).replace(/[\s.:–|-]+$/, '').trim(); const desc = l.slice(pm.index + pm[0].length).replace(/^[\s.:–|-]+/, '').trim(); if (name) svc.push({ name, price: pm[0].replace(/\s+/g, ''), desc }); continue; }
+    if (!d.address && /^\d{2,6}\s+[\w .'-]+\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|way|ln|lane|pl|ct|hwy|pkwy)\b/i.test(l)) { d.address = l; continue; }
+    if (l.length > 70 && !/https?:\/\//.test(l)) about.push(l);
+  }
+  if (svc.length) { d.services = svc.slice(0, 24); notes.push(svc.length + ' services'); }
+  if (hrs.length) { d.hours = hrs; notes.push('hours'); }
+  if (about.length && (first || !d.about)) d.about = about.slice(0, 2).join(' ');
+  if (lead) { d.name = d.name || lead.business; d.category = d.category || lead.category; d.city = d.city || lead.city; d.phone = d.phone || lead.phone; d.address = d.address || lead.address; d.rating = d.rating || lead.rating; }
+  if (!d.name) d.name = (lines[0] || 'Your business').slice(0, 80);
+  if (!d.highlights || !d.highlights.length) d.highlights = [{ title: 'Real local service', text: 'A neighborhood spot that knows its regulars by name.' }, { title: 'Easy to book', text: 'Call or book online in under a minute.' }, { title: 'Done right', text: 'Clean work, fair prices, no surprises.' }];
+  const reply = first ? 'Built a first version from what you pasted' + (notes.length ? ' (' + notes.join(', ') + ')' : '') + '. Tell me what to change.' :
+    theme || hexm || notes.length ? 'Updated ' + [theme && 'the theme', hexm && 'the accent color'].concat(notes).filter(Boolean).join(', ') + '.' :
+      'Without the AI connected I can only change the theme (say dark, pink or bold), the color (#hex), the headline ("headline: ..."), or pull in pasted prices and hours.';
+  return { reply, theme, data: d };
+}
+
+// Local testing only (STUDIO_FAKE_AI=1): acts like a model, including trying to sneak in fake facts.
+function fakeAi(message, data, source) {
+  const name = (/Business: (.*)/.exec(source) || [])[1] || (data.name || 'Test Spot');
+  return '```json\n' + JSON.stringify({ reply: 'Built a ' + (/pink/i.test(message) ? 'Glow' : 'Noir') + ' site for ' + name + '.', theme: /pink/i.test(message) ? 'glow' : 'noir', accent: '',
+    data: { name, tagline: /tagline/i.test(message) ? 'Sharp cuts. Zero wait.' : 'Fresh every single time.', category: data.category || 'Barber', city: data.city || '', about: 'A neighborhood shop that takes its time with every cut.',
+      services: [{ name: 'Fade', price: '$35', desc: 'Clean blend, hot towel finish' }, { name: 'Beard trim', price: '$999', desc: 'Lined up sharp' }],
+      highlights: [{ title: 'No rush', text: 'Every cut gets the time it needs.' }, { title: 'Walk-ins welcome', text: 'Swing by when it works for you.' }, { title: 'Award winning', text: 'Voted best in LA 5 years running.' }],
+      cta: 'Pull up today.', hours: [{ day: 'Monday', time: '9 AM - 7 PM' }], phone: '(555) 123-4567', email: 'fake@made.up', address: '999 Fake St', rating: '5.0', reviews: '999', booking: 'https://booksy.com/made-up', instagram: '' } }) + '\n```';
 }
 
 /* ================= Demo site engine (Stage 3) =================
@@ -1432,6 +1679,8 @@ function cleanDemo(d, lead) {
     about: s(d.about, 1200), phone: s(d.phone, 40) || lead.phone || '', email: cleanEmail(d.email) || lead.email || '',
     address: s(d.address, 200) || lead.address || '', rating: s(d.rating, 12) || lead.rating || '', reviews: s(d.reviews, 12),
     instagram: url(d.instagram), booking: url(d.booking), services, hours, photos, accent,
+    highlights: (Array.isArray(d.highlights) ? d.highlights : []).slice(0, 4).map((x) => ({ title: s(x && x.title, 60), text: s(x && x.text, 220) })).filter((x) => x.title),
+    cta: s(d.cta, 60),
   };
 }
 
@@ -1472,6 +1721,9 @@ function renderDemo(d, themeKey) {
   const accent = d.accent || T.accent;
   const name = d.name || 'Your business';
   const words = name.split(/\s+/).filter(Boolean);
+  // shrink the hero headline so the longest word always fits the screen
+  const longest = Math.max(4, ...words.map((w) => w.length));
+  const fitVw = (88 / (longest * ({ noir: 0.6, glow: 0.6, drive: 0.8 }[themeKey] || 0.6))).toFixed(1);
   const telHref = d.phone ? 'tel:' + String(d.phone).replace(/[^\d+]/g, '') : '';
   const book = d.booking || telHref;
   const bookLabel = d.booking ? 'Book now' : (d.phone ? 'Call to book' : 'Get in touch');
@@ -1585,6 +1837,11 @@ section.block{padding:100px 0}
 .svc h3{font-size:20px;font-weight:800;letter-spacing:-.01em}
 .price{font-family:var(--display);font-size:26px;color:var(--accent);white-space:nowrap;${T.italic ? 'font-style:italic;font-weight:700;' : ''}}
 .svc p{color:var(--muted);margin-top:8px;font-size:15.5px}
+.whys{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.why{position:relative;padding:28px 26px 26px;border-radius:22px;border:1px solid var(--line);background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 12%,var(--surface)),var(--surface) 60%);overflow:hidden}
+.why .num{font-family:var(--display);font-size:46px;line-height:1;color:var(--accent);opacity:.9;${T.italic ? 'font-style:italic;' : ''}}
+.why h3{font-size:20px;font-weight:800;margin:14px 0 6px;letter-spacing:-.01em}
+.why p{color:var(--muted);font-size:15.5px}
 .about{display:grid;gap:40px;align-items:center}
 @media(min-width:860px){.about{grid-template-columns:1.1fr .9fr}}
 .about blockquote{font-family:var(--display);font-size:clamp(30px,4.6vw,52px);line-height:1.05;${T.upper ? 'text-transform:uppercase;' : ''}${T.italic ? 'font-style:italic;font-weight:600;' : ''}}
@@ -1634,7 +1891,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
   <div class="bg" aria-hidden="true">${bgLayer}</div>
   <div class="wrap">
     <div class="meta">${sub ? `<span class="chip">${esc(sub)}</span>` : ''}${ratingChip}</div>
-    <h1 class="disp">${words.map((w, i) => `<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ')}</h1>
+    <h1 class="disp" style="font-size:clamp(34px,min(14vw,${fitVw}vw),168px)">${words.map((w, i) => `<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ')}</h1>
     <p class="lead">${esc(tagline)}</p>
     <div class="cta">
       ${book ? `<a class="btn main" href="${esc(book)}"${d.booking ? ' target="_blank" rel="noopener"' : ''}>${esc(bookLabel)} →</a>` : ''}
@@ -1648,6 +1905,11 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
 ${services.length ? `<section class="block" id="services"><div class="wrap">
   <div class="head reveal"><div><span class="eyebrow">Services</span><h2 class="disp">What we do</h2></div><p>Prices are a starting point. Ask about anything you don't see.</p></div>
   <div class="svcs">${svcHtml}</div>
+</div></section>` : ''}
+
+${(d.highlights || []).length ? `<section class="block" id="why"><div class="wrap">
+  <div class="head reveal"><div><span class="eyebrow">Why ${esc(words[0] || 'us')}</span><h2 class="disp">The difference</h2></div></div>
+  <div class="whys">${d.highlights.map((x, i) => `<article class="why reveal" style="--i:${i}"><span class="num">0${i + 1}</span><h3>${esc(x.title)}</h3>${x.text ? `<p>${esc(x.text)}</p>` : ''}</article>`).join('')}</div>
 </div></section>` : ''}
 
 ${d.about ? `<section class="block" id="about"><div class="wrap about">
@@ -1671,7 +1933,7 @@ ${photos.length ? `<section class="block" style="padding-top:0"><div class="wrap
 </div></section>
 
 <section class="final"><div class="wrap">
-  <h2 class="disp reveal">Ready when<br>you are.</h2>
+  <h2 class="disp reveal">${d.cta ? esc(d.cta) : 'Ready when<br>you are.'}</h2>
   ${book ? `<a class="btn main reveal" style="--i:1" href="${esc(book)}"${d.booking ? ' target="_blank" rel="noopener"' : ''}>${esc(bookLabel)} →</a>` : ''}
 </div></section>
 
@@ -1686,6 +1948,11 @@ ${book ? `<div class="sticky-call"><a class="btn main" href="${esc(book)}"${d.bo
     var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12,rootMargin:'0px 0px -40px 0px'});
     els.forEach(function(el){io.observe(el);});
   } else els.forEach(function(el){el.classList.add('in');});
+  // last safety net: shrink the headline if a long word still doesn't fit (e.g. before the font loads)
+  function fitHero(){var h=document.querySelector('.hero h1');if(!h)return;h.style.fontSize='';var ws=[].slice.call(h.querySelectorAll('.w')),avail=document.documentElement.clientWidth-44,s=parseFloat(getComputedStyle(h).fontSize),n=0;
+    function widest(){return Math.max.apply(null,ws.map(function(w){return w.getBoundingClientRect().width;}).concat([0]));}
+    while(widest()>avail&&s>26&&n++<40){s-=2;h.style.fontSize=s+'px';}}
+  fitHero();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitHero);addEventListener('resize',fitHero);
   // today's hours + open now
   var list=document.getElementById('hours'); if(!list) return;
   var days=['sun','mon','tue','wed','thu','fri','sat'], now=new Date(), today=days[now.getDay()];
@@ -1737,6 +2004,20 @@ export default {
         console.error(e);
         return withDemoHeaders(new Response('<!doctype html><meta charset=utf-8><title>Preview unavailable</title><p style="font-family:system-ui;padding:40px">This preview is not available right now.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
       }
+    }
+    const pv = url.pathname.match(/^\/p\/(\d{1,9})$/);
+    if (pv && request.method === 'GET') {
+      try {
+        await ensureSchema(env);
+        const viewer = await getUser(request, env);
+        if (!viewer) return new Response('Log in to the portal to see previews.', { status: 401 });
+        const d = await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ?').bind(+pv[1]).first();
+        if (!d || (d.user_id !== viewer.id && viewer.role !== 'admin')) return new Response('Not found', { status: 404 });
+        const data = cleanDemo(JSON.parse(d.data || '{}'), {});
+        const r = withDemoHeaders(new Response(renderDemo(data, DEMO_THEMES[d.theme] ? d.theme : 'noir'), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }));
+        r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
+        return r;
+      } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
     }
     if (url.pathname === '/api/ingest') {
       try {

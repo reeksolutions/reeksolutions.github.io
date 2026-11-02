@@ -137,24 +137,24 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['team', 'Team'], ['demos', 'Demos'], ['more', 'More']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['account', 'Account']];
-    return [['demos', 'Demo Queue'], ['account', 'Account']];
+    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['team', 'Team'], ['studio', 'Studio'], ['more', 'More']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['studio', 'Studio'], ['earnings', 'Earnings']];
+    return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [
-      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['demos', 'Demos'], ['deals', 'Deals & commissions']]],
+      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['demos', 'Demo queue'], ['deals', 'Deals & commissions']]],
       ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
       ['Tools', [['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
     ];
-    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
-    return [[null, [['demos', 'Demo queue']]]];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
+    return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
-  const home = () => (S.me.role === 'dev' ? 'demos' : 'home');
-  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt' };
+  const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
+  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations'];
+  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,13 +199,14 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
       switch (route) {
         case 'home': return await viewHome();
         case 'team': return await viewTeam();
+        case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
         case 'deals': return await viewDeals();
@@ -434,7 +435,7 @@
     const actions = h('div', { class: 'actions' },
       L.phone ? h('a', { class: 'btn ok wide', href: telHref(L.phone) }, icon('phone'), 'Call ' + L.phone) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
-      h('a', { class: 'btn', href: '#/demo/' + L.id }, icon('spark'), L.demo_url ? 'Edit demo' : 'Build demo'),
+      h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
       L.demo_url ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(L.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', L.demo_url); } } }, icon('copy'), 'Copy link') : null,
       L.demo_url ? h('a', { class: 'btn', href: L.demo_url, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open demo') : null,
@@ -674,7 +675,7 @@
       const mailto = h('a', { class: 'btn', onclick: () => { mailto.href = 'mailto:' + L.email + '?subject=' + encodeURIComponent(subj.value) + '&body=' + encodeURIComponent(full()); sent.hidden = false; } }, 'Mail app');
       const copy = h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(full()); toast('Email copied'); } catch { toast('Copy failed, select the text instead', true); } sent.hidden = false; } }, icon('copy'), 'Copy');
       box.append(h('h2', null, 'Email ' + L.business), h('p', { class: 'sub' }, L.email),
-        !L.demo_url ? h('div', { class: 'cue-box' }, h('b', null, 'No demo yet.'), ' Emails with a demo link get way more replies. ', h('a', { href: '#/demo/' + L.id }, 'Build the demo first →')) : null,
+        !L.demo_url ? h('div', { class: 'cue-box' }, h('b', null, 'No demo yet.'), ' Emails with a demo link get way more replies. ', h('a', { href: '#/studio/' + L.id }, 'Build the demo first →')) : null,
         h('div', { class: 'field' }, h('label', null, 'Subject'), subj),
         h('div', { class: 'field' }, h('label', null, 'Message'), body),
         h('div', { class: 'field' }, h('label', null, 'Signature (saved on this device, add your mailing address)'), sig),
@@ -723,7 +724,7 @@
           h('div', { style: 'min-width:0' }, h('h2', null, l.business), h('p', { class: 'sub' }, [l.category, l.city, l.owner].filter(Boolean).join(' · ') || '—')),
           l.batch_name ? h('span', { class: 'tag' }, l.batch_name) : null),
         h('div', { class: 'row wrap', style: 'margin-top:12px' },
-          h('a', { class: 'btn primary small', href: '#/demo/' + l.id }, icon('spark'), l.demo_url ? 'Edit demo' : 'Build demo'),
+          h('a', { class: 'btn primary small', href: '#/studio/' + l.id }, icon('spark'), l.demo_url ? 'Edit in Studio' : 'Build in Studio'),
           l.demo_url ? h('a', { class: 'btn small', href: l.demo_url, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open') : null,
           l.link ? h('a', { class: 'btn small', href: l.link, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Their Google / social') : null),
         h('details', { class: 'own-link' }, h('summary', null, 'Built it somewhere else? Paste the link'), h('div', { class: 'row', style: 'margin-top:10px' }, input, btn)));
@@ -983,6 +984,150 @@
         h('p', { class: 'sub' }, 'Send leads in automatically. Duplicates, Do Not Call numbers and businesses that already have a website are skipped, same as CSV upload.'))),
       h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, keysP, howP), h('div', { class: 'col' }, logP)),
     ]);
+  }
+
+  /* ================= Demo Studio ================= */
+  const ENGINE_NAME = { 'workers-ai': 'Cloudflare AI · free', claude: 'Claude AI', basic: 'Basic builder · AI not connected' };
+  async function viewStudio(leadId) {
+    const r = await api('GET', '/studio' + (leadId ? '?lead=' + leadId : ''));
+    let lead = r.lead, draft = r.draft, engine = r.engine, busy = false;
+    let device = lsGet('rs_studio_device', 'phone');
+    let pane = 'chat';
+    const firstName = first(S.me.name);
+
+    const msgs = h('div', { class: 'msgs', 'aria-live': 'polite' });
+    const input = h('textarea', { rows: 1, placeholder: lead ? 'Ask for a change, or paste more info about ' + lead.business + '…' : "Paste a business's info (Google listing, Instagram bio, prices, hours)…" });
+    const sendBtn = h('button', { class: 'send', 'aria-label': 'Send', onclick: () => send() }, h('span', { html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>', style: 'display:contents' }));
+    const engineTag = h('span', { class: 'engine ' + engine }, h('i'), ENGINE_NAME[engine] || engine);
+    const frame = h('iframe', { class: 'pframe', title: 'Demo preview', loading: 'lazy' });
+    const frameWrap = h('div', { class: 'pwrap ' + device }, frame);
+    const emptyPv = h('div', { class: 'pempty' }, h('div', { class: 'orb' }), h('b', null, 'Your preview shows up here'), h('span', null, 'Send the business info and watch the site build.'));
+    const linkBox = h('div');
+    const themeRow = h('div', { class: 'tpick' });
+    const leadBar = h('div', { class: 'lead-bar' });
+
+    function autosize() { input.style.height = 'auto'; input.style.height = Math.min(200, input.scrollHeight) + 'px'; }
+    input.addEventListener('input', autosize);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(min-width:1000px)').matches) { e.preventDefault(); send(); } });
+
+    function bubble(role, text, eng) {
+      return h('div', { class: 'msg ' + role }, role === 'ai' ? h('span', { class: 'avatar ai' }, icon('spark')) : null,
+        h('div', { class: 'btext' }, text, role === 'ai' && eng === 'basic' && engine !== 'basic' ? h('small', null, 'basic builder') : null));
+    }
+    function renderMsgs() {
+      const list = (draft && draft.messages) || [];
+      msgs.replaceChildren(
+        h('div', { class: 'msg ai' }, h('span', { class: 'avatar ai' }, icon('spark')), h('div', { class: 'btext' },
+          lead ? `Let's build ${lead.business} a site they can't say no to. I already have their ${[lead.phone && 'phone', lead.city && 'city', lead.category && 'category', lead.rating && 'rating'].filter(Boolean).join(', ') || 'name'}. Paste anything else you've got (prices, hours, their Instagram bio), or just hit build.`
+            : "Paste everything you've got on a business: their Google listing, Instagram bio, menu or price list. I'll write the site and pick a look. Then tell me what to change.")),
+        ...list.map((m) => bubble(m.role, m.text, m.engine)));
+      if (!list.length) msgs.append(h('div', { class: 'suggest' }, (lead ? ['Build it from the lead info', 'Make it soft and pink', 'Make it dark and luxe'] : ['Show me an example']).map((s) => h('button', { onclick: () => {
+        if (s === 'Show me an example') { input.value = 'Fresh Cutz Barbershop\n4.8 (213) · Barber shop\n4512 W Century Blvd, Inglewood, CA\n(310) 555-0101\nFade $35\nBeard trim $15\nKids cut $25\nMon-Sat 9 AM–8 PM\nSunday Closed'; autosize(); input.focus(); return; }
+        send(s === 'Build it from the lead info' ? 'Build the first version of the site from the business info.' : 'Build the first version. ' + s + '.');
+      } }, s))));
+      else msgs.append(h('div', { class: 'suggest' }, ['Punchier headline', 'Change the colors', 'Shorter about section', 'Add a "why us" section'].map((s) => h('button', { onclick: () => send(s) }, s))));
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+    function renderLeadBar() {
+      leadBar.replaceChildren(lead
+        ? h('div', { class: 'for' }, h('small', null, 'Demo for'), h('a', { href: '#/lead/' + lead.id }, lead.business), h('button', { class: 'linkish', onclick: pickLead }, 'Change'))
+        : h('div', { class: 'for' }, h('small', null, 'No lead picked'), h('button', { class: 'linkish', onclick: pickLead }, 'Pick a lead'), h('span', { class: 'dim small' }, 'or just paste info below')));
+    }
+    function renderTheme() {
+      const cur = draft ? draft.theme : null;
+      themeRow.replaceChildren(...Object.entries(THEMES).map(([k, t]) => h('button', { class: 'tchoice' + (cur === k ? ' on' : ''), disabled: !draft, style: `--tb:${t.bg};--ta:${(draft && draft.data.accent && cur === k) ? draft.data.accent : t.accent}`, onclick: async () => {
+        try { const x = await api('PATCH', '/studio/' + draft.id, { theme: k }); draft.theme = x.theme; renderTheme(); refresh(); } catch (e) { fail(e); }
+      } }, h('i'), t.label)));
+    }
+    function refresh() {
+      if (!draft || !draft.id) { frameWrap.hidden = true; emptyPv.hidden = false; return; }
+      frameWrap.hidden = false; emptyPv.hidden = true;
+      frame.src = '/p/' + draft.id + '?v=' + Date.now();
+    }
+    async function pickLead() {
+      const chosen = await sheet((box, close) => {
+        const q = h('input', { type: 'search', placeholder: 'Search leads…' });
+        const list = h('div', { class: 'pick-list' });
+        let t;
+        const load = async () => {
+          try {
+            const rows = await api('GET', '/studio/leads?q=' + encodeURIComponent(q.value));
+            list.replaceChildren(...(rows.length ? rows.map((l) => h('button', { class: 'pick', onclick: () => close(l) }, h('div', null, h('b', null, l.business), h('small', null, [l.category, l.city].filter(Boolean).join(' · '))),
+              h('span', { class: 'tag ' + (l.demo_url ? 'good' : '') }, l.demo_url ? 'Has demo' : 'Needs demo'))) : [h('p', { class: 'dim', style: 'padding:14px 4px' }, 'No leads match.')]));
+          } catch (e) { fail(e); }
+        };
+        q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
+        box.append(h('h2', null, 'Pick a lead'), h('p', { class: 'sub' }, 'Leads without a demo come first.'), q, list,
+          h('button', { class: 'btn block', style: 'margin-top:12px', onclick: () => close(null) }, 'Cancel'));
+        load(); setTimeout(() => q.focus(), 60);
+      });
+      if (!chosen) return null;
+      if (draft && draft.id && !draft.lead_id) {
+        try { await api('PATCH', '/studio/' + draft.id, { lead_id: chosen.id }); } catch (e) { fail(e); return null; }
+      }
+      location.hash = '#/studio/' + chosen.id;
+      return chosen;
+    }
+    async function send(text) {
+      const message = (text || input.value).trim();
+      if (!message || busy) return;
+      busy = true; sendBtn.disabled = true; input.value = ''; autosize();
+      msgs.querySelectorAll('.suggest').forEach((x) => x.remove());
+      msgs.append(bubble('user', message), h('div', { class: 'msg ai typing' }, h('span', { class: 'avatar ai' }, icon('spark')), h('div', { class: 'btext' }, h('i'), h('i'), h('i'))));
+      msgs.scrollTop = msgs.scrollHeight;
+      shellEl.classList.add('building');
+      try {
+        const x = await api('POST', '/studio/chat', { draft_id: draft && draft.id, lead_id: lead && lead.id, message });
+        draft = Object.assign(draft || {}, { id: x.draft_id, theme: x.theme, data: x.data, messages: x.messages, lead_id: lead ? lead.id : (draft && draft.lead_id) });
+        renderMsgs(); renderTheme(); refresh(); renderSave();
+        if (!window.matchMedia('(min-width:1000px)').matches) setPane('preview');
+      } catch (e) { msgs.querySelector('.typing') && msgs.querySelector('.typing').remove(); fail(e); input.value = message; }
+      shellEl.classList.remove('building');
+      busy = false; sendBtn.disabled = false;
+    }
+    function renderSave() {
+      const saved = lead && lead.demo_url;
+      linkBox.replaceChildren(draft && draft.id ? h('div', { class: 'save-row' },
+        h('button', { class: 'btn ok', onclick: save }, icon('spark'), saved ? 'Update ' + (lead ? first(lead.business) + "'s" : 'the') + ' demo' : 'Save to lead'),
+        saved ? h('button', { class: 'btn small', onclick: async () => { try { await navigator.clipboard.writeText(lead.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', lead.demo_url); } } }, icon('copy'), 'Copy link') : null,
+        saved ? h('a', { class: 'btn small', href: lead.demo_url, target: '_blank', rel: 'noopener' }, 'Open live') : null) : null);
+    }
+    async function save() {
+      let target = lead;
+      if (!target) { target = await pickLead(); if (!target) return; }
+      try {
+        const x = await api('POST', '/studio/' + draft.id + '/save', { lead_id: target.id });
+        toast('Saved to ' + x.business + ' ✓');
+        lead = Object.assign({}, lead || target, { demo_url: x.url });
+        renderSave(); renderLeadBar();
+        await sheet((box, close) => box.append(h('h2', null, 'Demo is live ✓'), h('p', { class: 'sub' }, 'Saved to ' + x.business + '. The link is on their lead now, ready to text or email.'),
+          h('div', { class: 'demo-url' }, x.url),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: async () => { try { await navigator.clipboard.writeText(x.url); toast('Copied'); } catch { prompt('Copy:', x.url); } } }, icon('copy'), 'Copy link'),
+            h('a', { class: 'btn', href: '#/lead/' + x.lead_id, onclick: () => close() }, 'Go to lead'), h('button', { class: 'btn', onclick: () => close() }, 'Keep editing'))));
+      } catch (e) { fail(e); }
+    }
+    function setPane(p) { pane = p; shellEl.dataset.pane = p; paneSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.p === p)); }
+    const paneSeg = h('div', { class: 'seg pane-seg' }, h('button', { 'data-p': 'chat', class: 'on', onclick: () => setPane('chat') }, 'Chat'), h('button', { 'data-p': 'preview', onclick: () => setPane('preview') }, 'Preview'));
+    const devSeg = h('div', { class: 'dev-seg' }, [['phone', 'Phone'], ['desktop', 'Desktop']].map(([k, l]) => h('button', { class: device === k ? 'on' : null, onclick: (e) => {
+      device = k; lsSet('rs_studio_device', k); frameWrap.className = 'pwrap ' + k; devSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.currentTarget));
+    } }, l)));
+
+    const shellEl = h('div', { class: 'studio', 'data-pane': pane },
+      h('section', { class: 'chat-pane' },
+        h('div', { class: 'studio-head' }, h('p', { class: 'kicker' }, h('span', { class: 'live' }), 'Demo Studio'), h('h1', null, 'Welcome, ' + firstName), leadBar),
+        msgs,
+        h('div', { class: 'composer' }, input, sendBtn),
+        h('div', { class: 'composer-foot' }, engineTag, draft && draft.id ? h('button', { class: 'linkish', onclick: async () => {
+          if (!(await confirmSheet('Start over?', 'Clears this chat and draft. A demo you already saved stays live.', 'Start over', true))) return;
+          try { await api('PATCH', '/studio/' + draft.id, { reset: true }); viewStudio(leadId); } catch (e) { fail(e); }
+        } }, 'Start over') : null, lead ? h('a', { class: 'linkish', href: '#/demo/' + lead.id }, 'Manual editor') : null)),
+      h('section', { class: 'preview-pane' },
+        h('div', { class: 'pv-bar' }, themeRow, h('span', { style: 'flex:1' }), devSeg, draft && draft.id ? h('a', { class: 'icon-btn', href: '/p/' + draft.id, target: '_blank', rel: 'noopener', title: 'Open full screen', 'aria-label': 'Open preview full screen' }, icon('link')) : null),
+        h('div', { class: 'pv-stage' }, emptyPv, frameWrap),
+        linkBox));
+
+    renderLeadBar(); renderMsgs(); renderTheme(); refresh(); renderSave();
+    shell('studio', [paneSeg, shellEl]);
   }
 
   /* ================= batches + upload ================= */
@@ -1885,6 +2030,7 @@
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
         row('#/callbacks', 'callbacks', 'Callbacks', 'Who to call back today'),
+        row('#/demos', 'demos', 'Demo queue', 'Leads waiting on a demo site'),
         row('#/deals', 'deals', 'Deals & commissions', 'Closes, payouts and what you owe'),
         row('#/batches', 'batches', 'Batches', 'Lead uploads and how each batch is doing'),
         row('#/upload', 'batches', 'Upload CSV', 'Add a new batch of leads'),
