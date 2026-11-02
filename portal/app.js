@@ -1185,28 +1185,27 @@
     if (!st.ready) {
       return shell('finder', [
         h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Lead Finder'),
-          h('p', { class: 'sub' }, 'Find local businesses with no website and few reviews, straight from Google, then add them to the CRM in one tap.'))),
-        panel('One-time setup (about 10 minutes)', null, h('ol', { class: 'setup' },
-          h('li', null, 'Go to ', h('b', null, 'console.cloud.google.com'), ' and sign in with your Google account. Create a project called "Reekon".'),
-          h('li', null, 'Open ', h('b', null, 'Billing'), ' and add your card. Google needs it on file, but the portal caps searches at ' + st.limits.day + ' a day and ' + st.limits.month + ' a month so you stay inside the free allowance.'),
-          h('li', null, 'Search the top bar for ', h('b', null, 'Places API (New)'), ' and click ', h('b', null, 'Enable'), '.'),
-          h('li', null, 'Go to ', h('b', null, 'APIs & Services → Credentials → Create credentials → API key'), '. Click the key, set ', h('b', null, 'API restrictions'), ' to only "Places API (New)", and save. Copy the key.'),
-          h('li', null, 'Extra safety: in ', h('b', null, 'APIs & Services → Places API (New) → Quotas'), ', set requests per day to ' + st.limits.day + '.'),
-          h('li', null, 'In Cloudflare, open your portal worker → ', h('b', null, 'Settings → Variables and Secrets → + Add'), '. Type: Secret. Name: ', h('code', null, 'GOOGLE_PLACES_KEY'), '. Value: the key. Deploy.'),
-          h('li', null, 'Come back here and refresh.'))),
+          h('p', { class: 'sub' }, 'Find local businesses with no website, then add them to the CRM in one tap. Free with a TomTom key.'))),
+        panel('One-time setup (about 3 minutes, free, no card)', null, h('ol', { class: 'setup' },
+          h('li', null, 'Go to ', h('b', null, 'developer.tomtom.com'), ' and click ', h('b', null, 'Register'), '. Sign up free with your email (no card).'),
+          h('li', null, 'Open your ', h('b', null, 'Dashboard → Keys'), '. Copy the API key that is already there (or click ', h('b', null, 'Create key'), ').'),
+          h('li', null, 'In Cloudflare, open your portal worker → ', h('b', null, 'Settings → Variables and Secrets → + Add'), '. Type: Secret. Name: ', h('code', null, 'TOMTOM_KEY'), '. Value: the key. Deploy.'),
+          h('li', null, 'Come back here and refresh. The portal caps searches at ' + st.limits.day + ' a day and ' + st.limits.month + ' a month so you stay inside TomTom\'s free 2,500 requests.'))),
       ]);
     }
 
     const whatIn = h('input', { placeholder: 'e.g. Barber shop', value: F.what, list: 'nicheList' });
     const whereIn = h('input', { placeholder: 'e.g. Inglewood, CA', value: F.where, list: 'cityList' });
-    const revSel = h('select', null, [['', 'Any number of reviews'], ['20', 'Under 20 reviews'], ['50', 'Under 50 reviews'], ['100', 'Under 100 reviews'], ['200', 'Under 200 reviews']].map(([v, l]) => h('option', { value: v }, l)));
+    const noReviews = st.provider === 'tomtom';
+    if (noReviews) F.maxReviews = '';
+    const revSel = h('select', { hidden: noReviews }, [['', 'Any number of reviews'], ['20', 'Under 20 reviews'], ['50', 'Under 50 reviews'], ['100', 'Under 100 reviews'], ['200', 'Under 200 reviews']].map(([v, l]) => h('option', { value: v }, l)));
     revSel.value = F.maxReviews;
     const siteSel = h('select', null, [['none', 'No real website'], ['all', 'Show everyone']].map(([v, l]) => h('option', { value: v }, l)));
     siteSel.value = F.site;
     const goBtn = h('button', { class: 'btn primary', type: 'submit' }, icon('search'), 'Find leads');
     const listEl = h('div', { class: 'finds' });
     const summary = h('div', { class: 'find-sum' });
-    const moreBtn = h('button', { class: 'btn block', hidden: true, onclick: () => search(true) }, 'Load 20 more');
+    const moreBtn = h('button', { class: 'btn block', hidden: true, onclick: () => search(true) }, 'Load more');
     const addBar = h('div', { class: 'add-bar', hidden: true });
 
     const visible = () => F.results.filter((x) => (F.site === 'all' || x.site_status === 'none' || x.site_status === 'social') && (!F.maxReviews || x.reviews < +F.maxReviews));
@@ -1231,7 +1230,7 @@
       const el = h('label', { class: 'find' + (on ? ' on' : '') + (can ? '' : ' off') },
         h('input', { type: 'checkbox', checked: on, disabled: !can, onchange: (e) => { e.target.checked ? F.sel.add(x.place_id) : F.sel.delete(x.place_id); el.classList.toggle('on', e.target.checked); renderAdd(); } }),
         h('div', { class: 'fbody' },
-          h('div', { class: 'ftop' }, h('b', null, x.business), x.rating ? h('span', { class: 'stars' }, '★ ' + x.rating.toFixed(1), h('small', null, ' (' + x.reviews + ')')) : h('span', { class: 'stars none' }, 'No reviews')),
+          h('div', { class: 'ftop' }, h('b', null, x.business), x.rating ? h('span', { class: 'stars' }, '★ ' + x.rating.toFixed(1), h('small', null, ' (' + x.reviews + ')')) : x.reviews === 0 ? h('span', { class: 'stars none' }, 'No reviews') : null),
           h('div', { class: 'fmeta' }, [x.category, x.short_address || x.address].filter(Boolean).join(' · ')),
           h('div', { class: 'fmeta' }, x.phone || 'No phone listed'),
           h('div', { class: 'fbadges' }, badge, x.in_crm ? h('span', { class: 'fb' }, 'Already in CRM') : null, x.dnc ? h('span', { class: 'fb bad' }, 'Do Not Call') : null,
@@ -1261,7 +1260,7 @@
       F.what = whatIn.value.trim(); F.where = whereIn.value.trim();
       if (!F.what || !F.where) return toast('Type what and where', true);
       goBtn.disabled = true; moreBtn.disabled = true;
-      if (!more) { F.results = []; F.sel.clear(); F.next = null; listEl.replaceChildren(h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' }), h('p', { style: 'margin-top:10px' }, 'Searching Google and double-checking websites…'))); }
+      if (!more) { F.results = []; F.sel.clear(); F.next = null; listEl.replaceChildren(h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' }), h('p', { style: 'margin-top:10px' }, 'Searching and double-checking websites…'))); }
       try {
         const r = await api('POST', '/finder/search', { what: F.what, where: F.where, page_token: more ? F.next : undefined });
         F.city = F.where.replace(/,.*$/, '').trim();
@@ -1280,7 +1279,7 @@
     const form = h('form', { class: 'finder-form', onsubmit: (e) => { e.preventDefault(); search(false); } },
       h('div', { class: 'field' }, h('label', null, 'What kind of business'), whatIn),
       h('div', { class: 'field' }, h('label', null, 'Where'), whereIn),
-      h('div', { class: 'field' }, h('label', null, 'Reviews'), revSel),
+      noReviews ? null : h('div', { class: 'field' }, h('label', null, 'Reviews'), revSel),
       h('div', { class: 'field' }, h('label', null, 'Website'), siteSel),
       goBtn,
       h('datalist', { id: 'nicheList' }, NICHES.map((n) => h('option', { value: n }))),
@@ -1289,7 +1288,7 @@
 
     shell('finder', [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Lead Finder'),
-        h('p', { class: 'sub' }, 'Businesses with no real website and few reviews, straight from Google. Each search checks 20 businesses.')), usageEl),
+        h('p', { class: 'sub' }, st.provider === 'tomtom' ? 'Local businesses with no real website, from TomTom maps. Each search checks 40 businesses.' : 'Businesses with no real website and few reviews, straight from Google. Each search checks 20 businesses.')), usageEl),
       h('section', { class: 'panel' }, form, chips),
       summary, listEl, moreBtn, addBar,
     ]);

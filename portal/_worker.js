@@ -380,6 +380,52 @@ function pickRep(loads) {
 /* ---- Lead Finder helpers ---- */
 // Stays inside Google's free monthly allowance (1,000 Enterprise searches) with room to spare.
 const FINDER_LIMITS = { day: 30, month: 900 };
+// TomTom free tier: 2,500 requests a month. Each search uses 2 (find the city, then the businesses).
+const TOMTOM_LIMITS = { day: 40, month: 1100 };
+const finderProvider = (env) => (env.GOOGLE_PLACES_KEY ? 'google' : env.TOMTOM_KEY ? 'tomtom' : '');
+const finderLimits = (env) => (finderProvider(env) === 'tomtom' ? TOMTOM_LIMITS : FINDER_LIMITS);
+const usPhone = (p) => { const d = normPhone(p); const t = d.length === 11 && d[0] === '1' ? d.slice(1) : d; return t.length === 10 ? `(${t.slice(0, 3)}) ${t.slice(3, 6)}-${t.slice(6)}` : String(p || ''); };
+// Search TomTom and return results shaped like Google's, so the rest of the finder works the same.
+async function tomtomSearch(env, what, where, offset) {
+  const key = env.TOMTOM_KEY;
+  let lat, lon;
+  if (env.FINDER_FAKE === '1') { lat = 33.96; lon = -118.35; }
+  else {
+    const gr = await fetch('https://api.tomtom.com/search/2/geocode/' + encodeURIComponent(where) + '.json?limit=1&countrySet=US&key=' + encodeURIComponent(key));
+    if (gr.status === 401 || gr.status === 403) throw new HttpError(400, 'TomTom rejected the key. Check TOMTOM_KEY in Cloudflare.');
+    if (gr.status === 429) throw new HttpError(429, 'TomTom says too many requests. Try again in a minute.');
+    const g = await gr.json().catch(() => ({}));
+    const pos = g.results && g.results[0] && g.results[0].position;
+    if (!pos) throw new HttpError(400, `Couldn't find "${where}". Try "City, CA".`);
+    lat = pos.lat; lon = pos.lon;
+  }
+  let j;
+  if (env.FINDER_FAKE === '1') {
+    const mk = (i, name, url, phone, cat) => ({ id: 'TT' + i + 'o' + offset, poi: { name: name + (offset ? ' ' + offset : ''), phone, url, categories: [cat] }, address: { freeformAddress: (200 + i) + ' S Market St, Inglewood, CA 90301', streetNumber: String(200 + i), streetName: 'S Market St', municipality: 'Inglewood' } });
+    j = { summary: { totalResults: 80 }, results: [mk(1, 'Paw Spa Mobile', undefined, '+1 310-555-0151', 'pet care'), mk(2, 'Lux Lashes LA', 'www.instagram.com/luxlashesla', '+1 310-555-0152', 'beauty salon'), mk(3, 'Big Real Site Co', 'www.bigrealsite.com', '+1 310-555-0153', 'barber'), mk(4, 'No Phone Nails', undefined, undefined, 'nail salon')] };
+  } else {
+    const r = await fetch('https://api.tomtom.com/search/2/poiSearch/' + encodeURIComponent(what) + '.json?limit=40&ofs=' + (offset || 0) + '&countrySet=US&radius=16000&lat=' + lat + '&lon=' + lon + '&key=' + encodeURIComponent(key));
+    if (r.status === 401 || r.status === 403) throw new HttpError(400, 'TomTom rejected the key. Check TOMTOM_KEY in Cloudflare.');
+    if (r.status === 429) throw new HttpError(429, 'TomTom says too many requests. Try again in a minute.');
+    if (!r.ok) throw new HttpError(502, 'TomTom said ' + r.status);
+    j = await r.json();
+  }
+  const places = (j.results || []).filter((x) => x.poi && x.poi.name).map((x) => {
+    const a = x.address || {};
+    let site = x.poi.url || '';
+    if (site && !/^https?:\/\//i.test(site)) site = 'https://' + site;
+    return {
+      id: 'tt:' + x.id, displayName: { text: x.poi.name }, formattedAddress: a.freeformAddress || '',
+      shortFormattedAddress: [[a.streetNumber, a.streetName].filter(Boolean).join(' '), a.municipality].filter(Boolean).join(', '),
+      nationalPhoneNumber: x.poi.phone ? usPhone(x.poi.phone) : '', websiteUri: site, rating: null, userRatingCount: null,
+      googleMapsUri: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(x.poi.name + ' ' + (a.freeformAddress || '')),
+      primaryTypeDisplayName: { text: ((x.poi.categories || [])[0] || '').replace(/\b\w/g, (c) => c.toUpperCase()) },
+    };
+  });
+  const total = (j.summary && j.summary.totalResults) || 0;
+  const next = (offset || 0) + 40 < Math.min(total, 1000) ? String((offset || 0) + 40) : null;
+  return { places, next };
+}
 async function finderUsage(env) {
   const d = new Date();
   const la = new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
@@ -466,7 +512,7 @@ async function importRows(env, { batchId, rows, startStatus, assign, skipWithSit
       `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source,place_id,reviews)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?,?,?)`
     ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null, source || 'csv',
-      str(r.place_id, 200) || null, r.reviews !== undefined && r.reviews !== '' && Number.isFinite(+r.reviews) ? Math.round(+r.reviews) : null));
+      str(r.place_id, 200) || null, r.reviews != null && r.reviews !== '' && Number.isFinite(+r.reviews) ? Math.round(+r.reviews) : null));
     inserted++;
   }
   for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
@@ -1478,17 +1524,24 @@ async function api(request, env, url) {
   /* ---- Lead Finder (Google Places) ---- */
   if (path === '/finder' && method === 'GET') {
     need(user, 'admin');
-    return json({ ready: !!env.GOOGLE_PLACES_KEY, usage: await finderUsage(env), limits: FINDER_LIMITS });
+    return json({ ready: !!finderProvider(env), provider: finderProvider(env), usage: await finderUsage(env), limits: finderLimits(env) });
   }
   if (path === '/finder/search' && method === 'POST') {
     need(user, 'admin');
-    if (!env.GOOGLE_PLACES_KEY) bad('Add your Google Places key in Cloudflare first (see the setup steps on this page).');
+    if (!finderProvider(env)) bad('Add your free TomTom key in Cloudflare first (see the setup steps on this page).');
+    const LIM = finderLimits(env), provider = finderProvider(env);
     const what = str(body.what, 80), where = str(body.where, 80);
     if (!what || !where) bad('Type what kind of business and where');
     const u = await finderUsage(env);
-    if (u.today >= FINDER_LIMITS.day) bad(`You've hit today's ${FINDER_LIMITS.day} searches. This cap keeps Google free. It resets at midnight.`);
-    if (u.month >= FINDER_LIMITS.month) bad(`You've used this month's ${FINDER_LIMITS.month} free searches. It resets on the 1st.`);
+    if (u.today >= LIM.day) bad(`You've hit today's ${LIM.day} searches. This cap keeps it free. It resets at midnight.`);
+    if (u.month >= LIM.month) bad(`You've used this month's ${LIM.month} free searches. It resets on the 1st.`);
     const pageToken = str(body.page_token, 600) || undefined;
+    let g = {};
+    if (provider === 'tomtom') {
+      await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(user.id, what + ' | ' + where, 0, now()).run();
+      const t = await tomtomSearch(env, what, where, parseInt(pageToken, 10) || 0);
+      g = { places: t.places, nextPageToken: t.next };
+    } else {
     const r = env.FINDER_FAKE === '1' ? fakePlaces(pageToken) : await fetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
@@ -1496,11 +1549,11 @@ async function api(request, env, url) {
       body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
     });
     await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(user.id, what + ' | ' + where, 0, now()).run();
-    let g = {};
     try { g = await r.json(); } catch { g = {}; }
     if (!r.ok) {
       const msg = (g.error && g.error.message) || ('Google said ' + r.status);
       bad(/API key|not authorized|PERMISSION|billing/i.test(msg) ? 'Google rejected the key: ' + msg.slice(0, 160) + '. Check the setup steps.' : msg.slice(0, 200));
+    }
     }
     const places = (g.places || []).filter((p) => !p.businessStatus || p.businessStatus === 'OPERATIONAL');
     // what's already in the CRM / on the Do Not Call list
@@ -1519,7 +1572,7 @@ async function api(request, env, url) {
       return {
         place_id: p.id, business: (p.displayName && p.displayName.text) || '', phone: p.nationalPhoneNumber || '', address: p.formattedAddress || '',
         short_address: p.shortFormattedAddress || '', category: (p.primaryTypeDisplayName && p.primaryTypeDisplayName.text) || '', rating: p.rating || null,
-        reviews: p.userRatingCount || 0, link: p.googleMapsUri || '', website: site,
+        reviews: p.userRatingCount == null ? null : p.userRatingCount, link: p.googleMapsUri || '', website: site,
         site_status: !site ? 'none' : NOT_A_SITE.test(site) ? 'social' : 'site',
         in_crm: (pn && inCrm.has(pn)) || idSeen.has(p.id), dnc: !!(pn && dnc.has(pn)),
       };
@@ -1527,7 +1580,7 @@ async function api(request, env, url) {
     // double-check "no website" ones: try the obvious domain names
     const toCheck = out.filter((x) => x.site_status !== 'site' && !x.in_crm).slice(0, 20);
     await Promise.all(toCheck.map(async (x) => { const f = await guessSite(x.business); if (f) { x.site_status = 'found'; x.found_site = f; } }));
-    return json({ results: out, next_page_token: g.nextPageToken || null, usage: await finderUsage(env), city: where });
+    return json({ results: out, next_page_token: g.nextPageToken || null, usage: await finderUsage(env), city: where, provider });
   }
   if (path === '/finder/add' && method === 'POST') {
     need(user, 'admin');
