@@ -1534,6 +1534,7 @@ async function api(request, env, url) {
     if ((wantPhotos || !(clean.images || []).length) && aiImagesReady(env)) {
       const ids = await makeDemoPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, message);
       if (ids.length) { clean.images = ids; if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
+      else out.reply = (out.reply ? out.reply + ' ' : '') + "(Photos didn't work this time. Reason: " + (ids.error || 'unknown') + ')';
     }
     messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
     const t = now();
@@ -1573,7 +1574,7 @@ async function api(request, env, url) {
     if (!aiImagesReady(env)) bad('Photo making needs Cloudflare AI. It is not connected right now.');
     const data = JSON.parse(d.data || '{}');
     const ids = await makeDemoPhotos(env, user.id, data, data.design ? data.design.mode : d.theme, str(body.hint, 200));
-    if (!ids.length) bad("Couldn't make photos right now. Try again in a minute.");
+    if (!ids.length) bad("Couldn't make photos. Reason: " + (ids.error || 'unknown') + '. Send Claude a screenshot of this.');
     data.images = ids;
     await env.DB.prepare('UPDATE studio_drafts SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), d.id).run();
     return json({ ok: true, data });
@@ -2271,7 +2272,9 @@ async function makeDemoPhotos(env, userId, data, theme, hint) {
   const mood = PHOTO_MOOD[theme] || PHOTO_MOOD.noir;
   const extra = hint && /photo|picture|pic|image/i.test(hint) ? ' ' + String(hint).replace(/\b(new|different|other|more|better|change|redo|swap|photos?|pictures?|pics|images?|please|make|give me|the)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : '';
   const prompts = N.photos.slice(0, 4).map((p) => `${p}${extra ? ', ' + extra : ''}. Professional editorial photograph, ${mood}, sharp focus, realistic, high detail. No text, no words, no letters, no logos, no watermark.`);
-  const results = await Promise.all(prompts.map(async (prompt, i) => {
+  const errors = [];
+  const one = async (prompt, i) => {
+    let stage = 'ai';
     try {
       let bytes, mime;
       if (env.STUDIO_FAKE_AI === '1') {
@@ -2280,18 +2283,25 @@ async function makeDemoPhotos(env, userId, data, theme, hint) {
         bytes = new TextEncoder().encode(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},55%,62%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360},45%,28%)"/></linearGradient></defs><rect width="800" height="1000" fill="url(#g)"/><circle cx="400" cy="430" r="190" fill="rgba(255,255,255,.18)"/><text x="400" y="860" font-family="sans-serif" font-size="40" fill="#fff" text-anchor="middle">${N.key} photo ${i + 1}</text></svg>`);
       } else {
         const r = await env.AI.run(IMAGE_MODEL, { prompt, steps: 6, seed: Math.floor(Math.random() * 1e9) });
-        if (!r || !r.image) return null;
+        stage = 'decode';
+        if (!r || !r.image) throw new Error('the image model sent back no picture' + (r ? ' (got ' + Object.keys(r).join(',') + ')' : ''));
         const bin = atob(r.image);
         bytes = new Uint8Array(bin.length);
         for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
         mime = 'image/jpeg';
       }
+      stage = 'save';
       const id = hex(crypto.getRandomValues(new Uint8Array(10)));
       await env.DB.prepare('INSERT INTO demo_images (id, user_id, mime, data, prompt, created_at) VALUES (?,?,?,?,?,?)').bind(id, userId, mime, bytes, prompt.slice(0, 600), now()).run();
       return id;
-    } catch (e) { console.error('photo', e); return null; }
-  }));
-  return results.filter(Boolean);
+    } catch (e) { console.error('photo', stage, e); errors.push(stage + ': ' + String((e && e.message) || e).slice(0, 160)); return null; }
+  };
+  // two at a time, so we don't trip the AI's rate limit
+  const results = [];
+  for (let i = 0; i < prompts.length; i += 2) results.push(...(await Promise.all(prompts.slice(i, i + 2).map((p, j) => one(p, i + j)))));
+  const ok = results.filter(Boolean);
+  ok.error = errors[0] || '';
+  return ok;
 }
 
 /* ================= Demo Studio AI (Stage 4C) =================
