@@ -1101,7 +1101,33 @@
       linkBox.replaceChildren(draft && draft.id ? h('div', { class: 'save-row' },
         h('button', { class: 'btn ok', onclick: save }, icon('spark'), saved ? 'Update ' + (lead ? first(lead.business) + "'s" : 'the') + ' demo' : 'Save to lead'),
         saved ? h('button', { class: 'btn small', onclick: async () => { try { await navigator.clipboard.writeText(lead.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', lead.demo_url); } } }, icon('copy'), 'Copy link') : null,
-        saved ? h('a', { class: 'btn small', href: lead.demo_url, target: '_blank', rel: 'noopener' }, 'Open live') : null) : null);
+        saved ? h('a', { class: 'btn small', href: lead.demo_url, target: '_blank', rel: 'noopener' }, 'Open live') : null,
+        h('button', { class: 'btn small', onclick: async () => { const t = devBrief(); try { await navigator.clipboard.writeText(t); toast('Dev brief copied'); } catch { prompt('Copy the dev brief:', t); } } }, icon('copy'), 'Copy dev brief')) : null);
+    }
+    // everything a developer needs to build the real site from this demo
+    function devBrief() {
+      const d = (draft && draft.data) || {}, ds = d.design || {};
+      const L = [];
+      L.push('WEBSITE BUILD BRIEF: ' + (d.name || (lead && lead.business) || 'Business'));
+      if (lead && lead.demo_url) L.push('Approved demo (match this look): ' + lead.demo_url);
+      L.push('');
+      L.push('BUSINESS');
+      [['Category', d.category], ['City', d.city], ['Phone', d.phone], ['Email', d.email], ['Address', d.address], ['Booking link', d.booking], ['Instagram', d.instagram], ['Google rating', d.rating ? d.rating + (d.reviews ? ' (' + d.reviews + ' reviews)' : '') : '']]
+        .forEach(([k, v]) => v && L.push('- ' + k + ': ' + v));
+      L.push(''); L.push('COPY');
+      if (d.tagline) L.push('- Headline: ' + d.tagline);
+      if (d.about) L.push('- About: ' + d.about);
+      if (d.cta) L.push('- Closing line: ' + d.cta);
+      if ((d.highlights || []).length) { L.push('- Why us:'); d.highlights.forEach((x) => L.push('  • ' + x.title + (x.text ? ': ' + x.text : ''))); }
+      if ((d.services || []).length) { L.push(''); L.push('SERVICES'); d.services.forEach((x) => L.push('- ' + x.name + (x.price ? ' ' + x.price : '') + (x.desc ? ': ' + x.desc : ''))); }
+      if ((d.hours || []).length) { L.push(''); L.push('HOURS'); d.hours.forEach((x) => L.push('- ' + x.day + ': ' + x.time)); }
+      L.push(''); L.push('DESIGN (see the demo for exact colors)');
+      L.push('- Style: ' + (ds.style || '—') + ' · ' + (ds.mode || '') + ' mode');
+      L.push('- Fonts: ' + (ds.pair || ds.display || '—') + ' pairing (Google Fonts)');
+      L.push('- Hero layout: ' + (ds.hero || '—') + ' · Sections in order: ' + (ds.order || []).join(', '));
+      if ((d.stock || []).length) { L.push(''); L.push('SAMPLE PHOTOS (replace with the client\'s real photos before launch)'); d.stock.forEach((x) => L.push('- ' + (x.page || x.src) + (x.by ? ' (by ' + x.by + ', Pexels)' : ''))); }
+      L.push(''); L.push('MUST HAVE: mobile-first, tap-to-call button, Google Maps link, fast load, real photos from the client, no fake reviews.');
+      return L.join('\n');
     }
     async function save() {
       let target = lead;
@@ -1118,7 +1144,7 @@
       } catch (e) { fail(e); }
     }
     function setPane(p) { pane = p; shellEl.dataset.pane = p; paneSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.p === p)); }
-    const photoBtn = engine !== 'basic' ? h('button', { class: 'btn small', hidden: !(draft && draft.id), onclick: async (e) => {
+    const photoBtn = r.photos ? h('button', { class: 'btn small', hidden: !(draft && draft.id), onclick: async (e) => {
       const b = e.currentTarget; b.disabled = true; b.textContent = 'Making photos…'; shellEl.classList.add('building');
       try { const x = await api('POST', '/studio/' + draft.id + '/photos', {}); draft.data = x.data; refresh(); toast('New photos ✓'); } catch (er) { fail(er); }
       shellEl.classList.remove('building'); b.disabled = false; b.textContent = 'New photos';

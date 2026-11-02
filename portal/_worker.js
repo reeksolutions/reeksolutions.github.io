@@ -1492,7 +1492,7 @@ async function api(request, env, url) {
     const d = await env.DB.prepare(`SELECT * FROM studio_drafts WHERE user_id = ? AND ${lead ? 'lead_id = ?' : 'lead_id IS NULL'} ORDER BY updated_at DESC LIMIT 1`).bind(...(lead ? [user.id, lead.id] : [user.id])).first();
     const demo = lead ? await env.DB.prepare('SELECT slug, theme, data FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first() : null;
     return json({ lead: lead ? studioLead(lead) : null, draft: d ? draftOut(d) : null,
-      demo: demo ? { url: url.origin + '/d/' + demo.slug, theme: demo.theme, data: JSON.parse(demo.data || '{}') } : null, engine: aiEngine(env) });
+      demo: demo ? { url: url.origin + '/d/' + demo.slug, theme: demo.theme, data: JSON.parse(demo.data || '{}') } : null, engine: aiEngine(env), photos: env.PEXELS_KEY ? 'pexels' : aiImagesReady(env) ? 'ai' : '' });
   }
   if (path === '/studio/leads' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
@@ -1531,10 +1531,10 @@ async function api(request, env, url) {
     if (!Object.keys(data).length) newTheme = nicheFor(clean.category, clean.name).theme;
     // photos: make them on the first build, or when asked for new ones
     const wantPhotos = /\b(new|different|other|more|better|change|redo|swap)\b.{0,20}\b(photos?|pictures?|pics|images?)\b|\b(photos?|pictures?|pics|images?)\b.{0,20}\b(new|different|again|redo)\b/i.test(message);
-    if ((wantPhotos || !(clean.images || []).length) && aiImagesReady(env)) {
-      const ids = await makeDemoPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, message);
-      if (ids.length) { clean.images = ids; if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
-      else out.reply = (out.reply ? out.reply + ' ' : '') + "(Photos didn't work this time. Reason: " + (ids.error || 'unknown') + ')';
+    if ((wantPhotos || !((clean.images || []).length || (clean.stock || []).length)) && photosReady(env)) {
+      const ph = await getPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, wantPhotos ? message : '');
+      if (ph.ok) { Object.assign(clean, ph.set); if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
+      else out.reply = (out.reply ? out.reply + ' ' : '') + "(Photos didn't work this time. Reason: " + (ph.error || 'unknown') + ')';
     }
     messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
     const t = now();
@@ -1571,11 +1571,11 @@ async function api(request, env, url) {
     need(user, 'admin', 'rep', 'dev');
     const d = await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ? AND user_id = ?').bind(+m[1], user.id).first();
     if (!d) throw new HttpError(404, 'Draft not found');
-    if (!aiImagesReady(env)) bad('Photo making needs Cloudflare AI. It is not connected right now.');
+    if (!photosReady(env)) bad('Photos are not set up yet. Add the free Pexels key in Cloudflare (PEXELS_KEY).');
     const data = JSON.parse(d.data || '{}');
-    const ids = await makeDemoPhotos(env, user.id, data, data.design ? data.design.mode : d.theme, str(body.hint, 200));
-    if (!ids.length) bad("Couldn't make photos. Reason: " + (ids.error || 'unknown') + '. Send Claude a screenshot of this.');
-    data.images = ids;
+    const ph = await getPhotos(env, user.id, data, data.design ? data.design.mode : d.theme, str(body.hint, 200) || 'new photos');
+    if (!ph.ok) bad("Couldn't get photos. Reason: " + (ph.error || 'unknown') + '. Send Claude a screenshot of this.');
+    Object.assign(data, ph.set);
     await env.DB.prepare('UPDATE studio_drafts SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), d.id).run();
     return json({ ok: true, data });
   }
@@ -1602,6 +1602,7 @@ async function saveDemo(env, user, lead, themeIn, dataIn, origin) {
     const data = cleanDemo(Object.assign({}, dataIn || {}, {
       design: (dataIn && dataIn.design) || prevData.design,
       images: dataIn && Array.isArray(dataIn.images) && dataIn.images.length ? dataIn.images : prevData.images,
+      stock: dataIn && Array.isArray(dataIn.stock) && dataIn.stock.length ? dataIn.stock : (dataIn && Array.isArray(dataIn.images) && dataIn.images.length ? [] : prevData.stock),
     }), lead);
     const t = now();
     const existing = await env.DB.prepare('SELECT id, slug FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
@@ -1951,7 +1952,8 @@ function renderSite(d, D) {
   const book = d.booking || telHref;
   const bookLabel = d.booking ? N.book : (d.phone ? (N.key === 'food' ? 'Call to order' : N.key === 'home' ? 'Call for a quote' : 'Call to book') : 'Get in touch');
   const ext = d.booking ? ' target="_blank" rel="noopener"' : '';
-  const imgs = (d.images || []).map((id) => '/img/' + id + '.jpg').concat(d.photos || []);
+  const stock = d.stock || [];
+  const imgs = stock.length ? stock.map((x) => x.src).concat(d.photos || []) : (d.images || []).map((id) => '/img/' + id + '.jpg').concat(d.photos || []);
   const heroImg = imgs[0] || '';
   const gal = imgs.slice(1);
   const hero = heroImg ? D.hero : 'poster';
@@ -1964,7 +1966,8 @@ function renderSite(d, D) {
   const marquee = services.length ? services.map((x) => x.name) : [d.category || 'Quality', d.city || 'Local', N.book];
   const rating = d.rating ? `<span class="chip"><b>${esc(d.rating)}</b> ★ on Google${d.reviews ? ` · ${esc(d.reviews)} reviews` : ''}</span>` : '';
   const R = D.radius, BR = D.buttons === 'pill' ? 999 : D.buttons === 'rounded' ? 14 : 3;
-  const sample = d.images && d.images.length ? '<small class="sample">Sample photo</small>' : '';
+  const sample = (d.images && d.images.length) || stock.length ? '<small class="sample">Sample photo</small>' : '';
+  const credits = stock.length ? `<p class="credit">Sample photos from <a href="https://www.pexels.com" target="_blank" rel="noopener">Pexels</a>: ${[...new Map(stock.filter((x) => x.by).map((x) => [x.by, x])).values()].map((x) => x.by_url ? `<a href="${esc(x.by_url)}" target="_blank" rel="noopener">${esc(x.by)}</a>` : esc(x.by)).join(', ')}</p>` : '';
   const btnMain = (extra) => book ? `<a class="btn main${extra || ''}" href="${esc(book)}"${ext}>${esc(bookLabel)} <span aria-hidden="true">→</span></a>` : '';
   const head = (eyebrow, title, note) => `<div class="head reveal"><div><span class="eyebrow">${esc(eyebrow)}</span><h2 class="disp">${esc(title)}</h2></div>${note ? `<p>${esc(note)}</p>` : ''}</div>`;
   const disp = `font-family:${F.css};font-weight:${F.w};${F.upper ? 'text-transform:uppercase;letter-spacing:.01em;' : 'letter-spacing:-.02em;'}${F.italic ? 'font-style:italic;' : ''}`;
@@ -2012,7 +2015,7 @@ function renderSite(d, D) {
       ? `<div class="whyq">${hl.map((x, i) => `<div class="reveal" style="--i:${i}"><h3 class="disp">${esc(x.title)}</h3>${x.text ? `<p>${esc(x.text)}</p>` : ''}</div>`).join('')}</div>`
       : `${head('Why ' + (words[0] || 'us'), 'The difference')}<div class="whys why-${D.why}">${hl.map((x, i) => `<article class="why reveal" style="--i:${i}">${D.why === 'numbered' ? `<span class="num disp">0${i + 1}</span>` : '<span class="dot"></span>'}<h3>${esc(x.title)}</h3>${x.text ? `<p>${esc(x.text)}</p>` : ''}</article>`).join('')}</div>`}</div></section>` : '',
     about: d.about ? `<section class="block" id="about"><div class="wrap about"><blockquote class="disp reveal">${esc(name)}${d.city ? `<br><em>in ${esc(d.city)}.</em>` : ''}</blockquote><p class="reveal" style="--i:1">${esc(d.about)}</p></div></section>` : '',
-    gallery: gal.length ? `<section class="block" id="gallery"><div class="wrap">${head('A look inside', 'The vibe', d.images && d.images.length ? 'Sample photos for this preview. We’d swap in your real ones.' : '')}
+    gallery: gal.length ? `<section class="block" id="gallery"><div class="wrap">${head('A look inside', 'The vibe', (d.images && d.images.length) || stock.length ? 'Sample photos for this preview. We’d swap in your real ones.' : '')}
       <div class="gal-${D.gallery}">${gal.map((u, i) => `<figure class="g reveal g${i}" style="--i:${i}"><img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer"></figure>`).join('')}</div></div></section>` : '',
   };
   const hoursHtml = hours.map((h) => `<li data-day="${esc(h.day)}" data-time="${esc(h.time)}"><span>${esc(h.day)}</span><span>${esc(h.time)}</span></li>`).join('');
@@ -2208,6 +2211,7 @@ section.alt{background:var(--surface2)}
 .final h2{font-size:clamp(46px,10vw,124px);margin-bottom:30px}
 footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14px}
 footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
+.credit{flex-basis:100%;font-size:12px;opacity:.8}.credit a{text-decoration:underline}
 .js .reveal{opacity:0;transform:${motion};transition:opacity .8s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1);transition-delay:calc(var(--i,0) * 80ms)}
 .js .reveal.in{opacity:1;transform:none}
 .gal-polaroid .g.reveal.in:nth-child(odd){transform:rotate(-2.5deg)}.gal-polaroid .g.reveal.in:nth-child(even){transform:rotate(2deg)}
@@ -2251,7 +2255,7 @@ ${D.order.map((k) => sections[k] || '').join('\n')}
   <h2 class="disp reveal">${d.cta ? esc(d.cta) : 'Ready when<br>you are.'}</h2>
   ${book ? `<div class="reveal" style="--i:1">${btnMain()}</div>` : ''}
 </div></section>
-<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${esc(name)}</span><span>Preview site by Reekon Systems</span></div></footer>
+<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${esc(name)}</span><span>Preview site by Reekon Systems</span>${credits}</div></footer>
 ${book ? `<div class="sticky-call"><a class="btn main" href="${esc(book)}"${ext}>${esc(bookLabel)}</a></div>` : ''}
 ${SITE_SCRIPT}
 </body>
@@ -2261,6 +2265,61 @@ ${SITE_SCRIPT}
 function cleanDesign(x) {
   if (!x || typeof x !== 'object' || !x.v) return null;
   return makeDesign({}, x, 'repair');
+}
+
+/* ================= Demo photos =================
+   First choice: real stock photos from Pexels (free, real, licensed for business use).
+   Fallback: the free Cloudflare AI image model. */
+const PEXELS_QUERIES = {
+  pets: ['dog grooming', 'groomed dog', 'dog bath', 'pet groomer', 'fluffy dog portrait', 'small dog salon'],
+  barber: ['barber haircut', 'barbershop', 'barber fade', 'barber shaving beard', 'barber chair'],
+  nails: ['manicure', 'nail salon', 'nail art', 'nail polish manicure'],
+  lash: ['eyelash extensions', 'beauty salon facial', 'spa treatment', 'makeup artist'],
+  hair: ['hair salon', 'hairstylist', 'braids hairstyle', 'hair styling woman'],
+  tattoo: ['tattoo artist', 'tattoo studio', 'tattoo arm'],
+  auto: ['car detailing', 'car polishing', 'car wash foam', 'clean car interior', 'luxury car'],
+  food: ['tacos', 'street food', 'restaurant food plate', 'food truck', 'burger fries'],
+  fitness: ['gym workout', 'personal trainer', 'weightlifting gym', 'boxing training'],
+  home: ['house cleaning', 'landscaping garden', 'plumber working', 'handyman tools', 'clean kitchen'],
+  general: ['small business owner', 'local shop interior', 'storefront', 'customer service smile'],
+};
+function photosReady(env) { return !!env.PEXELS_KEY || aiImagesReady(env); }
+async function getPhotos(env, userId, data, mode, hint) {
+  if (env.PEXELS_KEY) {
+    const r = await pexelsPhotos(env, data, hint);
+    if (r.ok || !aiImagesReady(env)) return r;
+  }
+  const ids = await makeDemoPhotos(env, userId, data, mode, hint);
+  return ids.length ? { ok: true, set: { images: ids, stock: [] } } : { ok: false, error: ids.error };
+}
+async function pexelsPhotos(env, data, hint) {
+  const N = nicheFor(data.category, data.name);
+  const qs = PEXELS_QUERIES[N.key] || PEXELS_QUERIES.general;
+  // "new photos of huskies" → search for what they asked for
+  const asked = String(hint || '').toLowerCase().replace(/\b(new|different|other|more|better|change|redo|swap|photos?|pictures?|pics|images?|please|make|give me|the|with|of|some|show|use)\b/g, ' ').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const query = asked.length >= 3 ? asked.slice(0, 60) : qs[Math.floor(Math.random() * qs.length)];
+  try {
+    let j;
+    if (env.PEXELS_KEY === 'fake') {
+      j = { photos: Array.from({ length: 12 }, (_, i) => ({ id: 1000 + i, alt: query + ' ' + i, photographer: 'Test Photographer ' + i, photographer_url: 'https://www.pexels.com/@test' + i, url: 'https://www.pexels.com/photo/' + (1000 + i) + '/',
+        src: { large2x: 'https://images.pexels.com/photos/' + (1000 + i) + '/pexels-photo.jpeg?w=1880', large: 'https://images.pexels.com/photos/' + (1000 + i) + '/pexels-photo.jpeg?w=940' } })) };
+    } else {
+      const page = 1 + Math.floor(Math.random() * 3);
+      const r = await fetch('https://api.pexels.com/v1/search?query=' + encodeURIComponent(query) + '&per_page=30&page=' + page, { headers: { Authorization: env.PEXELS_KEY } });
+      if (r.status === 401 || r.status === 403) return { ok: false, error: 'Pexels rejected the key (check PEXELS_KEY in Cloudflare)' };
+      if (r.status === 429) return { ok: false, error: 'Pexels hourly limit reached, try again in a bit' };
+      if (!r.ok) return { ok: false, error: 'Pexels said ' + r.status };
+      j = await r.json();
+      if ((!j.photos || j.photos.length < 4) && page > 1) {
+        const r2 = await fetch('https://api.pexels.com/v1/search?query=' + encodeURIComponent(query) + '&per_page=30&page=1', { headers: { Authorization: env.PEXELS_KEY } });
+        if (r2.ok) j = await r2.json();
+      }
+    }
+    const list = (j.photos || []).filter((p) => p && p.src && /^https:\/\/images\.pexels\.com\//.test(p.src.large2x || ''));
+    if (list.length < 2) return { ok: false, error: 'no Pexels photos found for "' + query + '"' };
+    const picked = list.sort(() => Math.random() - 0.5).slice(0, 4);
+    return { ok: true, query, set: { images: [], stock: picked.map((p, i) => ({ src: i ? p.src.large : p.src.large2x, alt: String(p.alt || '').slice(0, 140), by: String(p.photographer || '').slice(0, 80), by_url: p.photographer_url || '', page: p.url || '' })) } };
+  } catch (e) { console.error('pexels', e); return { ok: false, error: 'could not reach Pexels' }; }
 }
 
 /* ================= Demo photos (free Cloudflare AI image model) ================= */
@@ -2569,6 +2628,8 @@ function cleanDemo(d, lead) {
     cta: s(d.cta, 60),
     images: (Array.isArray(d.images) ? d.images : []).filter((x) => /^[a-f0-9]{20}$/.test(String(x))).slice(0, 6),
     design: cleanDesign(d.design),
+    stock: (Array.isArray(d.stock) ? d.stock : []).slice(0, 6).map((x) => ({ src: String((x && x.src) || ''), alt: s(x && x.alt, 140), by: s(x && x.by, 80), by_url: url(x && x.by_url), page: url(x && x.page) }))
+      .filter((x) => /^https:\/\/images\.pexels\.com\/[\w\/.\-?=&%]+$/.test(x.src)),
   };
 }
 
