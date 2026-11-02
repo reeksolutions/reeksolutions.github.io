@@ -1551,7 +1551,12 @@ async function api(request, env, url) {
     const theme = DEMO_THEMES[body.theme] ? body.theme : d.theme;
     let leadId = d.lead_id;
     if (body.lead_id) { const lead = await loadLead(env, user, +body.lead_id); leadId = lead.id; }
-    if (body.reset) { await env.DB.prepare('DELETE FROM studio_drafts WHERE id = ?').bind(d.id).run(); return json({ ok: true }); }
+    if (body.reset) {
+      // clear every draft for the same lead (or every lead-less draft) so an older one doesn't pop back up
+      if (d.lead_id) await env.DB.prepare('DELETE FROM studio_drafts WHERE user_id = ? AND lead_id = ?').bind(user.id, d.lead_id).run();
+      else await env.DB.prepare('DELETE FROM studio_drafts WHERE user_id = ? AND lead_id IS NULL').bind(user.id).run();
+      return json({ ok: true });
+    }
     await env.DB.prepare('UPDATE studio_drafts SET theme = ?, data = ?, lead_id = ?, updated_at = ? WHERE id = ?').bind(theme, JSON.stringify(data), leadId, now(), d.id).run();
     return json({ ok: true, theme, data, lead_id: leadId });
   }
