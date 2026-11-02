@@ -146,15 +146,15 @@
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['demos', 'Demo queue'], ['deals', 'Deals & commissions']]],
       ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
-      ['Tools', [['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
+      ['Tools', [['finder', 'Lead Finder'], ['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark' };
+  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos'];
+  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos', 'finder'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,13 +199,14 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
       switch (route) {
         case 'home': return await viewHome();
         case 'team': return await viewTeam();
+        case 'finder': return await viewFinder();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -295,7 +296,7 @@
       sel('city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
       sel('contact', [['', 'Any contact']], [['email', 'Has email'], ['unemailed', 'Email not sent yet'], ['phone', 'Has phone']]),
       (opts.tags || []).length ? sel('tag', [['', 'Any tag']], opts.tags.map((t) => [t, '#' + t])) : null,
-      isAdmin ? sel('source', [['', 'Any source']], [['api', 'From scraper / n8n'], ['csv', 'From CSV upload']]) : null);
+      isAdmin ? sel('source', [['', 'Any source']], [['finder', 'From Lead Finder'], ['api', 'From scraper / n8n'], ['csv', 'From CSV upload']]) : null);
 
     // saved views: a few built in + your own
     const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
@@ -1128,6 +1129,130 @@
 
     renderLeadBar(); renderMsgs(); renderTheme(); refresh(); renderSave();
     shell('studio', [paneSeg, shellEl]);
+  }
+
+  /* ================= Lead Finder (admin) ================= */
+  const NICHES = ['Barber shop', 'Nail salon', 'Hair salon', 'Lash studio', 'Auto detailing', 'Mobile mechanic', 'Taqueria', 'Food truck', 'Braiding salon', 'Tattoo shop', 'Cleaning service', 'Landscaping'];
+  const CITIES = ['Inglewood', 'Hawthorne', 'Compton', 'Gardena', 'Culver City', 'Long Beach', 'Carson', 'South Gate', 'Lynwood', 'Downey', 'Torrance', 'Pasadena'];
+  async function viewFinder() {
+    const st = await api('GET', '/finder');
+    const F = S.finder || (S.finder = { what: '', where: '', maxReviews: '50', site: 'none', results: [], next: null, sel: new Set(), city: '' });
+    const usageEl = h('span', { class: 'usage' });
+    const showUsage = (u) => usageEl.replaceChildren(h('b', null, u.today + ' / ' + st.limits.day), ' searches today · ', h('b', null, u.month + ' / ' + st.limits.month), ' this month');
+    showUsage(st.usage);
+
+    if (!st.ready) {
+      return shell('finder', [
+        h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Lead Finder'),
+          h('p', { class: 'sub' }, 'Find local businesses with no website and few reviews, straight from Google, then add them to the CRM in one tap.'))),
+        panel('One-time setup (about 10 minutes)', null, h('ol', { class: 'setup' },
+          h('li', null, 'Go to ', h('b', null, 'console.cloud.google.com'), ' and sign in with your Google account. Create a project called "Reekon".'),
+          h('li', null, 'Open ', h('b', null, 'Billing'), ' and add your card. Google needs it on file, but the portal caps searches at ' + st.limits.day + ' a day and ' + st.limits.month + ' a month so you stay inside the free allowance.'),
+          h('li', null, 'Search the top bar for ', h('b', null, 'Places API (New)'), ' and click ', h('b', null, 'Enable'), '.'),
+          h('li', null, 'Go to ', h('b', null, 'APIs & Services → Credentials → Create credentials → API key'), '. Click the key, set ', h('b', null, 'API restrictions'), ' to only "Places API (New)", and save. Copy the key.'),
+          h('li', null, 'Extra safety: in ', h('b', null, 'APIs & Services → Places API (New) → Quotas'), ', set requests per day to ' + st.limits.day + '.'),
+          h('li', null, 'In Cloudflare, open your portal worker → ', h('b', null, 'Settings → Variables and Secrets → + Add'), '. Type: Secret. Name: ', h('code', null, 'GOOGLE_PLACES_KEY'), '. Value: the key. Deploy.'),
+          h('li', null, 'Come back here and refresh.'))),
+      ]);
+    }
+
+    const whatIn = h('input', { placeholder: 'e.g. Barber shop', value: F.what, list: 'nicheList' });
+    const whereIn = h('input', { placeholder: 'e.g. Inglewood, CA', value: F.where, list: 'cityList' });
+    const revSel = h('select', null, [['', 'Any number of reviews'], ['20', 'Under 20 reviews'], ['50', 'Under 50 reviews'], ['100', 'Under 100 reviews'], ['200', 'Under 200 reviews']].map(([v, l]) => h('option', { value: v }, l)));
+    revSel.value = F.maxReviews;
+    const siteSel = h('select', null, [['none', 'No real website'], ['all', 'Show everyone']].map(([v, l]) => h('option', { value: v }, l)));
+    siteSel.value = F.site;
+    const goBtn = h('button', { class: 'btn primary', type: 'submit' }, icon('search'), 'Find leads');
+    const listEl = h('div', { class: 'finds' });
+    const summary = h('div', { class: 'find-sum' });
+    const moreBtn = h('button', { class: 'btn block', hidden: true, onclick: () => search(true) }, 'Load 20 more');
+    const addBar = h('div', { class: 'add-bar', hidden: true });
+
+    const visible = () => F.results.filter((x) => (F.site === 'all' || x.site_status === 'none' || x.site_status === 'social') && (!F.maxReviews || x.reviews < +F.maxReviews));
+    function render() {
+      const v = visible();
+      const hiddenSite = F.results.filter((x) => F.site !== 'all' && (x.site_status === 'site' || x.site_status === 'found')).length;
+      const hiddenRev = F.results.filter((x) => F.maxReviews && x.reviews >= +F.maxReviews).length;
+      summary.replaceChildren(F.results.length ? h('p', null, h('b', null, v.length + ' match'), ' out of ' + F.results.length + ' businesses',
+        hiddenSite ? ' · ' + hiddenSite + ' hidden for having a website' : '', hiddenRev ? ' · ' + hiddenRev + ' hidden for too many reviews' : '') : null);
+      listEl.replaceChildren(...v.map(card));
+      if (F.results.length && !v.length) listEl.append(h('div', { class: 'empty-sm' }, 'Nothing matches your filters in this batch. Load more, loosen the review filter, or try a nearby city.'));
+      moreBtn.hidden = !F.next;
+      renderAdd();
+    }
+    function card(x) {
+      const can = !x.in_crm && !x.dnc && !!x.phone;
+      const on = F.sel.has(x.place_id);
+      const badge = x.site_status === 'none' ? h('span', { class: 'fb good' }, '✓ No website')
+        : x.site_status === 'social' ? h('span', { class: 'fb good' }, '✓ Social page only')
+          : x.site_status === 'found' ? h('a', { class: 'fb warn', href: x.found_site, target: '_blank', rel: 'noopener noreferrer' }, '⚠ Might have a site: ' + x.found_site.replace(/^https:\/\//, ''))
+            : h('a', { class: 'fb', href: x.website, target: '_blank', rel: 'noopener noreferrer' }, 'Has website');
+      const el = h('label', { class: 'find' + (on ? ' on' : '') + (can ? '' : ' off') },
+        h('input', { type: 'checkbox', checked: on, disabled: !can, onchange: (e) => { e.target.checked ? F.sel.add(x.place_id) : F.sel.delete(x.place_id); el.classList.toggle('on', e.target.checked); renderAdd(); } }),
+        h('div', { class: 'fbody' },
+          h('div', { class: 'ftop' }, h('b', null, x.business), x.rating ? h('span', { class: 'stars' }, '★ ' + x.rating.toFixed(1), h('small', null, ' (' + x.reviews + ')')) : h('span', { class: 'stars none' }, 'No reviews')),
+          h('div', { class: 'fmeta' }, [x.category, x.short_address || x.address].filter(Boolean).join(' · ')),
+          h('div', { class: 'fmeta' }, x.phone || 'No phone listed'),
+          h('div', { class: 'fbadges' }, badge, x.in_crm ? h('span', { class: 'fb' }, 'Already in CRM') : null, x.dnc ? h('span', { class: 'fb bad' }, 'Do Not Call') : null,
+            x.link ? h('a', { class: 'fb link', href: x.link, target: '_blank', rel: 'noopener noreferrer', onclick: (e) => e.stopPropagation() }, 'Google Maps ↗') : null)));
+      return el;
+    }
+    function renderAdd() {
+      const n = F.sel.size;
+      addBar.hidden = !n;
+      if (!n) return;
+      const repSel = h('select', null, h('option', { value: 'auto' }, 'Spread across reps'), h('option', { value: 'none' }, "Don't assign yet"));
+      addBar.replaceChildren(h('b', null, n + ' selected'), repSel,
+        h('button', { class: 'btn ok', onclick: async () => {
+          const picked = F.results.filter((x) => F.sel.has(x.place_id)).map((x) => Object.assign({}, x, { city: F.city }));
+          try {
+            const r = await api('POST', '/finder/add', { places: picked, assign: repSel.value, batch: F.what + ' · ' + F.city });
+            toast(r.inserted + ' added to the CRM' + (r.duplicates ? ' · ' + r.duplicates + ' were already there' : ''));
+            F.results.forEach((x) => { if (F.sel.has(x.place_id)) x.in_crm = true; });
+            F.sel.clear(); render();
+            await sheet((box, close) => box.append(h('h2', null, '✓ ' + r.inserted + ' leads added'), h('p', { class: 'sub' }, 'Saved as the batch "' + r.batch + '". They are in the demo queue and assigned' + (repSel.value === 'none' ? ' to nobody yet.' : ' across your reps.')),
+              h('div', { class: 'row wrap' }, h('a', { class: 'btn primary', href: '#/studio', onclick: () => close() }, icon('spark'), 'Build demos'), h('button', { class: 'btn', onclick: () => { Object.assign(S.leadFilters, { status: 'all', rep: '', batch: String(r.batch_id), city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' }); close(); location.hash = '#/leads'; } }, 'See the leads'),
+                h('button', { class: 'btn', onclick: () => close() }, 'Keep searching'))));
+          } catch (e) { fail(e); }
+        } }, 'Add to CRM'));
+    }
+    async function search(more) {
+      F.what = whatIn.value.trim(); F.where = whereIn.value.trim();
+      if (!F.what || !F.where) return toast('Type what and where', true);
+      goBtn.disabled = true; moreBtn.disabled = true;
+      if (!more) { F.results = []; F.sel.clear(); F.next = null; listEl.replaceChildren(h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' }), h('p', { style: 'margin-top:10px' }, 'Searching Google and double-checking websites…'))); }
+      try {
+        const r = await api('POST', '/finder/search', { what: F.what, where: F.where, page_token: more ? F.next : undefined });
+        F.city = F.where.replace(/,.*$/, '').trim();
+        const seen = new Set(F.results.map((x) => x.place_id));
+        F.results = F.results.concat(r.results.filter((x) => !seen.has(x.place_id)));
+        F.next = r.next_page_token;
+        // pre-select the good ones
+        r.results.forEach((x) => { if (!x.in_crm && !x.dnc && x.phone && (x.site_status === 'none' || x.site_status === 'social') && (!F.maxReviews || x.reviews < +F.maxReviews)) F.sel.add(x.place_id); });
+        showUsage(r.usage); render();
+        if (!more && !window.matchMedia('(min-width:1000px)').matches) summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) { fail(e); if (!more) listEl.replaceChildren(); }
+      goBtn.disabled = false; moreBtn.disabled = false;
+    }
+    revSel.onchange = () => { F.maxReviews = revSel.value; render(); };
+    siteSel.onchange = () => { F.site = siteSel.value; render(); };
+    const form = h('form', { class: 'finder-form', onsubmit: (e) => { e.preventDefault(); search(false); } },
+      h('div', { class: 'field' }, h('label', null, 'What kind of business'), whatIn),
+      h('div', { class: 'field' }, h('label', null, 'Where'), whereIn),
+      h('div', { class: 'field' }, h('label', null, 'Reviews'), revSel),
+      h('div', { class: 'field' }, h('label', null, 'Website'), siteSel),
+      goBtn,
+      h('datalist', { id: 'nicheList' }, NICHES.map((n) => h('option', { value: n }))),
+      h('datalist', { id: 'cityList' }, CITIES.map((c) => h('option', { value: c + ', CA' }))));
+    const chips = h('div', { class: 'quick' }, NICHES.slice(0, 8).map((n) => h('button', { type: 'button', class: 'vchip', onclick: () => { whatIn.value = n; } }, n)));
+
+    shell('finder', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Lead Finder'),
+        h('p', { class: 'sub' }, 'Businesses with no real website and few reviews, straight from Google. Each search checks 20 businesses.')), usageEl),
+      h('section', { class: 'panel' }, form, chips),
+      summary, listEl, moreBtn, addBar,
+    ]);
+    if (F.results.length) render();
   }
 
   /* ================= batches + upload ================= */
@@ -2029,6 +2154,7 @@
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
+        row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website and few reviews'),
         row('#/callbacks', 'callbacks', 'Callbacks', 'Who to call back today'),
         row('#/demos', 'demos', 'Demo queue', 'Leads waiting on a demo site'),
         row('#/deals', 'deals', 'Deals & commissions', 'Closes, payouts and what you owe'),

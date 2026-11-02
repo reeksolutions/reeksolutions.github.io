@@ -90,7 +90,7 @@ const SCHEMA = [
 // Stage 2 columns added to the existing deals table. Only added if missing — never drops data.
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
+const LEAD_COLUMNS = { place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -133,6 +133,8 @@ async function ensureSchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS studio_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, lead_id INTEGER, theme TEXT, data TEXT NOT NULL DEFAULT '{}',
       messages TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS finder_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, query TEXT, results INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS finder_time ON finder_log(created_at)'),
   ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
@@ -374,6 +376,51 @@ function pickRep(loads) {
 }
 
 
+/* ---- Lead Finder helpers ---- */
+// Stays inside Google's free monthly allowance (1,000 Enterprise searches) with room to spare.
+const FINDER_LIMITS = { day: 30, month: 900 };
+async function finderUsage(env) {
+  const d = new Date();
+  const la = new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const dayStart = new Date(d.getTime() - ((la.getHours() * 60 + la.getMinutes()) * 60 + la.getSeconds()) * 1000).toISOString();
+  const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
+  const r = await env.DB.prepare('SELECT SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, COUNT(*) AS month FROM finder_log WHERE created_at >= ?').bind(dayStart, monthStart).first();
+  return { today: r.today || 0, month: r.month || 0 };
+}
+// Try the obvious web addresses for a business Google says has no website.
+async function guessSite(name) {
+  const words = String(name || '').toLowerCase().replace(/&/g, ' and ').replace(/['’]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+  if (!words.length) return null;
+  const full = words.join('');
+  if (full.length < 4 || full.length > 40) return null;
+  const key = words.find((w) => w.length >= 4 && !/^(the|and|shop|salon|studio|spa|llc|inc)$/.test(w)) || words[0];
+  for (const domain of [full + '.com']) {
+    try {
+      const r = await fetch('https://' + domain, { redirect: 'follow', signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ReekonCheck/1.0)' } });
+      if (!r.ok) continue;
+      const text = (await r.text()).slice(0, 60000).toLowerCase();
+      if (/(domain|this website) (is|may be) for sale|buy this domain|parked free|domain parking|godaddy\.com\/domainsearch|sedo|hugedomains|dan\.com/.test(text)) continue;
+      if (text.includes(key)) return 'https://' + domain;
+    } catch { /* no site there */ }
+  }
+  return null;
+}
+
+// Local testing only (FINDER_FAKE=1): a Google-shaped answer.
+function fakePlaces(page) {
+  const mk = (i, name, site, rating, n, phone, type) => ({ id: 'fake' + i + (page ? 'b' : ''), displayName: { text: name + (page ? ' II' : '') }, formattedAddress: (100 + i) + ' W Manchester Blvd, Inglewood, CA 90301, USA', shortFormattedAddress: (100 + i) + ' W Manchester Blvd, Inglewood',
+    nationalPhoneNumber: phone, websiteUri: site, rating, userRatingCount: n, googleMapsUri: 'https://maps.google.com/?cid=' + i, primaryTypeDisplayName: { text: type }, businessStatus: 'OPERATIONAL' });
+  const places = [
+    mk(1, 'Kings Cutz', undefined, 4.9, 14, '(310) 555-0141', 'Barber shop'),
+    mk(2, 'Big Al Barbers', 'https://www.instagram.com/bigal', 4.6, 38, '(310) 555-0142', 'Barber shop'),
+    mk(3, 'Supreme Fades Lounge', 'https://supremefades.com', 4.8, 412, '(310) 555-0143', 'Barber shop'),
+    mk(4, 'Fresh Cutz Barbershop', undefined, 4.8, 213, '(310) 555-0101', 'Barber shop'),
+    mk(5, 'Line Up Kings', undefined, 5.0, 6, '(424) 555-0145', 'Barber shop'),
+    mk(6, 'Old School Shave', undefined, 4.2, 22, undefined, 'Barber shop'),
+  ];
+  return { ok: true, status: 200, json: async () => ({ places, ...(page ? {} : { nextPageToken: 'page2' }) }) };
+}
+
 /* ---- shared lead import (CSV upload + scraper/n8n endpoint) ---- */
 async function importRows(env, { batchId, rows, startStatus, assign, skipWithSite, source }) {
   rows = Array.isArray(rows) ? rows.slice(0, 500) : [];
@@ -415,9 +462,10 @@ async function importRows(env, { batchId, rows, startStatus, assign, skipWithSit
     if (em) seenEmail.add(em);
     const rep = loads ? pickRep(loads) : fixedRep;
     stmts.push(env.DB.prepare(
-      `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?)`
-    ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null, source || 'csv'));
+      `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source,place_id,reviews)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?,?,?)`
+    ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null, source || 'csv',
+      str(r.place_id, 200) || null, r.reviews !== undefined && r.reviews !== '' && Number.isFinite(+r.reviews) ? Math.round(+r.reviews) : null));
     inserted++;
   }
   for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
@@ -516,7 +564,7 @@ function leadFilter(p, user) {
   const tag = cleanTag(p.get('tag'));
   if (tag) { where.push('l.tags LIKE ?'); args.push('%,' + tag + ',%'); }
   if (p.get('due') === '1') { where.push('l.next_action_at IS NOT NULL AND l.next_action_at < ?'); args.push(validIso(p.get('due_before')) || now()); }
-  if (p.get('source') === 'api' || p.get('source') === 'csv') { where.push("COALESCE(l.source,'csv') = ?"); args.push(p.get('source')); }
+  if (['api', 'csv', 'finder'].includes(p.get('source'))) { where.push("COALESCE(l.source,'csv') = ?"); args.push(p.get('source')); }
   const q = str(p.get('q'), 80);
   if (q) {
     where.push('(l.business LIKE ? OR l.owner LIKE ? OR l.phone_norm LIKE ? OR l.category LIKE ? OR l.email LIKE ? OR l.tags LIKE ?)');
@@ -1367,6 +1415,71 @@ async function api(request, env, url) {
     need(user, 'admin', 'rep', 'dev');
     const lead = await loadLead(env, user, +body.lead_id);
     return json(await saveDemo(env, user, lead, body.theme, body.data || {}, url.origin));
+  }
+
+  /* ---- Lead Finder (Google Places) ---- */
+  if (path === '/finder' && method === 'GET') {
+    need(user, 'admin');
+    return json({ ready: !!env.GOOGLE_PLACES_KEY, usage: await finderUsage(env), limits: FINDER_LIMITS });
+  }
+  if (path === '/finder/search' && method === 'POST') {
+    need(user, 'admin');
+    if (!env.GOOGLE_PLACES_KEY) bad('Add your Google Places key in Cloudflare first (see the setup steps on this page).');
+    const what = str(body.what, 80), where = str(body.where, 80);
+    if (!what || !where) bad('Type what kind of business and where');
+    const u = await finderUsage(env);
+    if (u.today >= FINDER_LIMITS.day) bad(`You've hit today's ${FINDER_LIMITS.day} searches. This cap keeps Google free. It resets at midnight.`);
+    if (u.month >= FINDER_LIMITS.month) bad(`You've used this month's ${FINDER_LIMITS.month} free searches. It resets on the 1st.`);
+    const pageToken = str(body.page_token, 600) || undefined;
+    const r = env.FINDER_FAKE === '1' ? fakePlaces(pageToken) : await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken' },
+      body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
+    });
+    await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(user.id, what + ' | ' + where, 0, now()).run();
+    let g = {};
+    try { g = await r.json(); } catch { g = {}; }
+    if (!r.ok) {
+      const msg = (g.error && g.error.message) || ('Google said ' + r.status);
+      bad(/API key|not authorized|PERMISSION|billing/i.test(msg) ? 'Google rejected the key: ' + msg.slice(0, 160) + '. Check the setup steps.' : msg.slice(0, 200));
+    }
+    const places = (g.places || []).filter((p) => !p.businessStatus || p.businessStatus === 'OPERATIONAL');
+    // what's already in the CRM / on the Do Not Call list
+    const phones = places.map((p) => normPhone(p.nationalPhoneNumber)).filter(Boolean);
+    const ids = places.map((p) => p.id).filter(Boolean);
+    const inCrm = new Set(), dnc = new Set(), idSeen = new Set();
+    if (phones.length) {
+      const q = phones.map(() => '?').join(',');
+      (await env.DB.prepare(`SELECT phone_norm FROM leads WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => inCrm.add(x.phone_norm));
+      (await env.DB.prepare(`SELECT phone_norm FROM dnc WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => dnc.add(x.phone_norm));
+    }
+    if (ids.length) (await env.DB.prepare(`SELECT place_id FROM leads WHERE place_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.forEach((x) => idSeen.add(x.place_id));
+    const out = places.map((p) => {
+      const site = p.websiteUri || '';
+      const pn = normPhone(p.nationalPhoneNumber);
+      return {
+        place_id: p.id, business: (p.displayName && p.displayName.text) || '', phone: p.nationalPhoneNumber || '', address: p.formattedAddress || '',
+        short_address: p.shortFormattedAddress || '', category: (p.primaryTypeDisplayName && p.primaryTypeDisplayName.text) || '', rating: p.rating || null,
+        reviews: p.userRatingCount || 0, link: p.googleMapsUri || '', website: site,
+        site_status: !site ? 'none' : NOT_A_SITE.test(site) ? 'social' : 'site',
+        in_crm: (pn && inCrm.has(pn)) || idSeen.has(p.id), dnc: !!(pn && dnc.has(pn)),
+      };
+    });
+    // double-check "no website" ones: try the obvious domain names
+    const toCheck = out.filter((x) => x.site_status !== 'site' && !x.in_crm).slice(0, 20);
+    await Promise.all(toCheck.map(async (x) => { const f = await guessSite(x.business); if (f) { x.site_status = 'found'; x.found_site = f; } }));
+    return json({ results: out, next_page_token: g.nextPageToken || null, usage: await finderUsage(env), city: where });
+  }
+  if (path === '/finder/add' && method === 'POST') {
+    need(user, 'admin');
+    const list = Array.isArray(body.places) ? body.places.slice(0, 100) : [];
+    if (!list.length) bad('Pick some businesses first');
+    const name = str(body.batch, 100) || 'Lead Finder · ' + new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric' });
+    const b = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind(name, user.id, now()).run();
+    const rows = list.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city: p.city || '', category: p.category, rating: p.rating == null ? '' : String(p.rating), link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
+    const res = await importRows(env, { batchId: b.meta.last_row_id, rows, startStatus: body.start_status, assign: body.assign || 'auto', skipWithSite: false, source: 'finder' });
+    return json({ ...res, batch_id: b.meta.last_row_id, batch: name });
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
