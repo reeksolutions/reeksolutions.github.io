@@ -508,6 +508,9 @@ async function sha256Hex(s) { return hex(new Uint8Array(await crypto.subtle.dige
    GET  /api/outreach/batch?limit=40  → leads with an email that were never emailed
    POST /api/outreach/sent    {ids}    → mark them emailed
    POST /api/outreach/replies {yes:[emails], no:[emails]} → yes = hot lead, no = never email again */
+// a Facebook / Instagram / booking page doesn't count as a website
+const SOCIAL_SQL = "(" + ['facebook.', 'fb.com', 'instagram.', 'linktr', 'yelp.', 'booksy.', 'vagaro.', 'styleseat.', 'square.site', 'squareup.', 'tiktok.', 'fresha.', 'glossgenius.', 'google.', 'g.page', 'business.site']
+  .map((d) => "website LIKE '%" + d + "%'").join(' OR ') + ")";
 async function keyAuth(request, env) {
   const auth = request.headers.get('Authorization') || '';
   const key = (/^Bearer\s+(\S+)$/i.exec(auth) || [])[1] || request.headers.get('X-Api-Key') || '';
@@ -530,6 +533,7 @@ async function handleOutreach(request, env, url) {
        WHERE email IS NOT NULL AND email != '' AND emailed_at IS NULL
          AND status NOT IN ('dnc','lost','won') AND COALESCE(heat,'cold') != 'dead'
          AND (tags IS NULL OR tags NOT LIKE '%,opted-out,%')
+         AND (website IS NULL OR website = '' OR ${SOCIAL_SQL})
        ORDER BY id ASC LIMIT ?`).bind(limit).all();
     return json({ leads: results });
   }
