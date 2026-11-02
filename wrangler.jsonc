@@ -1,0 +1,20 @@
+// Cloudflare settings for the Reekon sales portal (runs as a Worker).
+// The public client site (index.html at the repo root) stays on GitHub Pages.
+{
+  "name": "reeksolutions-github-io",
+  "main": "portal/_worker.js",
+  "compatibility_date": "2024-09-23",
+  "assets": {
+    "directory": "./portal",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reekon-portal",
+      "database_id": "749f7eaf-48a8-497d-9f25-cb9ba91577c5"
+    }
+  ],
+  "keep_vars": true
+}
