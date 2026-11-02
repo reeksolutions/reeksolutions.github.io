@@ -1,10 +1,10 @@
-/* Reekon Systems — Sales Portal (stage 2) */
+/* Reekon Systems — Sales Portal (stage 3) */
 (function () {
   'use strict';
 
   /* ================= basics ================= */
   const $app = document.getElementById('app');
-  const S = { me: null, options: null, leadFilters: { status: 'open', rep: '', batch: '', city: '', q: '' }, selected: new Set(), selecting: false,
+  const S = { me: null, options: null, leadFilters: { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '' }, selected: new Set(), selecting: false,
     script: null, period: 'today', boardSort: 'closes', dealsFilter: '0' };
 
   const STATUS = {
@@ -15,7 +15,9 @@
     ['no_answer', 'No answer'], ['voicemail', 'Voicemail'], ['gatekeeper', 'Gatekeeper'], ['not_interested', 'Not interested'],
     ['callback', 'Callback'], ['demo_sent', 'Demo sent'], ['booked', 'Booked'], ['dnc', 'Do Not Call'],
   ];
-  const OUTCOME_LABEL = Object.fromEntries(OUTCOMES.concat([['status_change', 'Status changed'], ['demo_ready', 'Demo marked ready'], ['closed_won', 'Deal closed']]));
+  const HEAT = [['hot', 'Hot', '🔥'], ['warm', 'Warm', '☀️'], ['cold', 'Cold', '🧊'], ['dead', 'Dead', '💀']];
+  const HEAT_LABEL = Object.fromEntries(HEAT.map(([k, l, e]) => [k, e + ' ' + l]));
+  const OUTCOME_LABEL = Object.fromEntries(OUTCOMES.concat([['emailed', 'Emailed'], ['status_change', 'Status changed'], ['demo_ready', 'Demo marked ready'], ['closed_won', 'Deal closed']]));
 
   // tiny element builder — everything goes through textContent, so lead data can't inject HTML
   function h(tag, attrs, ...kids) {
@@ -46,6 +48,8 @@
     sms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5z"/></svg>',
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10.5L12 4l8 6.5V20"/><path d="M9.5 20v-5.5h5V20"/></svg>',
@@ -167,7 +171,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script'], rep: ['lead', 'script'], dev: ['lead'] }[S.me.role] || [];
+    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -181,6 +185,7 @@
         case 'lead': return await viewLead(+arg);
         case 'callbacks': return await viewCallbacks();
         case 'demos': return await viewDemos();
+        case 'demo': return await viewDemoBuilder(+arg);
         case 'batches': return await viewBatches();
         case 'upload': return await viewUpload();
         case 'users': return await viewUsers();
@@ -255,11 +260,16 @@
     const filters = h('div', { class: 'filters' }, statusSel,
       isAdmin ? sel('rep', [['', 'All reps'], ['none', 'Unassigned']], opts.reps.map((r) => [String(r.id), r.name + (r.active ? '' : ' (off)')])) : null,
       isAdmin ? sel('batch', [['', 'All batches']], opts.batches.map((b) => [String(b.id), b.name])) : null,
-      sel('city', [['', 'All cities']], opts.cities.map((c) => [c, c])));
+      sel('city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
+      sel('contact', [['', 'Any contact']], [['email', 'Has email'], ['unemailed', 'Email not sent yet'], ['phone', 'Has phone']]));
+    const heatChips = h('div', { class: 'heat-chips' }, [['', 'All']].concat(HEAT.map(([k, l, e]) => [k, e + ' ' + l])).map(([k, l]) =>
+      h('button', { class: 'hchip ' + (k || 'all') + (F.heat === k ? ' on' : ''), onclick: (e) => {
+        F.heat = k; heatChips.querySelectorAll('.hchip').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); load(true);
+      } }, l)));
 
     let tmr;
     const search = h('div', { class: 'search' }, icon('search'),
-      h('input', { type: 'search', placeholder: 'Search business, owner, phone…', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(true); }, 300); } }));
+      h('input', { type: 'search', placeholder: 'Search business, owner, phone, email…', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(true); }, 300); } }));
 
     // admin bulk select
     const bulk = h('div', { class: 'bulk', hidden: true });
@@ -281,7 +291,7 @@
     async function load(reset) {
       if (reset) { offset = 0; listEl.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' }))); }
       const qs = new URLSearchParams({ limit: 50, offset });
-      for (const k of ['status', 'rep', 'batch', 'city', 'q']) if (F[k]) qs.set(k, F[k]);
+      for (const k of ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact']) if (F[k]) qs.set(k, F[k]);
       if (F.status === '') qs.delete('status');
       try {
         const r = await api('GET', '/leads?' + qs);
@@ -295,7 +305,9 @@
     }
 
     function leadCard(l) {
-      const tags = [pill(l.status)];
+      const tags = [h('span', { class: 'tag heat ' + (l.heat || 'cold') }, HEAT_LABEL[l.heat || 'cold']), pill(l.status)];
+      if (l.demo_views) tags.push(h('span', { class: 'tag hot' }, '👀 viewed ' + l.demo_views + 'x'));
+      if (l.email) tags.push(h('span', { class: 'tag' + (l.emailed_at ? ' good' : '') }, l.emailed_at ? '✉ emailed' : '✉ email'));
       if (l.status === 'callback' && l.callback_at) tags.push(h('span', { class: 'tag hot' }, '↻ ' + fmt(l.callback_at)));
       if (l.status === 'booked' && l.booked_at) tags.push(h('span', { class: 'tag good' }, '📅 ' + fmt(l.booked_at)));
       tags.push(l.demo_url ? h('span', { class: 'tag good' }, 'Demo ✓') : h('span', { class: 'tag' }, 'No demo'));
@@ -305,6 +317,7 @@
         S.selecting ? h('input', { type: 'checkbox', checked: S.selected.has(l.id), onclick: (e) => { e.stopPropagation(); e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } }) : null,
         h('div', { class: 'body' }, h('div', { class: 'name' }, l.business),
           h('div', { class: 'meta' }, [l.owner, l.city, l.category].filter(Boolean).join(' · ') || '—'),
+          !l.phone && l.email ? h('div', { class: 'meta' }, '✉ ' + l.email) : null,
           h('div', { class: 'tags' }, tags)),
         l.phone && !S.selecting ? h('a', { class: 'call-btn', href: telHref(l.phone), 'aria-label': 'Call ' + l.business, onclick: (e) => e.stopPropagation() }, icon('phone')) : null);
       if (S.selecting) card.addEventListener('click', (e) => { if (e.target.type !== 'checkbox') { e.preventDefault(); const cb = card.querySelector('input'); cb.checked = !cb.checked; cb.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } });
@@ -315,7 +328,7 @@
     shell('leads', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, isAdmin ? 'Leads' : 'My leads'), h('p', { class: 'sub' }, isAdmin ? 'Every lead across all batches.' : 'Tap a lead to call and log the outcome.')),
         isAdmin ? h('div', { class: 'row' }, selectBtn, h('a', { class: 'btn small primary', href: '#/upload' }, 'Upload')) : null),
-      search, filters, countEl, listEl, moreBtn, bulk,
+      search, heatChips, filters, countEl, listEl, moreBtn, bulk,
     ]);
     load(true);
   }
@@ -327,17 +340,21 @@
     const reload = () => viewLead(id);
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
+    const seller = S.me.role === 'admin' || S.me.role === 'rep';
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
       L.phone ? h('a', { class: 'btn ok wide', href: telHref(L.phone) }, icon('phone'), 'Call ' + L.phone) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
+      h('a', { class: 'btn', href: '#/demo/' + L.id }, icon('spark'), L.demo_url ? 'Edit demo' : 'Build demo'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
       L.demo_url ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(L.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', L.demo_url); } } }, icon('copy'), 'Copy link') : null,
       L.demo_url ? h('a', { class: 'btn', href: L.demo_url, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open demo') : null,
       L.link ? h('a', { class: 'btn', href: L.link, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Google / social') : null);
 
     const info = h('div', { class: 'info' },
-      [['Owner', L.owner], ['Phone', L.phone], ['City', L.city], ['Category', L.category], ['Batch', L.batch_name], ['Rep', L.rep_name || 'Unassigned'],
-        ['Demo', L.demo_url ? 'Ready' : 'Not ready yet'], ['Calls made', String(L.attempts || 0)],
+      [['Owner', L.owner], ['Phone', L.phone], ['Email', L.email], ['Emailed', L.emailed_at ? fmt(L.emailed_at) : (L.email ? 'Not yet' : null)], ['Address', L.address], ['Rating', L.rating], ['City', L.city], ['Category', L.category], ['Batch', L.batch_name], ['Rep', L.rep_name || 'Unassigned'],
+        ['Demo', L.demo_url ? 'Ready' : 'Not ready yet'],
+        L.demo_url ? ['Demo opened', L.demo_views ? L.demo_views + (L.demo_views === 1 ? ' time' : ' times') + ' · last ' + fmt(L.demo_viewed_at) : 'Not yet'] : null, ['Calls made', String(L.attempts || 0)],
         L.callback_at && L.status === 'callback' ? ['Callback', fmt(L.callback_at)] : null,
         L.booked_at && L.status === 'booked' ? ['Booked call', fmt(L.booked_at)] : null]
         .filter((x) => x && x[1]).map(([k, v]) => h('div', null, h('span', null, k), h('span', null, v))));
@@ -396,6 +413,12 @@
       isAdmin ? h('button', { class: 'btn small', style: 'margin-top:10px', onclick: async () => { if (await dealSheet({ lead: L })) reload(); } }, '+ Add another deal (upsell)') : null) : null;
 
     const scriptPanel = script ? scriptBox(script.sections, ctxFor(L), true) : null;
+    const emailCue = L.emailed_at && seller && !closed ? h('div', { class: 'cue-box section' }, h('b', null, '✉ You emailed them ' + emailDay(L.emailed_at) + '. Open with it:'),
+      h('p', null, `"Hey ${first(L.owner) || 'there'}, this is ${first(S.me.name)} with Reekon Systems. I sent you an email ${emailDay(L.emailed_at)} with a free website we built for ${L.business}. Ring a bell?"`),
+      L.demo_views ? h('p', { class: 'dim' }, '👀 They opened the demo ' + L.demo_views + (L.demo_views === 1 ? ' time' : ' times') + '. Mention it: "I saw you checked it out, what did you think?"') : null) : null;
+    const heatSeg = seller ? h('div', { class: 'seg heat-seg' }, HEAT.map(([k, l, e]) => h('button', { class: (L.heat || 'cold') === k ? 'on ' + k : k, onclick: async () => {
+      try { await api('POST', '/leads/' + id + '/heat', { heat: k }); toast('Marked ' + l); reload(); } catch (x) { fail(x); }
+    } }, e + ' ' + l))) : null;
 
     const noteBox = h('textarea', { placeholder: 'Notes from this call…' });
     const saveNote = h('button', { class: 'btn primary block', style: 'margin-top:8px', onclick: async () => {
@@ -426,6 +449,7 @@
         f('Demo link', 'demo_url', L.demo_url, 'url'),
         f('Business', 'business', L.business), h('div', { class: 'grid2' }, f('Owner', 'owner', L.owner), f('Phone', 'phone', L.phone, 'tel')),
         h('div', { class: 'grid2' }, f('City', 'city', L.city), f('Category', 'category', L.category)),
+        h('div', { class: 'grid2' }, f('Email', 'email', L.email, 'email'), f('Address', 'address', L.address)),
         f('Google / social link', 'link', L.link, 'url'),
         h('button', { class: 'btn primary block', type: 'submit' }, 'Save changes'));
       form.addEventListener('submit', async (e) => {
@@ -449,9 +473,12 @@
 
     shell(S.me.role === 'admin' || S.me.role === 'rep' ? 'leads' : 'demos', [
       h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
-      h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null),
+      h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
+        L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
         h('h1', null, L.business)),
+      heatSeg,
       actions,
+      emailCue,
       scriptPanel,
       h('div', { class: 'card section' }, info),
       dealBox,
@@ -460,6 +487,46 @@
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'History'), h('div', { class: 'card' }, timeline)),
       adminPanel,
     ]);
+  }
+
+  /* ================= email first ================= */
+  function emailDay(iso) {
+    if (!iso) return '';
+    const d = new Date(iso), t = new Date();
+    const days = Math.round((new Date(t.toDateString()) - new Date(d.toDateString())) / 864e5);
+    if (days <= 0) return 'earlier today';
+    if (days === 1) return 'yesterday';
+    if (days < 7) return 'on ' + d.toLocaleDateString(undefined, { weekday: 'long' });
+    return 'last week';
+  }
+  const DEFAULT_SIG = (name) => `${name}\nReekon Systems · Los Angeles, CA\n\nIf you'd rather not hear from us, just reply "no thanks" and I won't email again.`;
+  function emailSheet(L, after) {
+    return sheet((box, close) => {
+      const own = first(L.owner);
+      const sigKey = 'rs_sig_' + S.me.id;
+      const sig = h('textarea', { rows: 4, oninput: () => lsSet(sigKey, sig.value) });
+      sig.value = lsGet(sigKey, DEFAULT_SIG(S.me.name));
+      const subj = h('input', { value: L.demo_url ? `Made a free website for ${L.business}` : `Quick question about ${L.business}` });
+      const body = h('textarea', { rows: 11 });
+      body.value = L.demo_url
+        ? `Hi ${own || 'there'},\n\nI'm ${first(S.me.name)} with Reekon Systems here in LA. I noticed ${L.business} doesn't have a website yet, so we went ahead and built you a free preview:\n\n${L.demo_url}\n\nNo cost and no catch. If you like it, it can be live this week. If not, no worries at all.\n\nI'll give you a quick call tomorrow to hear what you think.`
+        : `Hi ${own || 'there'},\n\nI'm ${first(S.me.name)} with Reekon Systems here in LA. I noticed ${L.business} doesn't have a website yet. We build free website previews for local businesses, and I'd love to make one for you.\n\nWant me to send it over? I'll give you a quick call tomorrow either way.`;
+      const full = () => body.value.trim() + '\n\n' + sig.value.trim();
+      const logIt = async () => {
+        try { await api('POST', '/leads/' + L.id + '/calls', { outcome: 'emailed' }); toast('Logged: emailed ✓'); close(true); after && after(); } catch (x) { fail(x); }
+      };
+      const sent = h('button', { class: 'btn ok block', hidden: true, onclick: logIt }, '✓ I sent it, log it');
+      const gmail = h('a', { class: 'btn primary', target: '_blank', rel: 'noopener', onclick: () => { gmail.href = 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(L.email) + '&su=' + encodeURIComponent(subj.value) + '&body=' + encodeURIComponent(full()); sent.hidden = false; } }, icon('mail'), 'Open in Gmail');
+      const mailto = h('a', { class: 'btn', onclick: () => { mailto.href = 'mailto:' + L.email + '?subject=' + encodeURIComponent(subj.value) + '&body=' + encodeURIComponent(full()); sent.hidden = false; } }, 'Mail app');
+      const copy = h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(full()); toast('Email copied'); } catch { toast('Copy failed, select the text instead', true); } sent.hidden = false; } }, icon('copy'), 'Copy');
+      box.append(h('h2', null, 'Email ' + L.business), h('p', { class: 'sub' }, L.email),
+        !L.demo_url ? h('div', { class: 'cue-box' }, h('b', null, 'No demo yet.'), ' Emails with a demo link get way more replies. ', h('a', { href: '#/demo/' + L.id }, 'Build the demo first →')) : null,
+        h('div', { class: 'field' }, h('label', null, 'Subject'), subj),
+        h('div', { class: 'field' }, h('label', null, 'Message'), body),
+        h('div', { class: 'field' }, h('label', null, 'Signature (saved on this device, add your mailing address)'), sig),
+        h('div', { class: 'row wrap' }, gmail, mailto, copy), h('div', { style: 'height:10px' }), sent,
+        h('button', { class: 'btn block', style: 'margin-top:8px', onclick: () => close(null) }, 'Cancel'));
+    });
   }
 
   /* ================= callbacks ================= */
@@ -501,14 +568,191 @@
         h('div', { class: 'row', style: 'justify-content:space-between;align-items:flex-start' },
           h('div', { style: 'min-width:0' }, h('h2', null, l.business), h('p', { class: 'sub' }, [l.category, l.city, l.owner].filter(Boolean).join(' · ') || '—')),
           l.batch_name ? h('span', { class: 'tag' }, l.batch_name) : null),
-        l.link ? h('a', { class: 'btn small', style: 'margin-top:12px', href: l.link, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Open their Google / social') : null,
-        h('div', { class: 'row', style: 'margin-top:12px' }, input, btn));
+        h('div', { class: 'row wrap', style: 'margin-top:12px' },
+          h('a', { class: 'btn primary small', href: '#/demo/' + l.id }, icon('spark'), l.demo_url ? 'Edit demo' : 'Build demo'),
+          l.demo_url ? h('a', { class: 'btn small', href: l.demo_url, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open') : null,
+          l.link ? h('a', { class: 'btn small', href: l.link, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Their Google / social') : null),
+        h('details', { class: 'own-link' }, h('summary', null, 'Built it somewhere else? Paste the link'), h('div', { class: 'row', style: 'margin-top:10px' }, input, btn)));
     };
     shell('demos', [
-      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Demo queue'), h('p', { class: 'sub' }, 'Build an unlisted demo site, paste its link, mark it ready. Reps see it right away.'))),
+      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Demo queue'), h('p', { class: 'sub' }, 'Tap Build demo, paste their info, pick a look. The link goes straight to the rep.'))),
       seg,
       r.leads.length ? r.leads.map(card) : h('div', { class: 'card empty' }, h('b', null, which === 'needed' ? 'Queue is empty' : 'Nothing ready yet'), which === 'needed' ? 'New batches land here.' : ''),
     ]);
+  }
+
+  /* ================= demo builder ================= */
+  const THEMES = {
+    noir: { label: 'Noir', note: 'Bold & luxe. Barbers, tattoo, lounges, pros.', bg: '#0b0a09', ink: '#f4eee3', accent: '#d8a64e', font: "Impact, 'Arial Narrow', sans-serif", upper: true },
+    glow: { label: 'Glow', note: 'Soft & elegant. Nails, lashes, salons, bakeries.', bg: '#fff7f4', ink: '#2b1620', accent: '#e14f7e', font: "Georgia, serif", italic: true },
+    drive: { label: 'Drive', note: 'Fast & loud. Auto, food, fitness, trades.', bg: '#07080b', ink: '#eef2f7', accent: '#c6ff2e', font: "'Arial Black', sans-serif", upper: true },
+  };
+  const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const DAY_FULL = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+  const DAY_RE = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?/i;
+
+  // "Mon-Fri: 9am-7pm" → one row per day; "Saturday 10 AM–5 PM", "Sun Closed"
+  function parseHours(text) {
+    const out = {};
+    const lines = String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const m = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?(?:\s*(?:-|–|—|to|thru|through)\s*(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?)?\s*[:,]?\s*(.*)$/i.exec(line);
+      if (!m) continue;
+      let time = m[3].trim();
+      // Google Maps copies "Monday" and "9 AM–7 PM" on separate lines
+      if (!time && lines[i + 1] && !DAY_RE.test(lines[i + 1]) && /(\d|closed|open 24)/i.test(lines[i + 1])) time = lines[++i];
+      if (!time || !/(\d|closed|open)/i.test(time)) continue;
+      time = time.replace(/\s*(hide open hours.*|suggest new hours.*)$/i, '').trim();
+      const a = DAY_KEYS.indexOf(m[1].toLowerCase()), b = m[2] ? DAY_KEYS.indexOf(m[2].toLowerCase()) : a;
+      for (let k = a; ; k = (k + 1) % 7) { out[DAY_KEYS[k]] = time; if (k === b) break; }
+    }
+    return DAY_KEYS.filter((k) => out[k]).map((k) => ({ day: DAY_FULL[k], time: out[k] }));
+  }
+  // "Fade - $35 - with hot towel" / "Fade $35" / "Full set ..... $45+"
+  function parseServices(text) {
+    return String(text || '').split('\n').map((x) => x.trim()).filter(Boolean).map((line) => {
+      const pm = /\$\s?\d[\d,]*(?:\.\d{2})?\+?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*\+?)?/.exec(line);
+      if (!pm) {
+        const [name, ...rest] = line.split(/\s+[-–|]\s+/);
+        return { name: name.replace(/^[-•*]\s*/, '').trim(), price: '', desc: rest.join(' - ').trim() };
+      }
+      let before = line.slice(0, pm.index).replace(/[\s.:–|-]+$/, '').replace(/^[-•*]\s*/, '').trim();
+      let lead = '';
+      const fm = /\s+(from|starting at|starts at|starting)$/i.exec(before);
+      if (fm) { lead = fm[1].toLowerCase() + ' '; before = before.slice(0, fm.index).trim(); }
+      const after = line.slice(pm.index + pm[0].length).replace(/^[\s.:–|-]+/, '').trim();
+      return { name: before || after, price: lead + pm[0].replace(/\s+/g, ''), desc: before ? after : '' };
+    }).filter((s) => s.name).slice(0, 24);
+  }
+  // Pull what we can out of anything pasted: a Google Maps listing, an Instagram bio, a Yelp page, a menu…
+  function parseAnything(text) {
+    const r = { services: [], hoursLines: [], other: [] };
+    const all = String(text || '');
+    const phone = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.exec(all); if (phone) r.phone = phone[0].trim();
+    const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(all); if (email) r.email = email[0];
+    const ig = /(?:instagram\.com\/|^@|\s@)([A-Za-z0-9_.]{2,30})/m.exec(all); if (ig) r.instagram = 'https://instagram.com/' + ig[1].replace(/\.$/, '');
+    const book = /https?:\/\/[^\s]*(?:booksy|vagaro|styleseat|square\.site|squareup|calendly|cal\.com|fresha|glossgenius|schedulicity|acuity)[^\s]*/i.exec(all); if (book) r.booking = book[0];
+    const rating = /\b([1-5][.,]\d)\s*(?:★|stars?|\(|\s)\s*\(?([\d,]{1,6})?\)?\s*(?:reviews?|google)?/i.exec(all);
+    if (rating) { r.rating = rating[1].replace(',', '.'); if (rating[2]) r.reviews = rating[2].replace(/,/g, ''); }
+    const lines = all.split('\n').map((x) => x.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (DAY_RE.test(l)) { r.hoursLines.push(l); if (!/\d|closed/i.test(l.replace(DAY_RE, '')) && lines[i + 1] && /\d|closed/i.test(lines[i + 1]) && !DAY_RE.test(lines[i + 1])) r.hoursLines.push(lines[++i]); continue; }
+      if (/\$\s?\d/.test(l) && l.length < 140) { r.services.push(l); continue; }
+      if (!r.address && /^\d{2,6}\s+[\w .'-]+\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|way|ln|lane|pl|place|ct|court|hwy|highway|pkwy|parkway)\b/i.test(l)) { r.address = l.replace(/^address:?\s*/i, ''); continue; }
+      if (l.length > 70 && !/https?:\/\//.test(l)) r.other.push(l);
+    }
+    if (r.other.length) r.about = r.other.slice(0, 2).join(' ');
+    return r;
+  }
+
+  async function viewDemoBuilder(id) {
+    const r = await api('GET', '/demos/lead/' + id);
+    const L = r.lead, D = (r.demo && r.demo.data) || {};
+    let theme = (r.demo && r.demo.theme) || guessTheme(L.category);
+    const val = (k, fallback) => (D[k] !== undefined && D[k] !== '' ? D[k] : fallback || '');
+    const inp = (k, ph, v, type) => h('input', { name: k, placeholder: ph || '', value: v || '', type: type || 'text' });
+    const F = {
+      name: inp('name', 'Business name', val('name', L.business)), tagline: inp('tagline', 'e.g. Clean cuts. Sharp lines. No wait.', val('tagline')),
+      category: inp('category', 'Barbershop', val('category', L.category)), city: inp('city', 'Inglewood', val('city', L.city)),
+      phone: inp('phone', '(310) 555-0100', val('phone', L.phone), 'tel'), email: inp('email', 'owner@email.com', val('email', L.email), 'email'),
+      address: inp('address', '123 Main St, Inglewood, CA', val('address', L.address)),
+      rating: inp('rating', '4.9', val('rating', L.rating)), reviews: inp('reviews', '213', val('reviews')),
+      booking: inp('booking', 'https://booksy.com/…', val('booking'), 'url'), instagram: inp('instagram', 'https://instagram.com/…', val('instagram'), 'url'),
+    };
+    const about = h('textarea', { rows: 4, placeholder: 'A few lines about them. Who they are, how long they\'ve been open, what they\'re known for.' }); about.value = val('about');
+    const services = h('textarea', { rows: 6, placeholder: 'One per line:\nFade - $35 - Hot towel finish\nBeard trim - $15\nKids cut - $25' });
+    services.value = (D.services || []).map((s) => [s.name, s.price, s.desc].filter(Boolean).join(' - ')).join('\n');
+    const hours = h('textarea', { rows: 7, placeholder: 'Mon-Fri: 9 AM - 7 PM\nSat: 10 AM - 5 PM\nSun: Closed' });
+    hours.value = (D.hours || []).map((x) => x.day + ': ' + x.time).join('\n');
+    const photos = h('textarea', { rows: 3, placeholder: 'Optional. Image links (https://…), one per line. Right-click a photo on their Google/Instagram → Copy image address.' });
+    photos.value = (D.photos || []).join('\n');
+    let accent = D.accent || '';
+    const accentIn = h('input', { type: 'color', value: accent || THEMES[theme].accent, oninput: () => { accent = accentIn.value; paintThemes(); } });
+    const accentReset = h('button', { class: 'btn small', type: 'button', onclick: () => { accent = ''; accentIn.value = THEMES[theme].accent; paintThemes(); } }, 'Theme color');
+
+    const themeRow = h('div', { class: 'themes' });
+    function paintThemes() {
+      themeRow.replaceChildren(...Object.entries(THEMES).map(([k, t]) => {
+        const a = k === theme && accent ? accent : t.accent;
+        return h('button', { type: 'button', class: 'theme' + (k === theme ? ' on' : ''), style: `background:${t.bg};color:${t.ink}`, onclick: () => { theme = k; if (!accent) accentIn.value = t.accent; paintThemes(); } },
+          h('span', { class: 'tname', style: `font-family:${t.font};${t.upper ? 'text-transform:uppercase;' : ''}${t.italic ? 'font-style:italic;' : ''}` }, F.name.value.split(' ').slice(0, 2).join(' ') || t.label),
+          h('span', { class: 'tbar', style: `background:${a}` }),
+          h('small', null, h('b', null, t.label + (k === theme ? ' ✓' : '')), ' ', t.note));
+      }));
+    }
+    F.name.addEventListener('input', paintThemes);
+    paintThemes();
+
+    const paste = h('textarea', { rows: 5, placeholder: 'Paste anything about the business: their Google Maps listing, Instagram bio, Yelp page, price list, menu… We\'ll pull out the phone, hours, prices, rating and address.' });
+    const fillBtn = h('button', { class: 'btn primary block', type: 'button', onclick: () => {
+      const p = parseAnything(paste.value); let n = 0;
+      for (const k of ['phone', 'email', 'address', 'rating', 'reviews', 'booking', 'instagram']) if (p[k] && !F[k].value) { F[k].value = p[k]; n++; }
+      if (p.about && !about.value) { about.value = p.about; n++; }
+      if (p.services.length) { services.value = (services.value ? services.value + '\n' : '') + parseServices(p.services.join('\n')).map((s) => [s.name, s.price, s.desc].filter(Boolean).join(' - ')).join('\n'); n += p.services.length; }
+      if (p.hoursLines.length) { const hrs = parseHours(p.hoursLines.join('\n')); if (hrs.length) { hours.value = hrs.map((x) => x.day + ': ' + x.time).join('\n'); n++; } }
+      toast(n ? 'Filled ' + n + ' thing' + (n === 1 ? '' : 's') + '. Check below.' : 'Couldn\'t find anything to pull. Fill it in below.', !n);
+    } }, icon('spark'), 'Fill from paste');
+
+    const result = h('div');
+    function showLink(u, views) {
+      result.replaceChildren(h('div', { class: 'card section linkbox' },
+        h('span', { class: 'eyebrow' }, 'Demo link'), h('div', { class: 'demo-url' }, u),
+        views !== undefined ? h('p', { class: 'sub' }, views ? '👀 Opened ' + views + (views === 1 ? ' time' : ' times') + ' by the client' : 'Not opened by the client yet. (Your own views don\'t count.)') : null,
+        h('div', { class: 'row wrap' },
+          h('a', { class: 'btn primary', href: u, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open demo'),
+          h('button', { class: 'btn', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(u); toast('Link copied'); } catch { prompt('Copy the demo link:', u); } } }, icon('copy'), 'Copy link'),
+          h('a', { class: 'btn', href: '#/lead/' + L.id }, 'Back to lead'))));
+    }
+    if (r.demo) showLink(r.demo.url, r.demo.views);
+
+    const save = h('button', { class: 'btn ok block', type: 'button', onclick: async () => {
+      if (!F.name.value.trim()) return toast('Add the business name', true);
+      save.disabled = true;
+      const data = Object.fromEntries(Object.entries(F).map(([k, el]) => [k, el.value.trim()]));
+      Object.assign(data, { about: about.value.trim(), services: parseServices(services.value), hours: parseHours(hours.value),
+        photos: photos.value.split(/\s+/).filter((x) => /^https:\/\//.test(x)), accent });
+      try {
+        const res = await api('POST', '/demos', { lead_id: L.id, theme, data });
+        toast(r.demo ? 'Demo updated ✓' : 'Demo is live ✓');
+        r.demo = { url: res.url }; showLink(res.url);
+        save.textContent = 'Save changes';
+        result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (e) { fail(e); }
+      save.disabled = false;
+    } }, r.demo ? 'Save changes' : 'Save & get link');
+
+    const fld = (label, el, hint) => h('div', { class: 'field' }, h('label', null, label), el, hint ? h('small', { class: 'hint' }, hint) : null);
+    shell(S.me.role === 'dev' ? 'demos' : 'leads', [
+      h('a', { class: 'back', href: '#/lead/' + L.id }, icon('back'), L.business),
+      h('div', { class: 'head' }, h('div', null, h('h1', null, r.demo ? 'Edit demo' : 'Build a demo'), h('p', { class: 'sub' }, 'Paste their info, pick a look, get a link. Takes about 2 minutes.'))),
+      result,
+      h('div', { class: 'card section' }, h('span', { class: 'eyebrow' }, '1 · Paste their info'),
+        L.link ? h('a', { class: 'btn small', style: 'margin:8px 0 10px', href: L.link, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Open their Google listing') : null,
+        paste, h('div', { style: 'height:10px' }), fillBtn),
+      h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, '2 · Pick a look'), themeRow,
+        h('div', { class: 'row', style: 'margin-top:10px;align-items:center' }, h('label', { class: 'dim', style: 'font-size:14px' }, 'Accent color'), accentIn, accentReset)),
+      h('div', { class: 'card section' }, h('span', { class: 'eyebrow' }, '3 · Check the details'),
+        fld('Business name', F.name), fld('Tagline (big headline)', F.tagline, 'Leave empty and we write one for them.'),
+        h('div', { class: 'grid2' }, fld('Category', F.category), fld('City', F.city)),
+        h('div', { class: 'grid2' }, fld('Phone', F.phone), fld('Email', F.email)),
+        fld('Address', F.address),
+        h('div', { class: 'grid2' }, fld('Google rating', F.rating), fld('# of reviews', F.reviews)),
+        fld('Services & prices', services, 'One per line: Name - $price - short description'),
+        fld('Hours', hours, 'Mon-Fri ranges work. Shows "Open now" live on the site.'),
+        fld('About', about),
+        h('div', { class: 'grid2' }, fld('Booking link', F.booking), fld('Instagram', F.instagram)),
+        fld('Photos', photos)),
+      save,
+      h('p', { class: 'dim', style: 'text-align:center;font-size:13px;margin-top:10px' }, 'Only use their real info. No made-up reviews or prices.'),
+    ]);
+  }
+  function guessTheme(category) {
+    const c = String(category || '').toLowerCase();
+    if (/(nail|lash|brow|salon|spa|beauty|hair|braid|wax|esthetic|makeup|bridal|florist|bakery|cake)/.test(c)) return 'glow';
+    if (/(auto|detail|car|tire|smog|mechanic|repair|body shop|gym|fitness|training|taco|food|restaurant|grill|bbq|catering|truck|moving|plumb|electric|roof|construct|clean)/.test(c)) return 'drive';
+    return 'noir';
   }
 
   /* ================= batches + upload ================= */
@@ -544,23 +788,78 @@
     return rows.filter((r) => r.some((c) => c.trim()));
   }
   const FIELD_NAMES = {
-    business: ['business', 'businessname', 'name', 'company', 'companyname', 'title', 'place', 'placename'],
+    business: ['business', 'businessname', 'name', 'company', 'companyname', 'title', 'place', 'placename', 'qbfpd'],
     owner: ['owner', 'ownername', 'contact', 'contactname', 'decisionmaker'],
     phone: ['phone', 'phonenumber', 'telephone', 'tel', 'mobile', 'number'],
+    email: ['email', 'emailaddress', 'mail', 'emails'],
+    website: ['website', 'site', 'web', 'websiteurl', 'domain'],
+    address: ['address', 'street', 'streetaddress', 'fulladdress'],
+    rating: ['rating', 'stars', 'googlerating', 'score'],
     city: ['city', 'town', 'location', 'area'],
     category: ['category', 'type', 'industry', 'niche', 'categories'],
-    link: ['link', 'googlesociallink', 'google', 'googlelink', 'maps', 'mapslink', 'googlemaps', 'url', 'social', 'sociallink', 'facebook', 'instagram', 'profile'],
+    link: ['link', 'googlesociallink', 'google', 'googlelink', 'maps', 'mapslink', 'googlemaps', 'social', 'sociallink', 'facebook', 'instagram', 'profile'],
   };
-  function mapColumns(header) {
-    const norm = header.map((x) => x.toLowerCase().replace(/[^a-z]/g, ''));
-    const map = {}; let hits = 0;
+  const PHONE_RE = /^\s*(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\s*$/;
+  const EMAIL_RE = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/;
+  const ADDR_RE = /^\d{1,6}\s+[\w .'#-]+\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|way|ln|lane|pl|place|ct|court|hwy|highway|pkwy|parkway|cir|circle)\b/i;
+  // Works with any CSV: matches headers first, then looks at what is actually in each column
+  // (Instant Data Scraper exports have junk headers like "qBF1Pd" or "UsdlK").
+  function mapColumns(rows) {
+    const header = rows[0];
+    const norm = header.map((x) => String(x).toLowerCase().replace(/[^a-z]/g, ''));
+    const map = {};
+    const used = () => Object.values(map);
     for (const [field, names] of Object.entries(FIELD_NAMES)) {
-      const i = norm.findIndex((n, idx) => names.includes(n) && !Object.values(map).includes(idx));
-      if (i >= 0) { map[field] = i; hits++; }
+      const i = norm.findIndex((n, idx) => names.includes(n) && !used().includes(idx));
+      if (i >= 0) map[field] = i;
     }
-    if (map.business === undefined) { const i = norm.findIndex((n) => n.includes('business') || n.includes('company')); if (i >= 0) { map.business = i; hits++; } }
-    if (map.link === undefined) { const i = norm.findIndex((n) => n.includes('link') || n.includes('url') || n.includes('google')); if (i >= 0) { map.link = i; hits++; } }
-    return hits >= 2 ? { map, hasHeader: true } : { map: { business: 0, owner: 1, phone: 2, city: 3, category: 4, link: 5 }, hasHeader: false };
+    const headerHits = Object.keys(map).length;
+    const body = rows.slice(headerHits >= 2 ? 1 : 0, 80);
+    const cols = header.map((_, i) => body.map((r) => String(r[i] || '').trim()).filter(Boolean));
+    const share = (vals, fn) => (vals.length ? vals.filter(fn).length / vals.length : 0);
+    const free = (i) => !used().includes(i) && cols[i].length;
+    const pick = (field, fn, min) => {
+      if (map[field] !== undefined) return;
+      let best = -1, bestScore = min;
+      cols.forEach((vals, i) => { if (!free(i)) return; const sc = share(vals, fn); if (sc > bestScore) { best = i; bestScore = sc; } });
+      if (best >= 0) map[field] = best;
+    };
+    const isUrl = (v) => /^https?:\/\//i.test(v);
+    pick('email', (v) => EMAIL_RE.test(v), 0.5);
+    pick('phone', (v) => PHONE_RE.test(v), 0.5);
+    pick('link', (v) => /google\.[a-z.]+\/maps|maps\.app\.goo|goo\.gl\/maps/i.test(v), 0.5);
+    pick('website', (v) => isUrl(v) && !/google\.[a-z.]+\/(maps|search)|gstatic|googleusercontent|ggpht/i.test(v), 0.5);
+    pick('rating', (v) => /^[1-5][.,]\d$/.test(v), 0.6);
+    pick('address', (v) => ADDR_RE.test(v.replace(/^[^\w]*\s*/, '')), 0.4);
+    if (map.business === undefined) {
+      // the business name: mostly-unique text, not a URL/number, usually the first such column
+      let best = -1, bestScore = 0;
+      cols.forEach((vals, i) => {
+        if (!free(i) || vals.length < body.length * 0.6) return;
+        const text = share(vals, (v) => /[a-z]/i.test(v) && !isUrl(v) && v.length >= 3 && v.length <= 80 && !/^(open|closed|website|directions|call|share|save|order|reserve)/i.test(v));
+        const uniq = new Set(vals).size / vals.length;
+        const sc = text * uniq - i * 0.01;
+        if (text > 0.7 && uniq > 0.6 && sc > bestScore) { best = i; bestScore = sc; }
+      });
+      if (best >= 0) map.business = best;
+    }
+    if (map.category === undefined) {
+      // category: short text that repeats a lot (e.g. "Barber shop")
+      let best = -1, bestScore = 0;
+      cols.forEach((vals, i) => {
+        if (!free(i) || vals.length < body.length * 0.5) return;
+        const short = share(vals, (v) => /^[A-Za-z][A-Za-z &'/-]{2,40}(\s·.*)?$/.test(v) && !/^(open|closed|website|directions|call|share|save)\b/i.test(v));
+        const uniq = new Set(vals).size / vals.length;
+        if (short > 0.7 && uniq <= 0.85 && short - uniq * 0.5 > bestScore) { best = i; bestScore = short - uniq * 0.5; }
+      });
+      if (best >= 0) map.category = best;
+    }
+    const smart = headerHits < 2;
+    if (map.business === undefined && smart) return { map: { business: 0, owner: 1, phone: 2, city: 3, category: 4, link: 5 }, hasHeader: false, smart: false };
+    // a header row exists if row 0 doesn't look like data in the phone/email columns
+    const r0 = rows[0];
+    const looksData = (map.phone !== undefined && PHONE_RE.test(r0[map.phone] || '')) || (map.email !== undefined && EMAIL_RE.test(r0[map.email] || ''));
+    return { map, hasHeader: !looksData, smart };
   }
 
   async function viewUpload() {
@@ -569,6 +868,11 @@
     const nameIn = h('input', { placeholder: 'e.g. Inglewood barbers – Nov', value: '' });
     const fileIn = h('input', { type: 'file', accept: '.csv,text/csv,.tsv,text/plain' });
     const paste = h('textarea', { placeholder: 'Or paste CSV text here…' });
+    const cityIn = h('input', { placeholder: 'e.g. Inglewood (optional, fills empty cities)' });
+    const catIn = h('input', { placeholder: 'e.g. Barber (optional, fills empty categories)' });
+    const skipSite = h('input', { type: 'checkbox', checked: true, onchange: () => lastText && refresh() });
+    let lastText = '';
+    const refresh = () => preview(lastText);
     const startSel = h('select', null, h('option', { value: 'demo_needed' }, 'Demo needed (send to dev queue)'), h('option', { value: 'new' }, 'New (hold for now)'));
     const assignSel = h('select', null, h('option', { value: 'auto' }, 'Auto-assign (spread evenly across reps)'), h('option', { value: 'none' }, "Don't assign yet"),
       opts.reps.filter((r) => r.active).map((r) => h('option', { value: r.id }, 'All to ' + r.name)));
@@ -578,35 +882,60 @@
     const result = h('div');
 
     function preview(text) {
+      lastText = text;
       const rows = parseCSV(text);
       if (!rows.length) { parsed = null; previewBox.replaceChildren(); go.disabled = true; return; }
-      const { map, hasHeader } = mapColumns(rows[0]);
-      const data = (hasHeader ? rows.slice(1) : rows).map((r) => Object.fromEntries(Object.entries(map).map(([f, i]) => [f, (r[i] || '').trim()]))).filter((r) => r.business);
+      const { map, hasHeader, smart } = mapColumns(rows);
+      const cleanRow = (r) => {
+        const o = Object.fromEntries(Object.entries(map).map(([f, i]) => [f, String(r[i] || '').trim()]));
+        if (o.phone && !PHONE_RE.test(o.phone)) { const m = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.exec(o.phone); o.phone = m ? m[0] : ''; }
+        if (o.email && !EMAIL_RE.test(o.email)) o.email = '';
+        if (o.address) o.address = o.address.replace(/^[^\w]*\s*/, '');
+        if (o.category) o.category = o.category.split(' · ')[0].trim();
+        if (o.rating) o.rating = (/[1-5][.,]\d/.exec(o.rating) || [''])[0].replace(',', '.');
+        if (!o.city && cityIn.value.trim()) o.city = cityIn.value.trim();
+        if (!o.category && catIn.value.trim()) o.category = catIn.value.trim();
+        return o;
+      };
+      let all = (hasHeader ? rows.slice(1) : rows).map(cleanRow).filter((r) => r.business);
+      // drop exact repeats inside the same file (scrapers often grab a listing twice)
+      const seenKey = new Set();
+      all = all.filter((r) => { const k = (r.phone || r.email || r.business).toLowerCase().replace(/\W/g, ''); if (seenKey.has(k)) return false; seenKey.add(k); return true; });
+      const noContact = all.filter((r) => !r.phone && !r.email).length;
+      const NOT_SITE = /(facebook|fb\.com|instagram|linktr|yelp|booksy|vagaro|styleseat|square|tiktok|fresha|glossgenius)/i;
+      const withSite = all.filter((r) => r.website && !NOT_SITE.test(r.website)).length;
+      const data = all.filter((r) => r.phone || r.email);
       parsed = data;
-      const cols = ['business', 'owner', 'phone', 'city', 'category', 'link'];
+      const cols = ['business', 'phone', 'email', 'website', 'category', 'city', 'address', 'rating', 'link'].filter((c) => map[c] !== undefined || (c === 'city' && cityIn.value) || (c === 'category' && catIn.value) || c === 'business');
+      const ready = data.length - (skipSite.checked ? withSite : 0);
       previewBox.replaceChildren(h('div', { class: 'card section' },
-        h('b', null, data.length + ' leads found'),
-        h('p', { class: 'sub' }, hasHeader ? 'Columns matched: ' + cols.map((c) => c + (map[c] !== undefined ? ' ✓' : ' ✗')).join(' · ') : 'No header row detected, so columns are read in this order: business, owner, phone, city, category, link.'),
+        h('b', null, ready + ' leads ready to add'),
+        h('p', { class: 'sub' }, [data.length + ' rows with a phone or email',
+          skipSite.checked && withSite ? withSite + ' already have a website (will be skipped)' : null,
+          noContact ? noContact + ' had no phone or email (skipped)' : null].filter(Boolean).join(' · ')),
+        h('p', { class: 'sub' }, (smart ? 'Auto-detected columns: ' : hasHeader ? 'Columns matched: ' : 'No header row, read in order: ') + cols.map((c) => c + (map[c] !== undefined ? ' ✓' : '')).join(' · ')),
         h('div', { class: 'preview' }, h('table', null, h('thead', null, h('tr', null, cols.map((c) => h('th', null, c)))),
-          h('tbody', null, data.slice(0, 5).map((r) => h('tr', null, cols.map((c) => h('td', null, r[c] || '—')))))))));
+          h('tbody', null, data.slice(0, 5).map((r) => h('tr', null, cols.map((c) => h('td', null, r[c] ? String(r[c]).slice(0, 40) : '—')))))))));
       go.disabled = !data.length;
     }
     fileIn.addEventListener('change', async () => { const f = fileIn.files[0]; if (!f) return; if (!nameIn.value) nameIn.value = f.name.replace(/\.[^.]+$/, ''); preview(await f.text()); });
     paste.addEventListener('input', () => preview(paste.value));
+    cityIn.addEventListener('input', () => lastText && refresh());
+    catIn.addEventListener('input', () => lastText && refresh());
 
     go.addEventListener('click', async () => {
       if (!parsed || !parsed.length) return;
       go.disabled = true; prog.hidden = false; result.replaceChildren();
-      const bar = prog.firstChild; const tot = { inserted: 0, duplicates: 0, dnc: 0, invalid: 0 };
+      const bar = prog.firstChild; const tot = { inserted: 0, duplicates: 0, dnc: 0, invalid: 0, hasSite: 0 };
       try {
         const b = await api('POST', '/batches', { name: nameIn.value });
         for (let i = 0; i < parsed.length; i += 200) {
-          const r = await api('POST', '/batches/' + b.id + '/leads', { rows: parsed.slice(i, i + 200), startStatus: startSel.value, assign: assignSel.value });
-          for (const k in tot) tot[k] += r[k];
+          const r = await api('POST', '/batches/' + b.id + '/leads', { rows: parsed.slice(i, i + 200), startStatus: startSel.value, assign: assignSel.value, skipWithSite: skipSite.checked });
+          for (const k in tot) tot[k] += r[k] || 0;
           bar.style.width = Math.round(Math.min(100, ((i + 200) / parsed.length) * 100)) + '%';
         }
         result.replaceChildren(h('div', { class: 'card section' }, h('h2', null, '✓ Batch "' + b.name + '" uploaded'),
-          h('div', { class: 'stats' }, [['Added', tot.inserted], ['Duplicates skipped', tot.duplicates], ['Do Not Call skipped', tot.dnc]].map(([k, v]) => h('div', { class: 'stat' }, h('b', null, v), h('small', null, k)))),
+          h('div', { class: 'stats' }, [['Added', tot.inserted], ['Already have a website', tot.hasSite], ['Duplicates skipped', tot.duplicates], ['Do Not Call skipped', tot.dnc]].map(([k, v]) => h('div', { class: 'stat' }, h('b', null, v), h('small', null, k)))),
           assignSel.value === 'auto' && !opts.reps.some((r) => r.active) ? h('p', { class: 'sub' }, "Note: you have no reps yet, so these leads are unassigned. Add reps under Team, then assign them from Leads.") : null,
           h('div', { class: 'row', style: 'margin-top:14px' }, h('a', { class: 'btn primary', href: '#/batches' }, 'See batches'), h('a', { class: 'btn', href: '#/demos' }, 'Demo queue'))));
         toast(tot.inserted + ' leads added');
@@ -616,10 +945,12 @@
     shell('batches', [
       h('a', { class: 'back', href: '#/batches' }, icon('back'), 'Batches'),
       h('h1', null, 'Upload a batch'),
-      h('p', { class: 'sub' }, 'CSV columns: business name, owner, phone, city, category, Google/social link. Duplicates and Do Not Call numbers are skipped automatically.'),
+      h('p', { class: 'sub' }, 'Drop in the CSV straight from Instant Data Scraper (or any spreadsheet). We find the name, phone, email, website and rating columns for you. Duplicates and Do Not Call numbers are skipped automatically.'),
       h('div', { class: 'card section' },
         h('div', { class: 'field' }, h('label', null, 'Batch name'), nameIn),
-        h('div', { class: 'field' }, h('label', null, 'CSV file'), fileIn), paste),
+        h('div', { class: 'field' }, h('label', null, 'CSV file'), fileIn), paste,
+        h('div', { class: 'grid2', style: 'margin-top:12px' }, h('div', { class: 'field' }, h('label', null, 'City'), cityIn), h('div', { class: 'field' }, h('label', null, 'Category'), catIn)),
+        h('label', { class: 'check' }, skipSite, h('span', null, h('b', null, 'Skip businesses that already have a website'), h('br'), h('small', { class: 'dim' }, 'Facebook / Instagram / booking pages don\'t count as a website. Those stay in.')))),
       previewBox,
       h('div', { class: 'card section' },
         h('div', { class: 'field' }, h('label', null, 'Start leads as'), startSel),
@@ -719,13 +1050,14 @@
     if (!S.script || force) S.script = await api('GET', '/script');
     return S.script;
   }
-  const SAMPLE_LEAD = { business: 'Fresh Fadez Barbershop', owner: 'Marcus Hill', city: 'Inglewood', category: 'Barber', demo_url: 'https://freshfadez-demo.pages.dev' };
+  const SAMPLE_LEAD = { emailed_at: new Date(Date.now() - 864e5).toISOString(), business: 'Fresh Fadez Barbershop', owner: 'Marcus Hill', city: 'Inglewood', category: 'Barber', demo_url: 'https://freshfadez-demo.pages.dev' };
   function ctxFor(L) {
     const own = String(L.owner || '').trim();
     return {
       owner_first: first(own) || 'the owner', owner: own || 'the owner', business: L.business || 'your business',
       rep_first: first(S.me.name) || 'me', rep: S.me.name, city: L.city || 'your area',
       category: (L.category || 'local').toLowerCase(), demo_link: L.demo_url || '(demo not ready yet)',
+      email_day: L.emailed_at ? emailDay(L.emailed_at) : 'yesterday',
     };
   }
   // Renders script text safely: {placeholders} filled + highlighted, [stage directions] dimmed, "- " lines as bullets
@@ -803,7 +1135,7 @@
       h('a', { class: 'back', href: '#/more' }, icon('back'), 'More'),
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'Call script'), h('p', { class: 'sub' }, sc.custom ? 'Your custom script.' : 'The starter script. Edit it to make it yours.'))),
       h('div', { class: 'card hint' },
-        h('b', null, 'Fill-ins: '), '{owner_first} {owner} {business} {rep_first} {city} {category} {demo_link}', h('br'),
+        h('b', null, 'Fill-ins: '), '{owner_first} {owner} {business} {rep_first} {city} {category} {demo_link} {email_day}', h('br'),
         h('b', null, '[Brackets]'), ' = a note for the rep (shown dimmed). Start a line with ', h('b', null, '- '), ' for a bullet.'),
       h('div', { class: 'row', style: 'margin:12px 0' },
         h('button', { class: 'btn small', onclick: () => sheet((box, close) => box.append(h('h2', null, 'Preview'), h('p', { class: 'sub' }, 'With a sample lead'), scriptBox(list, ctxFor(SAMPLE_LEAD), false), h('button', { class: 'btn block', style: 'margin-top:12px', onclick: () => close() }, 'Close'))) }, 'Preview'),
