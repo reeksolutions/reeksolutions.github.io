@@ -92,6 +92,9 @@ const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER' };
 // Stage 3 columns added to leads (only if missing — never drops data).
 const LEAD_COLUMNS = { email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
 
+// Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
+const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
+
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -110,6 +113,14 @@ async function ensureSchema(env) {
       catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
     }
   }
+  const ucols = new Set((await env.DB.prepare('PRAGMA table_info(users)').all()).results.map((c) => c.name));
+  for (const [name, type] of Object.entries(USER_COLUMNS)) {
+    if (!ucols.has(name)) {
+      try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${name} ${type}`).run(); }
+      catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+    }
+  }
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS demos_creator ON demos(created_by, created_at)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
   schemaReady = true;
@@ -414,7 +425,8 @@ async function api(request, env, url) {
   need(user);
 
   if (path === '/me' && method === 'GET') {
-    return json({ id: user.id, name: user.name, email: user.email, role: user.role });
+    const g = await env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?').bind(user.id).first();
+    return json({ id: user.id, name: user.name, email: user.email, role: user.role, daily_goal: (g && g.daily_goal) || 0 });
   }
 
   if (path === '/password' && method === 'POST') {
@@ -434,7 +446,7 @@ async function api(request, env, url) {
   if (path === '/users' && method === 'GET') {
     need(user, 'admin');
     const { results } = await env.DB.prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, u.commission_pct,
+      `SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, u.commission_pct, u.daily_goal,
         (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.status IN ('new','demo_needed','demo_ready','called','callback','booked')) AS open_leads
        FROM users u ORDER BY u.active DESC, u.role, u.name`
     ).all();
@@ -463,6 +475,11 @@ async function api(request, env, url) {
     if (!target) throw new HttpError(404, 'User not found');
     const stmts = [];
     if (body.name !== undefined) { const n = str(body.name, 80); if (!n) bad('Name required'); stmts.push(env.DB.prepare('UPDATE users SET name=? WHERE id=?').bind(n, id)); }
+    if (body.daily_goal !== undefined) {
+      const g = Math.round(Number(body.daily_goal));
+      if (!Number.isFinite(g) || g < 0 || g > 1000) bad('Daily goal must be a number from 0 to 1000');
+      stmts.push(env.DB.prepare('UPDATE users SET daily_goal=? WHERE id=?').bind(g, id));
+    }
     if (body.role !== undefined) {
       if (!ROLES.includes(body.role)) bad('Bad role');
       if (id === user.id && body.role !== 'admin') bad("You can't remove your own admin role");
@@ -840,10 +857,13 @@ async function api(request, env, url) {
     const mineD = isAdmin ? '' : ' AND d.rep_id = ?';
     const me = isAdmin ? [] : [user.id];
 
-    const [callsRow, dealsRow, board, days, pipe, owed] = await Promise.all([
+    const dfrom = validIso(p.get('dfrom')), duntil = validIso(p.get('duntil'));
+    const [callsRow, dealsRow, board, days, pipe, owed, funnel, todayRow] = await Promise.all([
       env.DB.prepare(
         `SELECT SUM(CASE WHEN c.outcome IN (${CALL_OUTCOMES_SQL}) THEN 1 ELSE 0 END) AS calls,
-                COUNT(DISTINCT CASE WHEN c.outcome = 'booked' THEN c.lead_id END) AS booked
+                COUNT(DISTINCT CASE WHEN c.outcome = 'booked' THEN c.lead_id END) AS booked,
+                COUNT(DISTINCT CASE WHEN c.outcome IN ('demo_sent','emailed') THEN c.lead_id END) AS demos_sent,
+                SUM(CASE WHEN c.outcome = 'emailed' THEN 1 ELSE 0 END) AS emails
          FROM calls c WHERE c.created_at >= ? AND c.created_at < ?${mine}`
       ).bind(from, until, ...me).first(),
       env.DB.prepare(
@@ -880,6 +900,17 @@ async function api(request, env, url) {
         `SELECT COALESCE(SUM(ROUND(d.amount_cents * d.commission_pct / 100.0)),0) AS owed_cents, COUNT(*) AS n
          FROM deals d WHERE d.paid = 0${mineD}`
       ).bind(...me).first(),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS leads,
+           SUM(CASE WHEN demo_url IS NOT NULL AND demo_url != '' THEN 1 ELSE 0 END) AS demo,
+           SUM(CASE WHEN attempts > 0 OR emailed_at IS NOT NULL THEN 1 ELSE 0 END) AS contacted,
+           SUM(CASE WHEN status IN ('booked','won') OR booked_at IS NOT NULL THEN 1 ELSE 0 END) AS booked,
+           SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) AS won
+         FROM leads WHERE status != 'dnc'${isAdmin ? '' : ' AND assigned_to = ?'}`
+      ).bind(...me).first(),
+      dfrom && duntil
+        ? env.DB.prepare(`SELECT SUM(CASE WHEN outcome IN (${CALL_OUTCOMES_SQL}) THEN 1 ELSE 0 END) AS calls FROM calls WHERE user_id = ? AND created_at >= ? AND created_at < ?`).bind(user.id, dfrom, duntil).first()
+        : null,
     ]);
 
     const leaderboard = board.results
@@ -891,13 +922,105 @@ async function api(request, env, url) {
       scope: isAdmin ? 'team' : 'me',
       totals: {
         calls: callsRow.calls || 0, booked: callsRow.booked || 0, closes: dealsRow.closes || 0,
+        demos_sent: callsRow.demos_sent || 0, emails: callsRow.emails || 0,
         ...(isAdmin ? { revenue_cents: dealsRow.revenue_cents } : { commission_cents: dealsRow.commission_cents }),
       },
       leaderboard,
       days: days.results,
       pipeline: Object.fromEntries(Object.entries(pipe || {}).map(([k, v]) => [k, v || 0])),
       owed_cents: owed.owed_cents || 0, owed_deals: owed.n || 0,
+      funnel: Object.fromEntries(Object.entries(funnel || {}).map(([k, v]) => [k, v || 0])),
+      today_calls: todayRow ? todayRow.calls || 0 : null,
     });
+  }
+
+  /* ---- Stage 4: team stats (admin) ---- */
+  if (path === '/team' && method === 'GET') {
+    need(user, 'admin');
+    const p = url.searchParams;
+    const until = validIso(p.get('until')) || now();
+    const from = validIso(p.get('from')) || new Date(Date.now() - 864e5).toISOString();
+    const dfrom = validIso(p.get('dfrom')) || from, duntil = validIso(p.get('duntil')) || until;
+    const DIAL = `c.outcome IN (${CALL_OUTCOMES_SQL})`;
+    const [users, calls, today, deals, demos] = await Promise.all([
+      env.DB.prepare(`SELECT id, name, role, active, daily_goal FROM users ORDER BY name`).all(),
+      env.DB.prepare(
+        `SELECT c.user_id AS id, SUM(CASE WHEN ${DIAL} THEN 1 ELSE 0 END) AS calls,
+           COUNT(DISTINCT CASE WHEN c.outcome = 'booked' THEN c.lead_id END) AS booked,
+           SUM(CASE WHEN c.outcome = 'emailed' THEN 1 ELSE 0 END) AS emails,
+           SUM(CASE WHEN c.outcome IN ('no_answer','voicemail','gatekeeper') THEN 1 ELSE 0 END) AS no_contact,
+           MIN(CASE WHEN ${DIAL} THEN c.created_at END) AS first_call, MAX(CASE WHEN ${DIAL} THEN c.created_at END) AS last_call
+         FROM calls c WHERE c.created_at >= ? AND c.created_at < ? GROUP BY c.user_id`).bind(from, until).all(),
+      env.DB.prepare(
+        `SELECT c.user_id AS id, SUM(CASE WHEN ${DIAL} THEN 1 ELSE 0 END) AS calls, MAX(CASE WHEN ${DIAL} THEN c.created_at END) AS last_call
+         FROM calls c WHERE c.created_at >= ? AND c.created_at < ? GROUP BY c.user_id`).bind(dfrom, duntil).all(),
+      env.DB.prepare(`SELECT rep_id AS id, COUNT(*) AS closes, COALESCE(SUM(amount_cents),0) AS revenue_cents FROM deals WHERE created_at >= ? AND created_at < ? GROUP BY rep_id`).bind(from, until).all(),
+      env.DB.prepare(
+        `SELECT d.created_by AS id, COUNT(*) AS demos,
+           AVG((julianday(d.created_at) - julianday(l.created_at)) * 24) AS avg_hours,
+           SUM(CASE WHEN d.created_at >= ? AND d.created_at < ? THEN 1 ELSE 0 END) AS demos_today
+         FROM demos d LEFT JOIN leads l ON l.id = d.lead_id WHERE d.created_at >= ? AND d.created_at < ? GROUP BY d.created_by`).bind(dfrom, duntil, from, until).all(),
+    ]);
+    const by = (rows) => Object.fromEntries(rows.results.map((r) => [r.id, r]));
+    const C = by(calls), T = by(today), D = by(deals), M = by(demos);
+    const team = users.results.map((u) => {
+      const c = C[u.id] || {}, t = T[u.id] || {}, d = D[u.id] || {}, m = M[u.id] || {};
+      return { id: u.id, name: u.name, role: u.role, active: !!u.active, daily_goal: u.daily_goal || 0,
+        calls: c.calls || 0, booked: c.booked || 0, emails: c.emails || 0, no_contact: c.no_contact || 0,
+        first_call: c.first_call || null, last_call: c.last_call || null,
+        closes: d.closes || 0, revenue_cents: d.revenue_cents || 0,
+        today_calls: t.calls || 0, today_last_call: t.last_call || null,
+        demos: m.demos || 0, demos_today: m.demos_today || 0, demo_avg_hours: m.avg_hours == null ? null : Math.round(m.avg_hours * 10) / 10 };
+    }).filter((u) => u.active || u.calls || u.closes || u.demos);
+    return json({ team });
+  }
+
+  if ((m = path.match(/^\/team\/(\d+)$/)) && method === 'GET') {
+    need(user, 'admin');
+    const p = url.searchParams;
+    const until = validIso(p.get('until')) || now();
+    const from = validIso(p.get('from')) || new Date(Date.now() - 864e5).toISOString();
+    const since = validIso(p.get('since')) || new Date(Date.now() - 14 * 864e5).toISOString();
+    const tz = Math.max(-840, Math.min(840, parseInt(p.get('tz'), 10) || 0));
+    const shift = (tz >= 0 ? '+' : '') + tz + ' minutes';
+    const u = await env.DB.prepare('SELECT id, name, email, role, active, daily_goal, commission_pct, created_at FROM users WHERE id = ?').bind(+m[1]).first();
+    if (!u) throw new HttpError(404, 'User not found');
+    const DIAL = `outcome IN (${CALL_OUTCOMES_SQL})`;
+    const [daily, hourly, outcomes, deals, demos, recent, demoDaily] = await Promise.all([
+      env.DB.prepare(
+        `SELECT date(created_at, ?1) AS day, SUM(CASE WHEN ${DIAL} THEN 1 ELSE 0 END) AS calls,
+           COUNT(DISTINCT CASE WHEN outcome = 'booked' THEN lead_id END) AS booked,
+           SUM(CASE WHEN outcome = 'emailed' THEN 1 ELSE 0 END) AS emails,
+           MIN(CASE WHEN ${DIAL} THEN created_at END) AS first_call, MAX(CASE WHEN ${DIAL} THEN created_at END) AS last_call
+         FROM calls WHERE user_id = ?2 AND created_at >= ?3 GROUP BY day ORDER BY day`).bind(shift, u.id, since).all(),
+      env.DB.prepare(
+        `SELECT CAST(strftime('%H', created_at, ?1) AS INTEGER) AS hour, COUNT(*) AS calls
+         FROM calls WHERE user_id = ?2 AND ${DIAL} AND created_at >= ?3 AND created_at < ?4 GROUP BY hour`).bind(shift, u.id, from, until).all(),
+      env.DB.prepare(`SELECT outcome, COUNT(*) AS n FROM calls WHERE user_id = ? AND created_at >= ? AND created_at < ? AND outcome NOT IN ('status_change','demo_ready','closed_won') GROUP BY outcome ORDER BY n DESC`).bind(u.id, from, until).all(),
+      env.DB.prepare(`SELECT d.id, d.amount_cents, d.commission_pct, d.paid, d.package, d.created_at, l.business, l.id AS lead_id FROM deals d LEFT JOIN leads l ON l.id = d.lead_id WHERE d.rep_id = ? AND d.created_at >= ? AND d.created_at < ? ORDER BY d.created_at DESC LIMIT 50`).bind(u.id, from, until).all(),
+      env.DB.prepare(`SELECT d.slug, d.views, d.created_at, l.business, l.id AS lead_id, (julianday(d.created_at) - julianday(l.created_at)) * 24 AS hours FROM demos d LEFT JOIN leads l ON l.id = d.lead_id WHERE d.created_by = ? AND d.created_at >= ? AND d.created_at < ? ORDER BY d.created_at DESC LIMIT 50`).bind(u.id, from, until).all(),
+      env.DB.prepare(`SELECT c.outcome, c.created_at, l.business, l.id AS lead_id FROM calls c LEFT JOIN leads l ON l.id = c.lead_id WHERE c.user_id = ? ORDER BY c.created_at DESC LIMIT 25`).bind(u.id).all(),
+      env.DB.prepare(`SELECT date(created_at, ?1) AS day, COUNT(*) AS demos FROM demos WHERE created_by = ?2 AND created_at >= ?3 GROUP BY day`).bind(shift, u.id, since).all(),
+    ]);
+    return json({ user: { ...u, active: !!u.active }, daily: daily.results, hourly: hourly.results, outcomes: outcomes.results,
+      deals: deals.results, demos: demos.results.map((d) => ({ ...d, hours: d.hours == null ? null : Math.round(d.hours * 10) / 10 })),
+      recent: recent.results, demo_daily: demoDaily.results });
+  }
+
+  /* ---- Stage 4: live activity feed (admin) ---- */
+  if (path === '/feed' && method === 'GET') {
+    need(user, 'admin');
+    const limit = Math.max(5, Math.min(100, parseInt(url.searchParams.get('limit'), 10) || 40));
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM (
+         SELECT 'call' AS kind, c.created_at AS t, c.outcome AS detail, u.name AS who, l.business AS biz, l.id AS lead_id FROM calls c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN leads l ON l.id = c.lead_id
+         UNION ALL SELECT 'note', n.created_at, substr(n.body, 1, 90), u.name, l.business, l.id FROM notes n LEFT JOIN users u ON u.id = n.user_id LEFT JOIN leads l ON l.id = n.lead_id
+         UNION ALL SELECT 'deal', d.created_at, CAST(d.amount_cents AS TEXT), u.name, l.business, l.id FROM deals d LEFT JOIN users u ON u.id = d.rep_id LEFT JOIN leads l ON l.id = d.lead_id
+         UNION ALL SELECT 'demo', dm.created_at, dm.theme, u.name, l.business, l.id FROM demos dm LEFT JOIN users u ON u.id = dm.created_by LEFT JOIN leads l ON l.id = dm.lead_id
+         UNION ALL SELECT 'view', l.demo_viewed_at, CAST(l.demo_views AS TEXT), NULL, l.business, l.id FROM leads l WHERE l.demo_viewed_at IS NOT NULL
+       ) ORDER BY t DESC LIMIT ?`
+    ).bind(limit).all();
+    return json({ feed: results });
   }
 
   /* ---- deals + commissions ---- */

@@ -49,6 +49,11 @@
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
     mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v6a4 4 0 0 1-8 0zM8 6H4.5a3 3 0 0 0 3.5 4M16 6h3.5a3 3 0 0 1-3.5 4M12 14v3M8.5 20.5h7M10 17h4v3.5h-4z"/></svg>',
+    flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
@@ -130,27 +135,50 @@
   }
 
   /* ================= shell + router ================= */
+  // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['demos', 'Demos'], ['deals', 'Deals'], ['more', 'More']];
+    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['team', 'Team'], ['demos', 'Demos'], ['more', 'More']];
     if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['account', 'Account']];
     return [['demos', 'Demo Queue'], ['account', 'Account']];
   }
+  // sidebar on desktop: grouped
+  function navFor(role) {
+    if (role === 'admin') return [
+      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['demos', 'Demos'], ['deals', 'Deals & commissions']]],
+      ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
+      ['Tools', [['upload', 'Upload leads'], ['batches', 'Batches'], ['script', 'Call script']]],
+    ];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
+    return [[null, [['demos', 'Demo queue']]]];
+  }
   const home = () => (S.me.role === 'dev' ? 'demos' : 'home');
-  const TAB_ICON = { earnings: 'deals' };
-  // pages that live under the admin "More" tab
-  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account'];
+  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches' };
+  // pages that live under the admin "More" tab on phones
+  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals'];
+  const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
     const tabs = tabsFor(S.me.role);
-    if (S.me.role === 'admin' && UNDER_MORE.includes(active)) active = 'more';
-    const nav = h('nav', { class: 'tabs' + (tabs.length > 5 ? ' six' : ''), 'aria-label': 'Main' },
-      tabs.map(([k, label]) => h('a', { href: '#/' + k, class: active === k ? 'on' : null }, icon(TAB_ICON[k] || k), h('span', null, label),
-        k === 'callbacks' ? h('span', { class: 'count', id: 'cbCount', hidden: true }) : null)));
+    let tabActive = active;
+    if (S.me.role === 'admin' && UNDER_MORE.includes(active)) tabActive = 'more';
+    if (active === 'rep') tabActive = 'team';
+    const sideActive = active === 'rep' ? 'team' : active;
+    const nav = h('nav', { class: 'tabs', 'aria-label': 'Main' },
+      tabs.map(([k, label]) => h('a', { href: '#/' + k, class: tabActive === k ? 'on' : null }, icon(TAB_ICON[k] || k), h('span', null, label),
+        k === 'callbacks' || (k === 'more' && S.me.role === 'admin') ? h('span', { class: 'count cb-count', hidden: true }) : null)));
+    const side = h('aside', { class: 'side', 'aria-label': 'Sidebar' },
+      h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
+      h('div', { class: 'side-scroll' }, navFor(S.me.role).map(([group, items]) => h('div', { class: 'side-group' },
+        group ? h('div', { class: 'side-label' }, group) : null,
+        items.map(([k, label]) => h('a', { href: '#/' + k, class: 'side-link' + (sideActive === k ? ' on' : '') }, icon(TAB_ICON[k] || k), h('span', null, label),
+          k === 'callbacks' ? h('span', { class: 'count cb-count', hidden: true }) : null))))),
+      h('a', { href: '#/account', class: 'side-me' + (active === 'account' ? ' on' : '') }, h('span', { class: 'avatar' }, initials(S.me.name)),
+        h('span', { class: 'who' }, h('b', null, S.me.name), h('small', null, ROLE_NAME[S.me.role] || S.me.role)), icon('chev')));
     const top = h('header', { class: 'top' },
-      h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems')), h('small', null, 'Sales')),
+      h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
       h('a', { href: '#/account', class: 'me', title: S.me.name }, initials(S.me.name)));
-    const main = h('main', { id: 'view' }, content);
-    $app.replaceChildren(top, main, nav);
+    const main = h('main', { id: 'view', class: 'enter' }, content);
+    $app.replaceChildren(side, h('div', { class: 'frame' }, top, main), nav);
     if (S.me.role !== 'dev') refreshCallbackBadge();
     window.scrollTo(0, 0);
     return main;
@@ -160,8 +188,8 @@
     try {
       const [from, until] = dayBounds();
       const list = await api('GET', '/callbacks?from=' + encodeURIComponent(from) + '&until=' + encodeURIComponent(until));
-      const el = document.getElementById('cbCount');
-      if (el) { el.textContent = list.length; el.hidden = !list.length; }
+      const n = list.filter((l) => l.status === 'callback').length;
+      document.querySelectorAll('.cb-count').forEach((el) => { el.textContent = n; el.hidden = !n; });
     } catch { /* ignore */ }
   }
 
@@ -171,12 +199,14 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
       switch (route) {
         case 'home': return await viewHome();
+        case 'team': return await viewTeam();
+        case 'rep': return await viewRep(+arg);
         case 'deals': return await viewDeals();
         case 'earnings': return await viewEarnings();
         case 'more': return viewMore();
@@ -1151,44 +1181,314 @@
   }
 
   /* ================= home: dashboard + leaderboard ================= */
+  /* ================= home ================= */
+  const tzMin = () => String(-new Date().getTimezoneOffset());
+  const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—');
+  const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
+  const PERIOD_NAME = { today: 'today', week: 'this week', month: 'this month' };
+  function periodSeg(onPick) {
+    return h('div', { class: 'seg compact' }, PERIODS.map(([k, l]) => h('button', { class: S.period === k ? 'on' : null, onclick: () => { S.period = k; onPick(); } }, l)));
+  }
+  function kpiTile(ic, label, value, note, opts) {
+    opts = opts || {};
+    return h(opts.href ? 'a' : 'div', { class: 'kpi2' + (opts.cls ? ' ' + opts.cls : ''), href: opts.href || null },
+      h('div', { class: 'kpi-top' }, h('span', { class: 'kic' }, icon(ic)), h('small', null, label)),
+      h('b', null, value), note ? h('span', { class: 'kpi-note' }, note) : null);
+  }
+  function goalBar(done, goal, label) {
+    const pct = goal ? Math.min(100, Math.round((done / goal) * 100)) : 0;
+    const state = !goal ? '' : done >= goal ? ' hit' : done === 0 ? ' zero' : '';
+    return h('div', { class: 'goal' + state },
+      h('div', { class: 'goal-line' }, h('span', null, label || 'Today'), h('b', null, done + (goal ? ' / ' + goal : ''))),
+      goal ? h('div', { class: 'goal-track' }, h('i', { style: 'width:' + pct + '%' })) : null);
+  }
+  function panel(title, right, ...body) {
+    return h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', null, title), right || null), ...body);
+  }
+
   async function viewHome() {
     const isAdmin = S.me.role === 'admin';
     const [from, until] = periodBounds(S.period);
+    const [dfrom, duntil] = dayBounds();
     const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 6);
-    const qs = new URLSearchParams({ from, until, since: since.toISOString(), tz: String(-new Date().getTimezoneOffset()) });
-    const d = await api('GET', '/dashboard?' + qs);
-    const T = d.totals, P = d.pipeline;
-    const periodName = { today: 'today', week: 'this week', month: 'this month' }[S.period];
+    const qs = new URLSearchParams({ from, until, since: since.toISOString(), tz: tzMin(), dfrom, duntil });
+    const [d, me, team] = await Promise.all([
+      api('GET', '/dashboard?' + qs),
+      api('GET', '/me'),
+      isAdmin ? api('GET', '/team?' + new URLSearchParams({ from: dfrom, until: duntil, dfrom, duntil })) : null,
+    ]);
+    S.me.daily_goal = me.daily_goal;
+    const T = d.totals, P = d.pipeline, F = d.funnel || {};
+    const pn = PERIOD_NAME[S.period];
+    const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
-    const seg = h('div', { class: 'seg' }, [['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([k, l]) =>
-      h('button', { class: S.period === k ? 'on' : null, onclick: () => { S.period = k; viewHome(); } }, l)));
+    const head = h('div', { class: 'page-head' },
+      h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine),
+        h('h1', null, 'Welcome back, ' + first(S.me.name)),
+        h('p', { class: 'sub' }, isAdmin ? "Here's what your team is doing " + pn + '.' : 'Your numbers ' + pn + '. Keep stacking.')),
+      periodSeg(viewHome));
 
-    const kpi = (label, value, note, cls) => h('div', { class: 'kpi ' + (cls || '') }, h('small', null, label), h('b', null, value), note ? h('span', null, note) : null);
-    const bookRate = T.calls ? Math.round((T.booked / T.calls) * 100) + '% of calls' : null;
-    const kpis = h('div', { class: 'kpis' },
-      kpi('Calls', T.calls.toLocaleString()),
-      kpi('Booked', T.booked.toLocaleString(), bookRate),
-      kpi('Closes', T.closes.toLocaleString(), T.booked && T.closes ? Math.round((T.closes / Math.max(T.booked, 1)) * 100) + '% of booked' : null),
-      isAdmin ? kpi('Revenue', money(T.revenue_cents), 'setup fees closed', 'money') : kpi('You earned', money(T.commission_cents), 'commission ' + periodName, 'money'));
+    if (!isAdmin) return repHome(d, me, head);
 
-    // rep: what to do next
-    const nextUp = !isAdmin ? h('div', { class: 'card next' },
-      h('div', { style: 'min-width:0' }, h('b', null, P.callbacks_due ? P.callbacks_due + (P.callbacks_due === 1 ? ' callback due' : ' callbacks due') : 'No callbacks due'),
-        h('div', { class: 'sub' }, (P.demo_ready || 0) + ' demo-ready leads to call')),
-      h('a', { class: 'btn primary', href: P.callbacks_due ? '#/callbacks' : '#/leads' }, P.callbacks_due ? 'Call back' : 'Start calling')) : null;
+    const kpis = h('div', { class: 'kpi-grid' },
+      kpiTile('phone', 'Calls made', T.calls.toLocaleString(), T.calls ? Math.round((T.booked / T.calls) * 100) + '% booked' : 'No calls yet', { href: '#/team' }),
+      kpiTile('mail', 'Demos sent', T.demos_sent.toLocaleString(), T.emails ? T.emails + ' by email' : 'by text or email'),
+      kpiTile('callbacks', 'Callbacks due', (P.callbacks_due || 0).toLocaleString(), P.callback ? P.callback + ' scheduled in total' : 'none scheduled', { href: '#/callbacks', cls: P.callbacks_due ? 'warn' : '' }),
+      kpiTile('cal', 'Calls booked', T.booked.toLocaleString(), 'with the closer'),
+      kpiTile('trophy', 'Deals closed', T.closes.toLocaleString(), T.booked ? Math.round((T.closes / Math.max(1, T.booked)) * 100) + '% of booked' : '', { href: '#/deals' }),
+      kpiTile('deals', 'Revenue', money(T.revenue_cents), 'setup fees ' + pn, { cls: 'money', href: '#/deals' }));
 
-    // admin: commissions owed
-    const owed = isAdmin && d.owed_cents ? h('a', { class: 'card next', href: '#/deals' },
+    // team pulse: everyone's calls today vs goal
+    const reps = (team.team || []).filter((u) => u.active && u.role === 'rep');
+    const devs = (team.team || []).filter((u) => u.active && u.role === 'dev');
+    const flagged = reps.filter((u) => u.today_calls === 0 || (u.daily_goal && u.today_calls < u.daily_goal));
+    const pulse = panel('Team today', h('a', { class: 'link-sm', href: '#/team' }, 'Team stats →'),
+      reps.length || devs.length ? h('div', { class: 'pulse' },
+        reps.map((u) => h('a', { class: 'pulse-row', href: '#/rep/' + u.id },
+          h('span', { class: 'avatar sm' }, initials(u.name)),
+          h('div', { class: 'pulse-body' }, h('div', { class: 'pulse-name' }, h('b', null, u.name),
+            u.today_calls === 0 ? h('span', { class: 'flag bad' }, 'No calls yet') : u.daily_goal && u.today_calls < u.daily_goal ? h('span', { class: 'flag warn' }, 'Under goal') : u.daily_goal ? h('span', { class: 'flag ok' }, 'Goal hit') : null),
+            goalBar(u.today_calls, u.daily_goal, u.today_last_call ? 'Last call ' + ago(u.today_last_call) : 'Calls today')))),
+        devs.map((u) => h('a', { class: 'pulse-row', href: '#/rep/' + u.id },
+          h('span', { class: 'avatar sm dev' }, initials(u.name)),
+          h('div', { class: 'pulse-body' }, h('div', { class: 'pulse-name' }, h('b', null, u.name), h('span', { class: 'flag' }, 'Demo builder')),
+            goalBar(u.demos_today, u.daily_goal, 'Demos built today'))))) :
+        h('div', { class: 'empty-sm' }, 'No reps yet. ', h('a', { href: '#/users' }, 'Add your first rep →')),
+      flagged.length ? h('p', { class: 'pulse-note' }, icon('flag'), flagged.length + (flagged.length === 1 ? ' rep needs' : ' reps need') + ' a nudge today.') : null);
+
+    // funnel
+    const stages = [['Leads', F.leads, 'all'], ['Demo built', F.demo, 'demo_ready'], ['Contacted', F.contacted, 'called'], ['Booked', F.booked, 'booked'], ['Won', F.won, 'won']];
+    const top = Math.max(1, F.leads || 0);
+    const funnel = panel('Pipeline funnel', h('span', { class: 'dim small' }, 'All time'),
+      h('div', { class: 'funnel' }, stages.map(([l, v, st], i) => {
+        const prev = i ? stages[i - 1][1] : null;
+        return h('button', { class: 'fstep', onclick: () => { Object.assign(S.leadFilters, { status: st, rep: '', batch: '', city: '', q: '', heat: '', contact: '' }); location.hash = '#/leads'; } },
+          h('div', { class: 'fl' }, h('span', null, l), h('b', null, (v || 0).toLocaleString())),
+          h('div', { class: 'ftrack' }, h('i', { style: 'width:' + Math.max(v ? 3 : 0, ((v || 0) / top) * 100) + '%;--d:' + i * 90 + 'ms' })),
+          h('small', null, i && prev ? Math.round(((v || 0) / prev) * 100) + '% of ' + stages[i - 1][0].toLowerCase() : i ? '—' : 'not counting Do Not Call'));
+      })));
+
+    // live feed
+    const feedBox = h('div', { class: 'feed' }, h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' })));
+    const feed = panel('Live activity', h('span', { class: 'live-tag' }, h('span', { class: 'live' }), 'Live'), feedBox);
+    async function loadFeed() {
+      try {
+        const r = await api('GET', '/feed?limit=25');
+        feedBox.replaceChildren(...(r.feed.length ? r.feed.map(feedRow) : [h('div', { class: 'empty-sm' }, 'Nothing yet. Calls, notes, demos and deals show up here the second they happen.')]));
+      } catch { /* keep last */ }
+    }
+    loadFeed();
+    clearInterval(S.feedTimer);
+    S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
+
+    const owed = d.owed_cents ? h('a', { class: 'banner', href: '#/deals' }, h('span', { class: 'kic' }, icon('deals')),
       h('div', null, h('b', null, money(d.owed_cents) + ' commission owed'), h('div', { class: 'sub' }, d.owed_deals + (d.owed_deals === 1 ? ' unpaid deal' : ' unpaid deals'))),
       h('span', { class: 'btn small' }, 'Pay out')) : null;
 
     shell('home', [
-      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Hey ' + first(S.me.name)), h('p', { class: 'sub' }, isAdmin ? 'How the whole team is doing.' : 'Your numbers. Keep stacking.'))),
-      seg, kpis, nextUp, owed,
-      weekChart(d.days, isAdmin),
-      leaderboard(d.leaderboard, isAdmin, periodName),
-      pipeline(P, isAdmin),
-      !isAdmin ? h('a', { class: 'card next section', href: '#/script' }, h('div', null, h('b', null, 'Practice the call script'), h('div', { class: 'sub' }, 'Read it before your first dial.')), icon('chev')) : null,
+      head, kpis, owed,
+      h('div', { class: 'dash-grid' },
+        h('div', { class: 'col' }, pulse, funnel, weekChart(d.days, true)),
+        h('div', { class: 'col' }, feed, leaderboard(d.leaderboard, true, pn))),
+    ]);
+  }
+
+  function feedRow(e) {
+    let what, cls = '';
+    if (e.kind === 'call') {
+      const o = e.detail;
+      const verbs = { no_answer: 'called · no answer', voicemail: 'left a voicemail for', gatekeeper: 'hit a gatekeeper at', not_interested: 'called · not interested:', callback: 'set a callback with', demo_sent: 'sent the demo to', booked: 'booked a call with', dnc: 'marked Do Not Call:', emailed: 'emailed', status_change: 'changed status of', demo_ready: 'marked demo ready for', closed_won: 'closed' };
+      what = verbs[o] || (OUTCOME_LABEL[o] || o) + ':';
+      cls = o === 'booked' ? 'ok' : o === 'callback' ? 'warn' : o === 'emailed' || o === 'demo_sent' ? 'blue' : '';
+    } else if (e.kind === 'note') { what = 'added a note on'; }
+    else if (e.kind === 'deal') { what = 'closed ' + money(+e.detail) + ' with'; cls = 'money'; }
+    else if (e.kind === 'demo') { what = 'built a demo for'; cls = 'blue'; }
+    else if (e.kind === 'view') { what = 'opened their demo (' + e.detail + 'x)'; cls = 'hot'; }
+    const who = e.kind === 'view' ? (e.biz || 'A lead') : (e.who || 'Someone');
+    return h('a', { class: 'frow', href: e.lead_id ? '#/lead/' + e.lead_id : null },
+      h('span', { class: 'fdot ' + cls }),
+      h('div', { class: 'ftext' }, h('b', null, who), ' ', what, e.kind === 'view' ? null : [' ', h('b', null, e.biz || 'a lead')],
+        e.kind === 'note' && e.detail ? h('div', { class: 'fquote' }, '“' + e.detail + '”') : null),
+      h('time', null, ago(e.t)));
+  }
+
+  function repHome(d, me, head) {
+    const T = d.totals, P = d.pipeline;
+    const goal = me.daily_goal || 0, today = d.today_calls || 0;
+    const goalCard = h('section', { class: 'panel goal-panel' },
+      h('div', { class: 'panel-head' }, h('h3', null, 'Today'), goal ? h('span', { class: 'dim small' }, 'Goal: ' + goal + ' calls') : h('span', { class: 'dim small' }, 'No daily goal set')),
+      h('div', { class: 'big-goal' }, h('b', null, today), h('span', null, goal ? '/ ' + goal + ' calls' : today === 1 ? 'call today' : 'calls today')),
+      goal ? goalBar(today, goal, today >= goal ? 'Goal hit. Keep going.' : goal - today + ' to go') : null);
+    const kpis = h('div', { class: 'kpi-grid four' },
+      kpiTile('phone', 'Calls', T.calls.toLocaleString(), T.calls ? Math.round((T.booked / T.calls) * 100) + '% booked' : null),
+      kpiTile('cal', 'Booked', T.booked.toLocaleString()),
+      kpiTile('trophy', 'Closes', T.closes.toLocaleString()),
+      kpiTile('deals', 'You earned', money(T.commission_cents), 'commission ' + PERIOD_NAME[S.period], { cls: 'money' }));
+    const next = h('a', { class: 'banner', href: P.callbacks_due ? '#/callbacks' : '#/leads' }, h('span', { class: 'kic' }, icon(P.callbacks_due ? 'callbacks' : 'phone')),
+      h('div', null, h('b', null, P.callbacks_due ? P.callbacks_due + (P.callbacks_due === 1 ? ' callback due' : ' callbacks due') : 'No callbacks due'),
+        h('div', { class: 'sub' }, (P.demo_ready || 0) + ' demo-ready leads to call')),
+      h('span', { class: 'btn primary small' }, P.callbacks_due ? 'Call back' : 'Start calling'));
+    shell('home', [head, goalCard, kpis, next,
+      h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, weekChart(d.days, false), pipeline(P, false)), h('div', { class: 'col' }, leaderboard(d.leaderboard, false, PERIOD_NAME[S.period]),
+        h('a', { class: 'banner', href: '#/script' }, h('span', { class: 'kic' }, icon('script')), h('div', null, h('b', null, 'Practice the call script'), h('div', { class: 'sub' }, 'Read it before your first dial.')), icon('chev'))))]);
+  }
+
+  /* ================= team stats (admin) ================= */
+  async function viewTeam() {
+    const [from, until] = periodBounds(S.period);
+    const [dfrom, duntil] = dayBounds();
+    const r = await api('GET', '/team?' + new URLSearchParams({ from, until, dfrom, duntil }));
+    const pn = PERIOD_NAME[S.period];
+    const reps = r.team.filter((u) => u.role !== 'dev');
+    const devs = r.team.filter((u) => u.role === 'dev');
+    const key = S.teamSort || 'calls';
+    const sorted = [...reps].sort((a, b) => b[key] - a[key] || b.calls - a.calls || a.name.localeCompare(b.name));
+    const noCalls = reps.filter((u) => u.active && u.role === 'rep' && u.today_calls === 0);
+    const under = reps.filter((u) => u.active && u.role === 'rep' && u.daily_goal && u.today_calls > 0 && u.today_calls < u.daily_goal);
+
+    const flags = h('div', { class: 'flag-row' },
+      h('div', { class: 'flag-card' + (noCalls.length ? ' bad' : ' ok') }, h('b', null, noCalls.length), h('span', null, noCalls.length === 1 ? 'rep with no calls today' : 'reps with no calls today'),
+        noCalls.length ? h('small', null, noCalls.map((u) => first(u.name)).join(', ')) : null),
+      h('div', { class: 'flag-card' + (under.length ? ' warn' : ' ok') }, h('b', null, under.length), h('span', null, 'under their daily goal'),
+        under.length ? h('small', null, under.map((u) => first(u.name) + ' ' + u.today_calls + '/' + u.daily_goal).join(', ')) : null),
+      h('div', { class: 'flag-card' }, h('b', null, reps.reduce((n, u) => n + u.today_calls, 0)), h('span', null, 'team calls today')));
+
+    const sortBtn = (k, l) => h('button', { class: 'th' + (key === k ? ' on' : ''), onclick: () => { S.teamSort = k; viewTeam(); } }, l);
+    const medal = ['🥇', '🥈', '🥉'];
+    const board = h('div', { class: 'tboard' },
+      h('div', { class: 'trow thead' }, h('span', null, '#'), h('span', null, 'Rep'), sortBtn('calls', 'Calls'), sortBtn('booked', 'Booked'), sortBtn('closes', 'Closes'), sortBtn('revenue_cents', 'Revenue'), h('span', { class: 'hide-sm' }, 'Today'), h('span', { class: 'hide-sm' }, 'Last call')),
+      sorted.length ? sorted.map((u, i) => h('a', { class: 'trow', href: '#/rep/' + u.id },
+        h('span', { class: 'rk' }, u[key] && i < 3 ? medal[i] : String(i + 1)),
+        h('span', { class: 'tname' }, h('span', { class: 'avatar sm' }, initials(u.name)), h('span', null, h('b', null, u.name),
+          h('small', null, !u.active ? 'Inactive' : u.role === 'admin' ? 'Admin' : u.today_calls === 0 ? 'No calls today' : u.daily_goal ? u.today_calls + ' / ' + u.daily_goal + ' today' : u.today_calls + ' today'))),
+        h('span', { class: 'n' + (key === 'calls' ? ' on' : '') }, u.calls), h('span', { class: 'n' + (key === 'booked' ? ' on' : '') }, u.booked),
+        h('span', { class: 'n' + (key === 'closes' ? ' on' : '') }, u.closes), h('span', { class: 'n' + (key === 'revenue_cents' ? ' on' : '') }, money(u.revenue_cents)),
+        h('span', { class: 'hide-sm' }, u.role === 'rep' ? goalBar(u.today_calls, u.daily_goal, '') : '—'),
+        h('span', { class: 'hide-sm dim' }, u.last_call ? ago(u.last_call) : '—'))) :
+        h('div', { class: 'empty-sm' }, 'No reps yet. ', h('a', { href: '#/users' }, 'Add one under Team members →')));
+
+    const devBoard = devs.length ? panel('Demo builders · ' + pn, null, h('div', { class: 'tboard' },
+      h('div', { class: 'trow thead dev' }, h('span', null, 'Builder'), h('span', null, 'Demos'), h('span', null, 'Today'), h('span', null, 'Avg speed')),
+      devs.map((u) => h('a', { class: 'trow dev', href: '#/rep/' + u.id },
+        h('span', { class: 'tname' }, h('span', { class: 'avatar sm dev' }, initials(u.name)), h('b', null, u.name)),
+        h('span', { class: 'n on' }, u.demos), h('span', { class: 'n' }, u.demos_today + (u.daily_goal ? ' / ' + u.daily_goal : '')),
+        h('span', { class: 'n' }, u.demo_avg_hours == null ? '—' : fmtHours(u.demo_avg_hours)))),
+      h('p', { class: 'dim small', style: 'margin-top:10px' }, 'Avg speed = time from when the lead was uploaded to when its demo was built.'))) : null;
+
+    shell('team', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Team'), h('h1', null, 'Who’s putting in work'),
+        h('p', { class: 'sub' }, 'Tap anyone to see their day hour by hour. Set daily goals on their page.')), periodSeg(viewTeam)),
+      flags,
+      panel('Leaderboard · ' + pn, h('span', { class: 'dim small' }, 'Tap a column to rank'), board),
+      devBoard,
+    ]);
+  }
+  const fmtHours = (hrs) => (hrs < 1 ? Math.max(1, Math.round(hrs * 60)) + ' min' : hrs < 48 ? (Math.round(hrs * 10) / 10) + ' hrs' : Math.round(hrs / 24) + ' days');
+
+  async function viewRep(id) {
+    const [from, until] = periodBounds(S.period);
+    const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 13);
+    const r = await api('GET', '/team/' + id + '?' + new URLSearchParams({ from, until, since: since.toISOString(), tz: tzMin() }));
+    const U = r.user, isDev = U.role === 'dev';
+    const pn = PERIOD_NAME[S.period];
+    const dayKey = (x) => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+    const byDay = Object.fromEntries(r.daily.map((x) => [x.day, x]));
+    const demoDay = Object.fromEntries(r.demo_daily.map((x) => [x.day, x.demos]));
+    const days = [];
+    for (let i = 13; i >= 0; i--) { const x = new Date(); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - i); const k = dayKey(x); days.push({ date: x, key: k, ...(byDay[k] || {}), demos: demoDay[k] || 0, today: i === 0 }); }
+    const today = days[13];
+    const metric = isDev ? 'demos' : 'calls';
+    const periodCalls = r.hourly.reduce((n, x) => n + x.calls, 0);
+    const booked = r.outcomes.find((o) => o.outcome === 'booked');
+    const revenue = r.deals.reduce((n, x) => n + x.amount_cents, 0);
+
+    const editGoal = async () => {
+      const v = await sheet((box, close) => {
+        const inp = h('input', { type: 'number', min: 0, max: 1000, inputmode: 'numeric', value: U.daily_goal || '' });
+        box.append(h('h2', null, 'Daily goal for ' + first(U.name)), h('p', { class: 'sub' }, isDev ? 'Demos to build per day.' : 'Calls to make per day. They see it on their home screen.'),
+          h('div', { class: 'field' }, h('label', null, isDev ? 'Demos per day' : 'Calls per day'), inp),
+          h('div', { class: 'row wrap', style: 'margin-bottom:12px' }, (isDev ? [5, 10, 15] : [40, 60, 80, 100]).map((n) => h('button', { class: 'btn small', type: 'button', onclick: () => { inp.value = n; } }, String(n)))),
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value === '' ? 0 : +inp.value) }, 'Save goal')));
+      });
+      if (v === null || v === undefined) return;
+      try { await api('PATCH', '/users/' + U.id, { daily_goal: v }); toast('Goal saved'); viewRep(id); } catch (e) { fail(e); }
+    };
+
+    const todayVal = isDev ? today.demos : today.calls || 0;
+    const head = h('div', { class: 'page-head' },
+      h('div', { class: 'rep-id' }, h('span', { class: 'avatar lg' + (isDev ? ' dev' : '') }, initials(U.name)),
+        h('div', null, h('p', { class: 'kicker' }, ROLE_NAME[U.role] + (U.active ? '' : ' · inactive')), h('h1', null, U.name),
+          h('p', { class: 'sub' }, U.email))),
+      periodSeg(() => viewRep(id)));
+
+    const goalP = h('section', { class: 'panel goal-panel' },
+      h('div', { class: 'panel-head' }, h('h3', null, 'Today'), h('button', { class: 'btn small', onclick: editGoal }, icon('flag'), U.daily_goal ? 'Goal: ' + U.daily_goal + '/day' : 'Set daily goal')),
+      h('div', { class: 'big-goal' }, h('b', null, todayVal), h('span', null, U.daily_goal ? '/ ' + U.daily_goal + ' ' + metric : metric + ' today')),
+      U.daily_goal ? goalBar(todayVal, U.daily_goal, todayVal >= U.daily_goal ? 'Goal hit' : todayVal === 0 ? 'Nothing yet today' : U.daily_goal - todayVal + ' to go') : null,
+      !isDev ? h('div', { class: 'times' }, h('div', null, h('small', null, 'First call'), h('b', null, clock(today.first_call))), h('div', null, h('small', null, 'Last call'), h('b', null, today.last_call ? clock(today.last_call) + ' · ' + ago(today.last_call) : '—'))) : null);
+
+    const kpis = isDev
+      ? h('div', { class: 'kpi-grid four' },
+        kpiTile('spark', 'Demos built', r.demos.length.toLocaleString(), pn),
+        kpiTile('bolt', 'Avg speed', r.demos.length ? fmtHours(r.demos.reduce((n, d) => n + (d.hours || 0), 0) / r.demos.length) : '—', 'upload → demo'),
+        kpiTile('demos', 'Demo opens', r.demos.reduce((n, d) => n + (d.views || 0), 0).toLocaleString(), 'by business owners'),
+        kpiTile('cal', 'Last 14 days', days.reduce((n, x) => n + x.demos, 0).toLocaleString(), 'demos'))
+      : h('div', { class: 'kpi-grid four' },
+        kpiTile('phone', 'Calls', periodCalls.toLocaleString(), pn),
+        kpiTile('cal', 'Booked', (booked ? booked.n : 0).toLocaleString(), periodCalls ? Math.round(((booked ? booked.n : 0) / periodCalls) * 100) + '% of calls' : null),
+        kpiTile('trophy', 'Closes', r.deals.length.toLocaleString()),
+        kpiTile('deals', 'Revenue', money(revenue), pn, { cls: 'money' }));
+
+    // 14-day bars with goal line
+    const max = Math.max(1, U.daily_goal || 0, ...days.map((x) => (isDev ? x.demos : x.calls || 0)));
+    const readout = h('div', { class: 'readout' });
+    const show = (x) => readout.replaceChildren(h('b', null, (isDev ? x.demos : x.calls || 0) + ' ' + metric), h('span', null, ' · ' + (x.today ? 'today' : x.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })) + (!isDev && x.first_call ? ' · ' + clock(x.first_call) + '–' + clock(x.last_call) : '')));
+    const bars = days.map((x) => {
+      const v = isDev ? x.demos : x.calls || 0;
+      const b = h('button', { class: 'bar' + (x.today ? ' today' : '') + (U.daily_goal && v >= U.daily_goal ? ' hit' : ''), type: 'button', onmouseenter: () => { show(x); mark(b); }, onclick: () => { show(x); mark(b); } },
+        h('div', { class: 'track' }, h('i', { style: 'height:' + (v ? Math.max(4, (v / max) * 100) : 0) + '%' })), h('small', null, x.date.toLocaleDateString([], { weekday: 'narrow' })));
+      return b;
+    });
+    const mark = (b0) => bars.forEach((b) => b.classList.toggle('sel', b === b0));
+    show(today); mark(bars[13]);
+    const chart = panel((isDev ? 'Demos' : 'Calls') + ' per day · last 14 days', U.daily_goal ? h('span', { class: 'dim small' }, '— goal ' + U.daily_goal) : null,
+      readout, h('div', { class: 'chart tall' }, U.daily_goal ? h('div', { class: 'goal-mark', style: 'bottom:' + Math.round(22 + (U.daily_goal / max) * 158) + 'px' }) : null, bars));
+
+    // calls by hour
+    let hourPanel = null, dayTable = null, outcomesP = null;
+    if (!isDev) {
+      const hrs = Object.fromEntries(r.hourly.map((x) => [x.hour, x.calls]));
+      const lo = Math.min(7, ...r.hourly.map((x) => x.hour)), hi = Math.max(20, ...r.hourly.map((x) => x.hour));
+      const hmax = Math.max(1, ...r.hourly.map((x) => x.calls));
+      const lbl = (hr) => (hr % 12 || 12) + (hr < 12 ? 'a' : 'p');
+      const cols = []; for (let hr = lo; hr <= hi; hr++) cols.push(hr);
+      hourPanel = panel('Calls by hour · ' + pn, null, r.hourly.length ? h('div', { class: 'hours' }, cols.map((hr) => h('div', { class: 'hcol', title: lbl(hr) + ': ' + (hrs[hr] || 0) + ' calls' },
+        h('div', { class: 'htrack' }, h('i', { style: 'height:' + ((hrs[hr] || 0) / hmax) * 100 + '%' }), hrs[hr] ? h('em', null, hrs[hr]) : null), h('small', null, hr % 2 === 0 ? lbl(hr) : '')))) :
+        h('div', { class: 'empty-sm' }, 'No calls ' + pn + '.'));
+      const worked = days.filter((x) => x.calls || x.emails).reverse();
+      dayTable = panel('Day by day', null, worked.length ? h('div', { class: 'dtable' },
+        h('div', { class: 'drow head' }, h('span', null, 'Day'), h('span', null, 'Calls'), h('span', null, 'Booked'), h('span', null, 'First'), h('span', null, 'Last')),
+        worked.map((x) => h('div', { class: 'drow' + (U.daily_goal && x.calls < U.daily_goal ? ' under' : '') },
+          h('span', null, x.today ? 'Today' : x.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })),
+          h('span', null, String(x.calls || 0), U.daily_goal && x.calls < U.daily_goal ? h('i', { class: 'flag-dot', title: 'Under goal' }) : null),
+          h('span', null, String(x.booked || 0)), h('span', null, clock(x.first_call)), h('span', null, clock(x.last_call))))) :
+        h('div', { class: 'empty-sm' }, 'No calls in the last 14 days.'));
+      const omax = Math.max(1, ...r.outcomes.map((o) => o.n));
+      outcomesP = panel('Outcomes · ' + pn, null, r.outcomes.length ? h('div', { class: 'obars' }, r.outcomes.map((o) => h('div', { class: 'obar o-' + o.outcome },
+        h('span', null, OUTCOME_LABEL[o.outcome] || o.outcome), h('div', { class: 'otrack' }, h('i', { style: 'width:' + (o.n / omax) * 100 + '%' })), h('b', null, o.n)))) :
+        h('div', { class: 'empty-sm' }, 'Nothing logged ' + pn + '.'));
+    }
+    const dealsP = !isDev && r.deals.length ? panel('Closes · ' + pn, null, r.deals.map((d) => h('a', { class: 'frow', href: '#/lead/' + d.lead_id }, h('span', { class: 'fdot money' }),
+      h('div', { class: 'ftext' }, h('b', null, d.business || 'Deal'), ' ', d.package || ''), h('time', null, money(d.amount_cents))))) : null;
+    const demosP = isDev ? panel('Demos built · ' + pn, null, r.demos.length ? r.demos.map((d) => h('a', { class: 'frow', href: '#/lead/' + d.lead_id }, h('span', { class: 'fdot blue' }),
+      h('div', { class: 'ftext' }, h('b', null, d.business || 'Demo'), h('div', { class: 'fquote' }, (d.hours == null ? '' : 'built ' + fmtHours(d.hours) + ' after upload · ') + (d.views || 0) + ' opens')), h('time', null, ago(d.created_at)))) :
+      h('div', { class: 'empty-sm' }, 'No demos built ' + pn + '.')) : null;
+    const recentP = !isDev ? panel('Recent activity', null, r.recent.length ? r.recent.map((c) => feedRow({ kind: 'call', t: c.created_at, detail: c.outcome, who: first(U.name), biz: c.business, lead_id: c.lead_id })) : h('div', { class: 'empty-sm' }, 'No activity yet.')) : null;
+
+    shell('rep', [
+      h('a', { class: 'back', href: '#/team' }, icon('back'), 'Team stats'),
+      head, goalP, kpis,
+      h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, chart, hourPanel, outcomesP, demosP), h('div', { class: 'col' }, dayTable, dealsP, recentP)),
     ]);
   }
 
@@ -1384,11 +1684,12 @@
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
+        row('#/callbacks', 'callbacks', 'Callbacks', 'Who to call back today'),
+        row('#/deals', 'deals', 'Deals & commissions', 'Closes, payouts and what you owe'),
         row('#/batches', 'batches', 'Batches', 'Lead uploads and how each batch is doing'),
         row('#/upload', 'batches', 'Upload CSV', 'Add a new batch of leads'),
-        row('#/users', 'users', 'Team', 'Add reps and devs, set commission %'),
+        row('#/users', 'users', 'Team members', 'Add reps and devs, set commission %'),
         row('#/script', 'script', 'Call script', 'Edit what reps say on the phone'),
-        row('#/deals', 'deals', 'Commission settings', 'Default % and payouts'),
         row('#/account', 'account', 'Account', 'Password and log out')),
     ]);
   }
