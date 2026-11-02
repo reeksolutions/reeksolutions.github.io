@@ -1655,6 +1655,61 @@ const DBODY = {
   karla: { q: 'family=Karla:wght@400;500;600;700;800', css: "'Karla', system-ui, sans-serif" },
   outfitb: { q: 'family=Outfit:wght@400;500;600;700', css: "'Outfit', system-ui, sans-serif" },
 };
+/* Design data adapted from UI/UX Pro Max (github.com/nextlevelbuilder/ui-ux-pro-max-skill),
+   MIT License, Copyright (c) 2024 Next Level Builder.
+   Pro font pairings (from the UI/UX Pro Max typography data). Weights are ones each font really has. */
+const DPAIRS = {
+  classic: { h: ['Playfair Display', 800], b: 'Inter', w: 800, k: 0.6, mood: 'elegant luxury beauty spa' },
+  bold: { h: ['Bebas Neue', 400], b: 'Source Sans 3', upper: true, w: 400, k: 0.44, mood: 'bold dramatic sports barber' },
+  wellness: { h: ['Lora', 700], b: 'Raleway', w: 700, k: 0.56, mood: 'calm wellness spa organic' },
+  retro: { h: ['Abril Fatface', 400], b: 'Merriweather', w: 400, k: 0.64, mood: 'retro vintage restaurant barber' },
+  geometric: { h: ['Outfit', 800], b: 'Work Sans', w: 800, k: 0.6, mood: 'modern clean general' },
+  luxury: { h: ['Cormorant', 700], b: 'Montserrat', italic: true, w: 700, k: 0.5, mood: 'luxury fashion high-end' },
+  playful: { h: ['Fredoka', 700], b: 'Nunito', w: 700, k: 0.62, mood: 'playful friendly kids pets' },
+  soft: { h: ['Varela Round', 400], b: 'Nunito Sans', w: 400, k: 0.62, mood: 'soft rounded pets wellness' },
+  fashion: { h: ['Syne', 800], b: 'Manrope', w: 800, k: 0.72, mood: 'fashion edgy creative' },
+  menu: { h: ['Playfair Display SC', 700], b: 'Karla', w: 700, k: 0.7, mood: 'restaurant culinary' },
+  indie: { h: ['Amatic SC', 700], b: 'Cabin', w: 700, k: 0.42, mood: 'craft handmade bakery' },
+  music: { h: ['Righteous', 400], b: 'Poppins', w: 400, k: 0.62, mood: 'fun energetic food' },
+  sports: { h: ['Barlow Condensed', 800], b: 'Barlow', upper: true, w: 800, k: 0.46, mood: 'sports fitness gym' },
+  luxmin: { h: ['Bodoni Moda', 700], b: 'Jost', w: 700, k: 0.58, mood: 'luxury minimalist' },
+  genz: { h: ['Anton', 400], b: 'Epilogue', upper: true, w: 400, k: 0.5, mood: 'loud streetwear barber tattoo' },
+  startup: { h: ['Outfit', 800], b: 'Rubik', w: 800, k: 0.6, mood: 'bold modern confident' },
+  techy: { h: ['Space Grotesk', 700], b: 'DM Sans', w: 700, k: 0.62, mood: 'modern techy auto' },
+  estate: { h: ['Cinzel', 700], b: 'Josefin Sans', upper: true, w: 700, k: 0.72, mood: 'premium classic' },
+  handwritten: { h: ['Caveat', 700], b: 'Quicksand', w: 700, k: 0.48, mood: 'personal warm cafe' },
+  neubrutal: { h: ['Lexend Mega', 800], b: 'Public Sans', w: 800, k: 0.86, mood: 'loud quirky gen z' },
+  clay: { h: ['Nunito', 900], b: 'DM Sans', w: 900, k: 0.6, mood: 'claymorphism bubbly playful' },
+  gaming: { h: ['Russo One', 400], b: 'Chakra Petch', w: 400, k: 0.66, mood: 'action bold auto' },
+};
+const gq = (fam, w) => 'family=' + fam.replace(/ /g, '+') + (w ? ':wght@' + w : '');
+// UI styles (from UI/UX Pro Max styles data): each changes cards, buttons, borders and shadows
+const DSTYLES = ['soft', 'clay', 'glass', 'brutal', 'swiss', 'editorial', 'vibrant', 'luxury', 'organic', 'flat'];
+const STYLE_MODE = { clay: 'light', brutal: 'light', luxury: 'dark', organic: 'light' };
+// Palettes by business type (UI/UX Pro Max colors data): [primary, accent, background, foreground]
+const CURATED = {
+  pets: [['#F97316', '#2563EB', '#FFF7ED', '#9A3412'], ['#0D9488', '#EA580C', '#F0FDFA', '#134E4A']],
+  nails: [['#EC4899', '#8B5CF6', '#FDF2F8', '#831843']],
+  lash: [['#EC4899', '#8B5CF6', '#FDF2F8', '#831843']],
+  hair: [['#EC4899', '#8B5CF6', '#FDF2F8', '#831843']],
+  food: [['#DC2626', '#A16207', '#FEF2F2', '#450A0A'], ['#92400E', '#B45309', '#FEF3C7', '#78350F']],
+  fitness: [['#F97316', '#22C55E', '#1F2937', '#F8FAFC']],
+  auto: [['#DC2626', '#DC2626', '#0F172A', '#F8FAFC'], ['#1E293B', '#DC2626', '#F8FAFC', '#0F172A']],
+  home: [['#1E40AF', '#EA580C', '#EFF6FF', '#1E3A8A']],
+};
+const NICHE_UI = {
+  pets: { styles: ['clay', 'vibrant', 'soft', 'organic', 'flat'], pairs: ['playful', 'soft', 'clay', 'geometric', 'handwritten'] },
+  barber: { styles: ['luxury', 'editorial', 'brutal', 'swiss', 'flat'], pairs: ['bold', 'genz', 'retro', 'estate', 'sports'] },
+  nails: { styles: ['soft', 'glass', 'luxury', 'swiss', 'clay'], pairs: ['classic', 'luxury', 'luxmin', 'fashion', 'wellness'] },
+  lash: { styles: ['soft', 'glass', 'luxury', 'swiss', 'organic'], pairs: ['luxury', 'classic', 'luxmin', 'wellness'] },
+  hair: { styles: ['soft', 'glass', 'editorial', 'luxury', 'vibrant'], pairs: ['classic', 'fashion', 'luxmin', 'luxury', 'bold'] },
+  tattoo: { styles: ['brutal', 'luxury', 'editorial', 'swiss'], pairs: ['genz', 'retro', 'bold', 'estate', 'neubrutal'] },
+  auto: { styles: ['luxury', 'glass', 'swiss', 'vibrant', 'flat'], pairs: ['techy', 'gaming', 'sports', 'bold', 'startup'] },
+  food: { styles: ['vibrant', 'clay', 'editorial', 'flat', 'organic'], pairs: ['menu', 'retro', 'music', 'indie', 'handwritten'] },
+  fitness: { styles: ['vibrant', 'brutal', 'flat', 'luxury'], pairs: ['sports', 'bold', 'genz', 'startup'] },
+  home: { styles: ['flat', 'swiss', 'soft', 'vibrant'], pairs: ['geometric', 'startup', 'techy', 'soft'] },
+  general: { styles: DSTYLES, pairs: Object.keys(DPAIRS) },
+};
 const DOPTS = {
   hero: ['fullbleed', 'split', 'splitleft', 'arch', 'slant', 'tilt', 'circle', 'stack', 'poster'],
   services: ['cards', 'menu', 'rows', 'tiles'],
@@ -1692,11 +1747,19 @@ const pickOne = (rnd, list) => list[Math.floor(rnd() * list.length) % list.lengt
 function makeDesign(data, want, seed) {
   want = want && typeof want === 'object' ? want : {};
   const rnd = seededRandom(seed || Math.random());
-  const N = nicheFor(data.category, data.name);
+  const N0 = nicheFor(data.category, data.name);
+  // a saved design keeps the business type it was made for
+  const N = want.niche && NICHE_STYLE[want.niche] ? { key: want.niche } : N0;
   const st = NICHE_STYLE[N.key] || NICHE_STYLE.general;
   const ok = (k, v) => DOPTS[k].includes(v);
   const num = (v, lo, hi) => (Number.isFinite(+v) && +v >= lo && +v <= hi ? Math.round(+v) : null);
-  const mode = want.mode === 'dark' || want.mode === 'light' ? want.mode : (rnd() < st.dark ? 'dark' : 'light');
+  const U = NICHE_UI[N.key] || NICHE_UI.general;
+  const style = DSTYLES.includes(want.style) ? want.style : pickOne(rnd, U.styles);
+  const pair = DPAIRS[want.pair] ? want.pair : pickOne(rnd, U.pairs);
+  let mode = want.mode === 'dark' || want.mode === 'light' ? want.mode : (rnd() < st.dark ? 'dark' : 'light');
+  if (STYLE_MODE[style] && !(want.mode && want.style === undefined)) mode = want.mode && DSTYLES.includes(want.style) ? want.mode : STYLE_MODE[style];
+  const cur = CURATED[N.key] || [];
+  const curated = Number.isInteger(want.curated) && cur[want.curated] ? want.curated : (want.curated === -1 ? -1 : (cur.length && rnd() < 0.45 ? Math.floor(rnd() * cur.length) : -1));
   const hue = num(want.hue, 0, 360) ?? (pickOne(rnd, st.hues) + Math.round(rnd() * 16 - 8) + 360) % 360;
   const accentHue = num(want.accent_hue, 0, 360) ?? (rnd() < 0.55 ? hue : (hue + pickOne(rnd, [30, 150, 180, 200, 330])) % 360);
   let order = Array.isArray(want.order) ? want.order.filter((x) => ['services', 'why', 'gallery', 'about'].includes(x)) : [];
@@ -1706,7 +1769,7 @@ function makeDesign(data, want, seed) {
     order = rnd() < 0.75 ? ['services', ...rest] : [rest[0], 'services', rest[1], rest[2]];
   }
   return {
-    v: 1, mode, hue, accent_hue: accentHue,
+    v: 2, mode, hue, accent_hue: accentHue, style, pair, curated, niche: N.key,
     sat: num(want.sat, 30, 100) ?? Math.round(55 + rnd() * 40),
     display: DFONTS[want.display] ? want.display : pickOne(rnd, st.fonts.filter((f) => DFONTS[f])),
     body: DBODY[want.body] ? want.body : pickOne(rnd, Object.keys(DBODY)),
@@ -1740,6 +1803,20 @@ function lum(hexc) {
 const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 function palette(D, accentOverride) {
   const h = D.hue, dark = D.mode === 'dark';
+  const cp = D.curated >= 0 && CURATED[D.niche] && CURATED[D.niche][D.curated];
+  if (cp && !accentOverride) {
+    const [pri, acc, bg, fg] = cp;
+    const bgDark = lum(bg) < 0.2;
+    if (bgDark === dark && contrast(fg, bg) >= 7) {
+      const P = { bg, ink: fg, surface: dark ? hsl(h, 16, 11) : '#ffffff', surface2: dark ? hsl(h, 16, 15) : hsl(h, 40, 93), muted: dark ? '#9ca3af' : '#4b5563' };
+      // pick whichever of primary/accent stands out more on this background
+      P.accent = contrast(pri, bg) >= contrast(acc, bg) ? pri : acc;
+      if (contrast(P.accent, bg) < 3 || Math.max(contrast(P.accent, '#ffffff'), contrast(P.accent, '#0b0b0b')) < 4.6) P.accent = dark ? '#ffffff' : fg;
+      P.onAccent = contrast(P.accent, '#ffffff') >= contrast(P.accent, '#0b0b0b') ? '#ffffff' : '#0b0b0b';
+      P.line = dark ? 'rgba(255,255,255,.11)' : 'rgba(0,0,0,.09)';
+      return P;
+    }
+  }
   const P = dark
     ? { bg: hsl(h, 22, 6), surface: hsl(h, 18, 10.5), surface2: hsl(h, 16, 14), ink: hsl(h, 25, 95), muted: hsl(h, 10, 68) }
     : { bg: hsl(h, 45, 96.5), surface: hsl(h, 60, 99.3), surface2: hsl(h, 38, 92), ink: hsl(h, 32, 11), muted: hsl(h, 12, 36) };
@@ -1749,7 +1826,8 @@ function palette(D, accentOverride) {
     for (let i = 0; i < 40; i++) {
       const l = dark ? 58 + i : 46 - i;
       const c = hsl(D.accent_hue, D.sat, l);
-      if (contrast(c, P.bg) >= 3.2) { accent = c; break; }
+      // must stand out from the page AND carry readable button text
+      if (contrast(c, P.bg) >= 3.2 && Math.max(contrast(c, '#ffffff'), contrast(c, '#0b0b0b')) >= 4.6) { accent = c; break; }
     }
     accent = accent || (dark ? '#ffffff' : '#111111');
   }
@@ -1786,12 +1864,83 @@ const SITE_SCRIPT = String.raw`<script>
   });
   var st=document.getElementById('status');
   if(st&&open!==null){st.classList.toggle('open',open);st.querySelector('span').textContent=open?'Open now':'Closed right now';}
+  var th=document.getElementById('todayHrs'),tl=list.querySelector('li.today');
+  if(th){th.textContent=tl?tl.getAttribute('data-time'):'Closed';if(open)th.parentNode.querySelector('span').textContent='open now';}
 })();
 </script>`;
 
+// Each UI style re-skins the same structure (rules from UI/UX Pro Max styles data).
+function siteStyleCss(style, dark) {
+  const ink = 'var(--ink)';
+  switch (style) {
+    case 'clay': return `.svc,.tile,.why,.card,.float,.chip,.frame,.g,.mi,.row{border:3px solid color-mix(in srgb,var(--accent) 22%,#fff)!important;border-radius:28px!important;box-shadow:inset -4px -4px 10px rgba(0,0,0,.06),inset 4px 4px 10px rgba(255,255,255,.7),0 18px 34px -18px color-mix(in srgb,var(--accent) 55%,transparent)!important}
+.btn{border-radius:22px!important;box-shadow:inset -3px -3px 8px rgba(0,0,0,.15),inset 3px 3px 8px rgba(255,255,255,.35),0 12px 24px -10px var(--accent)!important;transition:transform .3s cubic-bezier(.34,1.56,.64,1)!important}
+.btn:hover{transform:translateY(-3px) scale(1.03)!important}
+body{background:linear-gradient(180deg,var(--bg),color-mix(in srgb,var(--accent) 6%,var(--bg)))}
+.svc:hover,.tile:hover{transform:translateY(-6px) scale(1.02)!important}`;
+    case 'glass': return `.svc,.tile,.why,.card,.float,.chip,.mi,.row{background:color-mix(in srgb,var(--surface) ${dark ? 45 : 55}%,transparent)!important;backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);border:1px solid ${dark ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.7)'}!important;box-shadow:0 20px 50px -30px rgba(0,0,0,.45)!important}
+section.block{position:relative;isolation:isolate}
+section.block::before{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(40% 50% at 15% 30%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%),radial-gradient(40% 50% at 85% 70%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 70%)}
+section.alt{background:transparent}`;
+    case 'brutal': return `.svc,.tile,.why,.card,.float,.chip,.frame,.g,.stack-photo,.poster-strip figure{border:3px solid ${ink}!important;border-radius:0!important;box-shadow:6px 6px 0 ${ink}!important}
+.btn{border:3px solid ${ink}!important;border-radius:0!important;box-shadow:5px 5px 0 ${ink}!important;transition:transform .08s,box-shadow .08s!important}
+.btn:hover{transform:translate(-2px,-2px)!important;box-shadow:7px 7px 0 ${ink}!important}
+.btn:active{transform:translate(4px,4px)!important;box-shadow:1px 1px 0 ${ink}!important}
+.btn.ghost{background:var(--surface)!important}
+.svc:hover,.tile:hover{transform:translate(-3px,-3px)!important;box-shadow:9px 9px 0 ${ink}!important}
+.tile.t1{background:color-mix(in srgb,var(--accent) 25%,#fff)}
+.marquee,.trust{border-block:3px solid ${ink}}
+.h-circle .frame{border-radius:50%!important}
+nav.nav-bar{border-bottom:3px solid ${ink}}`;
+    case 'swiss': return `.svc,.tile,.why,.card,.float,.frame,.g{border-radius:0!important;box-shadow:none!important}
+.svc,.why,.card{border:0!important;border-top:2px solid ${ink}!important;background:transparent!important;padding-left:0!important;padding-right:0!important}
+.btn{border-radius:0!important;box-shadow:none!important}
+.chip{border-radius:0!important}
+.head{border-bottom:1px solid var(--line);padding-bottom:24px}
+.hero h1 .w:last-child>span{color:var(--ink)}.hero h1 .w:last-child>span::after{content:'.';color:var(--accent)}
+.tx-glow,.tx-blob{display:none}`;
+    case 'editorial': return `.svc,.why,.card{border-radius:2px!important;box-shadow:none!important}
+.about p::first-letter{float:left;font-family:inherit;font-size:4.2em;line-height:.8;margin:6px 10px 0 0;color:var(--accent);font-weight:700}
+.head h2{font-style:italic}
+.eyebrow{border-top:2px solid var(--accent);padding-top:10px;display:inline-block}
+section.block+section.block{border-top:1px solid var(--line)}
+.why .num{font-size:72px!important}
+.btn{border-radius:2px!important}`;
+    case 'vibrant': return `section.alt{background:var(--accent)!important;color:var(--on)}
+section.alt .why{background:color-mix(in srgb,var(--on) 10%,transparent)!important;border-color:color-mix(in srgb,var(--on) 25%,transparent)!important;color:var(--on)}
+section.alt .why p,section.alt .head p,section.alt .whyq p{color:color-mix(in srgb,var(--on) 80%,transparent)!important}
+section.alt .eyebrow,section.alt .why .num,section.alt .whyq h3::before{color:var(--on)!important}
+section.alt .why .dot{background:var(--on)}
+.svc,.tile{border-radius:22px!important}
+.svc:hover{background:var(--accent)!important;color:var(--on)}.svc:hover p,.svc:hover .price{color:var(--on)!important}
+.marquee{background:var(--accent);color:var(--on)}.marquee span::after{color:var(--on)}
+section.block{padding:120px 0}`;
+    case 'luxury': return `.svc,.tile,.why,.card,.float,.chip{border-radius:2px!important;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)!important;background:transparent!important;box-shadow:none!important}
+.btn{border-radius:2px!important;letter-spacing:.14em;text-transform:uppercase;font-size:13px!important;font-weight:700!important}
+.btn.main{box-shadow:none!important}
+.eyebrow{letter-spacing:.32em}
+.head h2{font-weight:400}
+.frame{border-radius:2px!important;outline:1px solid color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:12px}
+.hero h1 .w:last-child>span{font-style:italic}`;
+    case 'organic': return `.svc,.why,.card,.tile{border-radius:34px 18px 34px 18px!important;box-shadow:0 8px 32px rgba(0,0,0,.08)!important}
+.frame,.g{border-radius:46% 54% 42% 58%/52% 44% 56% 48%!important}
+.btn{border-radius:999px!important}
+.tx-blob{opacity:.5!important}`;
+    case 'flat': return `.svc,.tile,.why,.card,.float,.chip,.frame,.g{box-shadow:none!important}
+.svc,.why,.card{background:var(--surface2)!important;border:0!important}
+.btn.main{box-shadow:none!important}
+.btn{border-radius:10px!important;transition:background .15s,transform .15s!important}
+.tx-grain,.tx-halo{display:none}`;
+    default: return `.svc,.why,.card,.tile{box-shadow:0 2px 4px rgba(0,0,0,.04),0 18px 40px -24px rgba(0,0,0,${dark ? '.6' : '.25'})!important}
+.btn{transition:transform .25s,box-shadow .25s!important}`; // soft
+  }
+}
+
 function renderSite(d, D) {
   const P = palette(D, d.accent);
-  const F = DFONTS[D.display] || DFONTS.anton, B = DBODY[D.body] || DBODY.manrope;
+  const PR = DPAIRS[D.pair];
+  const F = PR ? { q: gq(PR.h[0], PR.h[1]), css: `'${PR.h[0]}', Georgia, sans-serif`, upper: PR.upper, italic: PR.italic, w: PR.w, k: PR.k } : (DFONTS[D.display] || DFONTS.anton);
+  const B = PR ? { q: gq(PR.b, '400;700'), css: `'${PR.b}', system-ui, sans-serif` } : (DBODY[D.body] || DBODY.manrope);
   const dark = D.mode === 'dark';
   const name = d.name || 'Your business';
   const words = name.split(/\s+/).filter(Boolean);
@@ -1867,7 +2016,13 @@ function renderSite(d, D) {
   };
   const hoursHtml = hours.map((h) => `<li data-day="${esc(h.day)}" data-time="${esc(h.time)}"><span>${esc(h.day)}</span><span>${esc(h.time)}</span></li>`).join('');
   const motion = { rise: 'translateY(30px)', fade: 'scale(.97)', slide: 'translateX(-30px)' }[D.motion] || 'translateY(30px)';
-  const fontQ = [F.q, B.q].join('&');
+  const fontLinks = [F.q, B.q].map((q) => `<link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`).join('');
+  const open = hours.length ? 'data-hours' : '';
+  const trust = [d.rating ? `<div><b>${esc(d.rating)} ★</b><span>Google rating</span></div>` : '', d.reviews ? `<div><b>${esc(d.reviews)}</b><span>reviews</span></div>` : '',
+    services.length ? `<div><b>${services.length}</b><span>${esc(N.services.toLowerCase())}</span></div>` : '', hours.length ? `<div id="todayBox"><b id="todayHrs">—</b><span>today</span></div>` : '',
+    d.city ? `<div><b>${esc(d.city)}</b><span>local</span></div>` : ''].filter(Boolean);
+  const trustHtml = trust.length >= 2 ? `<div class="trust"><div class="wrap"><div class="trust-row">${trust.join('')}</div></div></div>` : '';
+  const styleCss = siteStyleCss(D.style, dark);
 
   return `<!doctype html>
 <html lang="en">
@@ -1878,7 +2033,7 @@ function renderSite(d, D) {
 <meta name="theme-color" content="${P.bg}">
 <title>${esc(name)}${sub ? ' | ' + esc(sub) : ''}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?${fontQ}&display=swap" rel="stylesheet">
+${fontLinks}
 <style>
 :root{--bg:${P.bg};--surface:${P.surface};--surface2:${P.surface2};--ink:${P.ink};--muted:${P.muted};--line:${P.line};--accent:${P.accent};--on:${P.onAccent};--r:${R}px;--br:${BR}px;--body:${B.css};color-scheme:${dark ? 'dark' : 'light'}}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2058,6 +2213,12 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
 .sticky-call{position:fixed;left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;display:flex}
 .sticky-call .btn{flex:1}
 @media(min-width:860px){.sticky-call{display:none}}
+.trust{border-block:1px solid var(--line);background:var(--surface)}
+.trust-row{display:flex;flex-wrap:wrap;justify-content:space-around;gap:10px 28px;padding:22px 0}
+.trust-row div{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:90px}
+.trust-row b{font-family:${F.css};font-weight:${F.w};font-size:clamp(22px,3vw,30px);line-height:1.1;color:var(--ink)}
+.trust-row span{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-top:4px}
+${styleCss}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal{opacity:1;transform:none}}
 </style>
 </head>
@@ -2069,6 +2230,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
   ${book ? `<a class="btn main" href="${esc(book)}"${ext}>${esc(bookLabel)}</a>` : ''}
 </div></div></nav>
 ${heroHtml}
+${trustHtml}
 ${D.marquee ? `<div class="marquee" aria-hidden="true"><div class="track">${[...marquee, ...marquee, ...marquee, ...marquee].map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>` : ''}
 ${D.order.map((k) => sections[k] || '').join('\n')}
 <section class="block" id="visit"><div class="wrap">
@@ -2154,7 +2316,7 @@ You only write the CONTENT as JSON. A design engine turns it into an animated pr
 
 Return ONLY one JSON object, no markdown, shaped like:
 {"reply":"1-2 short friendly sentences telling the user what you built or changed",
- "design":{"mode":"dark|light","hue":0-360,"accent_hue":0-360,"display":"FONT","body":"BODYFONT","hero":"HERO","services":"cards|menu|rows|tiles","why":"numbered|bordered|quote","gallery":"mosaic|strip|polaroid","texture":"grain|dots|grid|blobs|halo|lines|rays|none","radius":0|10|22|34,"buttons":"pill|rounded|square","nav":"bar|float","motion":"rise|fade|slide","marquee":true|false,"order":["services","why","gallery","about"]},
+ "design":{"style":"STYLE","pair":"FONTPAIR","mode":"dark|light","hue":0-360,"accent_hue":0-360,"hero":"HERO","services":"cards|menu|rows|tiles","why":"numbered|bordered|quote","gallery":"mosaic|strip|polaroid","texture":"grain|dots|grid|blobs|halo|lines|rays|none","radius":0|10|22|34,"buttons":"pill|rounded|square","nav":"bar|float","motion":"rise|fade|slide","marquee":true|false,"order":["services","why","gallery","about"]},
  "accent":"#rrggbb or empty",
  "data":{"name":"","tagline":"","category":"","city":"","about":"","cta":"",
    "services":[{"name":"","price":"","desc":""}],
@@ -2163,8 +2325,9 @@ Return ONLY one JSON object, no markdown, shaped like:
    "phone":"","email":"","address":"","rating":"","reviews":"","booking":"","instagram":""}}
 
 DESIGN: invent a look that fits THIS business's personality, so no two sites look alike. Be bold and specific.
-- FONT is one of: anton, bebas, archivo, oswald (tall, loud, all caps); fraunces, cormorant (elegant italic); playfair, dmserif, abril (classy serif); syne, unbounded (fashion, futuristic); spacegrotesk, sora, outfit, bricolage, rubik (modern, friendly); chakra (techy); righteous (fun, retro).
-- BODYFONT is one of: manrope, inter, dmsans, jakarta, karla, outfitb.
+- STYLE is one of: soft (soft UI, gentle shadows), clay (claymorphism: puffy, rounded, playful; light), glass (glassmorphism: frosted cards), brutal (neo-brutalism: thick black borders, hard shadows; light), swiss (minimal grid, no shadows), editorial (magazine, drop caps), vibrant (bold color blocks), luxury (thin gold lines, uppercase; dark), organic (natural blob shapes; light), flat (solid, no shadows).
+  Good fits: pets = clay/vibrant/soft; beauty, nails, lashes = soft/glass/luxury; barbers, tattoo = luxury/editorial/brutal; food = vibrant/clay/editorial; fitness = vibrant/brutal; auto = luxury/glass/swiss; home services = flat/swiss/soft.
+- FONTPAIR is one of: classic, bold, wellness, retro, geometric, luxury, playful, soft, fashion, menu, indie, music, sports, luxmin, genz, startup, techy, estate, handwritten, neubrutal, clay, gaming.
 - HERO is one of: fullbleed (photo behind the name), split, splitleft, arch (arched photo), slant (angled panel), tilt (tilted photo card), circle (round photo), stack (photo under the headline), poster (centered type with 3 photos).
 - hue/accent_hue are color wheel degrees (0 red, 30 orange, 50 gold, 120 green, 180 teal, 210 blue, 270 purple, 330 pink).
 - On the first build, choose every design field. Later, when the user asks for a visual change ("darker", "more playful", "different font", "make it pink"), change only the design fields that need to change.

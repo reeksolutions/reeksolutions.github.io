@@ -1047,7 +1047,7 @@
       themeRow.replaceChildren(
         h('button', { class: 'tchoice dice', disabled: !draft, title: 'Give it a whole new design', onclick: () => patch({ shuffle: true }, 'New design 🎲') }, h('span', { class: 'die' }, '🎲'), 'New design'),
         h('div', { class: 'dev-seg mode-seg' }, [['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => h('button', { class: ds && ds.mode === k ? 'on' : null, disabled: !draft, onclick: () => patch({ mode: k }) }, l))),
-        ds ? h('span', { class: 'ds-tag', title: 'This site\'s design' }, h('i', { style: 'background:hsl(' + ds.accent_hue + ',' + ds.sat + '%,55%)' }), ds.display + ' · ' + ds.hero) : null);
+        ds ? h('span', { class: 'ds-tag', title: 'This site\'s design' }, h('i', { style: 'background:hsl(' + ds.accent_hue + ',' + ds.sat + '%,55%)' }), (ds.style || ds.display) + ' · ' + (ds.pair || ds.hero)) : null);
     }
     function refresh() {
       if (!draft || !draft.id) { frameWrap.hidden = true; emptyPv.hidden = false; return; }
