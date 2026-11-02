@@ -504,6 +504,59 @@ function normalizeIngestRow(r) {
 
 async function sha256Hex(s) { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))); }
 
+/* ---- Email robot (Google Apps Script on the owner's Gmail) ----
+   GET  /api/outreach/batch?limit=40  → leads with an email that were never emailed
+   POST /api/outreach/sent    {ids}    → mark them emailed
+   POST /api/outreach/replies {yes:[emails], no:[emails]} → yes = hot lead, no = never email again */
+async function keyAuth(request, env) {
+  const auth = request.headers.get('Authorization') || '';
+  const key = (/^Bearer\s+(\S+)$/i.exec(auth) || [])[1] || request.headers.get('X-Api-Key') || '';
+  if (!/^rk_[a-f0-9]{40}$/.test(key)) throw new HttpError(401, 'Missing or invalid API key');
+  const k = await env.DB.prepare('SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL').bind(await sha256Hex(key)).first();
+  if (!k) throw new HttpError(401, 'Missing or invalid API key');
+  await env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').bind(now(), k.id).run();
+  return k;
+}
+async function handleOutreach(request, env, url) {
+  const k = await keyAuth(request, env);
+  const path = url.pathname.replace(/^\/api\/outreach/, '');
+  const actor = k.created_by || 1;
+  let body = {};
+  if (request.method === 'POST') { try { body = JSON.parse((await request.text()) || '{}'); } catch { throw new HttpError(400, 'Body must be JSON'); } }
+  if (path === '/batch' && request.method === 'GET') {
+    const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit'), 10) || 40));
+    const { results } = await env.DB.prepare(
+      `SELECT id, business, owner, email, city, category FROM leads
+       WHERE email IS NOT NULL AND email != '' AND emailed_at IS NULL
+         AND status NOT IN ('dnc','lost','won') AND COALESCE(heat,'cold') != 'dead'
+         AND (tags IS NULL OR tags NOT LIKE '%,opted-out,%')
+       ORDER BY id ASC LIMIT ?`).bind(limit).all();
+    return json({ leads: results });
+  }
+  if (path === '/sent' && request.method === 'POST') {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number).filter(Boolean).slice(0, 100);
+    const t = now(), stmts = [];
+    for (const id of ids) {
+      stmts.push(env.DB.prepare('UPDATE leads SET emailed_at = ?, updated_at = ? WHERE id = ? AND emailed_at IS NULL').bind(t, t, id));
+      stmts.push(env.DB.prepare("INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) SELECT id, ?, 'emailed', status, status, ? FROM leads WHERE id = ?").bind(actor, t, id));
+    }
+    for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+    return json({ ok: true, marked: ids.length });
+  }
+  if (path === '/replies' && request.method === 'POST') {
+    const clean = (a) => [...new Set((Array.isArray(a) ? a : []).map(cleanEmail).filter(Boolean))].slice(0, 200);
+    const yes = clean(body.yes), no = clean(body.no), t = now(), stmts = [];
+    for (const e of no) stmts.push(env.DB.prepare(`UPDATE leads SET heat = 'dead', status = CASE WHEN status IN ('won','dnc') THEN status ELSE 'lost' END,
+      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',opted-out,' WHEN tags LIKE '%,opted-out,%' THEN tags ELSE tags || 'opted-out,' END, updated_at = ? WHERE email = ?`).bind(t, e));
+    for (const e of yes) stmts.push(env.DB.prepare(`UPDATE leads SET heat = 'hot', next_action_at = ?, next_action = 'They replied to the email: send their demo / book the call',
+      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',replied,' WHEN tags LIKE '%,replied,%' THEN tags ELSE tags || 'replied,' END, updated_at = ? WHERE email = ? AND COALESCE(heat,'cold') != 'dead'`).bind(t, t, e));
+    for (const e of [...yes, ...no]) stmts.push(env.DB.prepare("INSERT INTO notes (lead_id,user_id,body,created_at) SELECT id, ?, ?, ? FROM leads WHERE email = ?").bind(actor, no.includes(e) ? 'Replied to the email: not interested. Will not be emailed again.' : 'Replied to the email. Check Gmail and follow up.', t, e));
+    for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+    return json({ ok: true, hot: yes.length, opted_out: no.length });
+  }
+  throw new HttpError(404, 'Not found');
+}
+
 async function handleIngest(request, env) {
   if (request.method !== 'POST') throw new HttpError(405, 'Send leads with POST');
   const auth = request.headers.get('Authorization') || '';
@@ -3034,6 +3087,16 @@ export default {
         r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
         return r;
       } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
+    }
+    if (url.pathname.startsWith('/api/outreach/')) {
+      try {
+        await ensureSchema(env);
+        return withHeaders(await handleOutreach(request, env, url));
+      } catch (e) {
+        if (e instanceof HttpError) return withHeaders(json({ error: e.message }, e.status));
+        console.error(e);
+        return withHeaders(json({ error: 'Something went wrong on the server. Try again.' }, 500));
+      }
     }
     if (url.pathname === '/api/ingest') {
       try {
