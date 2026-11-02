@@ -135,6 +135,7 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS finder_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, query TEXT, results INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS finder_time ON finder_log(created_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS demo_images (id TEXT PRIMARY KEY, user_id INTEGER, mime TEXT NOT NULL, data BLOB NOT NULL, prompt TEXT, created_at TEXT NOT NULL)`),
   ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
@@ -1521,7 +1522,15 @@ async function api(request, env, url) {
     const source = [lead ? leadSource(lead) : '', d ? d.source : '', message].filter(Boolean).join('\n\n').slice(-12000);
     const out = await studioRun(env, { message, data, theme, lead, source, messages, first: !Object.keys(data).length });
     const clean = cleanDemo(factCheck(out.data, data, source), lead || {});
-    const newTheme = DEMO_THEMES[out.theme] ? out.theme : theme || pickTheme(clean.category);
+    let newTheme = DEMO_THEMES[out.theme] ? out.theme : theme || pickTheme(clean.category);
+    // first build: use the look made for this kind of business, unless they asked for a style
+    if (!Object.keys(data).length && !/\b(dark|black|gold|luxe|pink|soft|elegant|bold|neon|lime|bright|friendly|noir|glow|drive|fresh)\b/i.test(message)) newTheme = nicheFor(clean.category, clean.name).theme;
+    // photos: make them on the first build, or when asked for new ones
+    const wantPhotos = /\b(new|different|other|more|better|change|redo|swap)\b.{0,20}\b(photos?|pictures?|pics|images?)\b|\b(photos?|pictures?|pics|images?)\b.{0,20}\b(new|different|again|redo)\b/i.test(message);
+    if ((wantPhotos || !(clean.images || []).length) && aiImagesReady(env)) {
+      const ids = await makeDemoPhotos(env, user.id, clean, newTheme, message);
+      if (ids.length) { clean.images = ids; if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
+    }
     messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
     const t = now();
     const newSource = [d ? d.source : '', message].filter(Boolean).join('\n\n').slice(-12000);
@@ -1545,6 +1554,18 @@ async function api(request, env, url) {
     if (body.reset) { await env.DB.prepare('DELETE FROM studio_drafts WHERE id = ?').bind(d.id).run(); return json({ ok: true }); }
     await env.DB.prepare('UPDATE studio_drafts SET theme = ?, data = ?, lead_id = ?, updated_at = ? WHERE id = ?').bind(theme, JSON.stringify(data), leadId, now(), d.id).run();
     return json({ ok: true, theme, data, lead_id: leadId });
+  }
+  if ((m = path.match(/^\/studio\/(\d+)\/photos$/)) && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const d = await env.DB.prepare('SELECT * FROM studio_drafts WHERE id = ? AND user_id = ?').bind(+m[1], user.id).first();
+    if (!d) throw new HttpError(404, 'Draft not found');
+    if (!aiImagesReady(env)) bad('Photo making needs Cloudflare AI. It is not connected right now.');
+    const data = JSON.parse(d.data || '{}');
+    const ids = await makeDemoPhotos(env, user.id, data, d.theme, str(body.hint, 200));
+    if (!ids.length) bad("Couldn't make photos right now. Try again in a minute.");
+    data.images = ids;
+    await env.DB.prepare('UPDATE studio_drafts SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), d.id).run();
+    return json({ ok: true, data });
   }
   if ((m = path.match(/^\/studio\/(\d+)\/save$/)) && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
@@ -1585,6 +1606,38 @@ async function saveDemo(env, user, lead, themeIn, dataIn, origin) {
   }
 }
 
+/* ================= Demo photos (free Cloudflare AI image model) ================= */
+const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
+const PHOTO_MOOD = { noir: 'moody warm cinematic lighting, dark rich tones', glow: 'soft airy pastel light, elegant, dreamy', drive: 'dramatic high-contrast lighting, bold, energetic', fresh: 'bright cheerful natural daylight, clean, warm and friendly' };
+function aiImagesReady(env) { return !!env.AI || env.STUDIO_FAKE_AI === '1'; }
+async function makeDemoPhotos(env, userId, data, theme, hint) {
+  const N = nicheFor(data.category, data.name);
+  const mood = PHOTO_MOOD[theme] || PHOTO_MOOD.noir;
+  const extra = hint && /photo|picture|pic|image/i.test(hint) ? ' ' + String(hint).replace(/\b(new|different|other|more|better|change|redo|swap|photos?|pictures?|pics|images?|please|make|give me|the)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+  const prompts = N.photos.slice(0, 4).map((p) => `${p}${extra ? ', ' + extra : ''}. Professional editorial photograph, ${mood}, sharp focus, realistic, high detail. No text, no words, no letters, no logos, no watermark.`);
+  const results = await Promise.all(prompts.map(async (prompt, i) => {
+    try {
+      let bytes, mime;
+      if (env.STUDIO_FAKE_AI === '1') {
+        mime = 'image/svg+xml';
+        const hue = (i * 70 + (theme === 'glow' ? 330 : theme === 'fresh' ? 20 : 40)) % 360;
+        bytes = new TextEncoder().encode(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},55%,62%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360},45%,28%)"/></linearGradient></defs><rect width="800" height="1000" fill="url(#g)"/><circle cx="400" cy="430" r="190" fill="rgba(255,255,255,.18)"/><text x="400" y="860" font-family="sans-serif" font-size="40" fill="#fff" text-anchor="middle">${N.key} photo ${i + 1}</text></svg>`);
+      } else {
+        const r = await env.AI.run(IMAGE_MODEL, { prompt, steps: 6, seed: Math.floor(Math.random() * 1e9) });
+        if (!r || !r.image) return null;
+        const bin = atob(r.image);
+        bytes = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+        mime = 'image/jpeg';
+      }
+      const id = hex(crypto.getRandomValues(new Uint8Array(10)));
+      await env.DB.prepare('INSERT INTO demo_images (id, user_id, mime, data, prompt, created_at) VALUES (?,?,?,?,?,?)').bind(id, userId, mime, bytes, prompt.slice(0, 600), now()).run();
+      return id;
+    } catch (e) { console.error('photo', e); return null; }
+  }));
+  return results.filter(Boolean);
+}
+
 /* ================= Demo Studio AI (Stage 4C) =================
    The AI writes the content (copy, services, highlights) and picks a theme;
    the premium themes above do the design. factCheck() drops any phone, price,
@@ -1607,7 +1660,7 @@ You only write the CONTENT as JSON. A design engine turns it into an animated pr
 
 Return ONLY one JSON object, no markdown, shaped like:
 {"reply":"1-2 short friendly sentences telling the user what you built or changed",
- "theme":"noir|glow|drive",
+ "theme":"noir|glow|drive|fresh",
  "accent":"#rrggbb or empty",
  "data":{"name":"","tagline":"","category":"","city":"","about":"","cta":"",
    "services":[{"name":"","price":"","desc":""}],
@@ -1615,7 +1668,7 @@ Return ONLY one JSON object, no markdown, shaped like:
    "hours":[{"day":"Monday","time":"9 AM - 7 PM"}],
    "phone":"","email":"","address":"","rating":"","reviews":"","booking":"","instagram":""}}
 
-Themes: noir = dark, gold, luxe (barbers, tattoo, lounges, pros). glow = soft light pink, elegant (nails, lashes, salons, bakeries, florists). drive = dark with neon lime, bold (auto, food, fitness, trades).
+Themes: noir = dark, gold, luxe (barbers, tattoo, lounges, pros). glow = soft light pink, elegant (nails, lashes, salons, bakeries, florists). drive = dark with neon lime, bold (auto, food, fitness). fresh = bright, warm and friendly (pet groomers, cleaning, landscaping, home services, family businesses).
 Writing: tagline max 7 words, punchy, no cliches like "Welcome to". about 2-4 short sentences, warm and plain. 3 highlights with a 2-4 word title and one sentence. Service descriptions max 12 words. cta max 5 words.
 HARD RULES:
 - Never invent facts. Phone, email, address, prices, hours, rating, review counts, years in business, awards, staff names, booking and instagram links must come from the BUSINESS INFO. If not given, leave them empty. Never write a made-up price.
@@ -1706,6 +1759,7 @@ function basicBuild(message, data, lead, source, first) {
   const notes = [];
   if (/\b(noir|dark|gold|luxe|black)\b/.test(m)) theme = 'noir';
   if (/\b(glow|pink|soft|light|girly|elegant)\b/.test(m)) theme = 'glow';
+  if (/\b(fresh|bright|friendly|cheerful|playful|cream|orange)\b/.test(m)) theme = 'fresh';
   if (/\b(drive|lime|neon|bold|loud|sporty)\b/.test(m)) theme = 'drive';
   const hexm = /#([0-9a-f]{6})\b/i.exec(message); if (hexm) d.accent = '#' + hexm[1];
   const tl = /(?:tagline|headline)\s*(?:to|:|=)?\s*["“]?([^"\n”]{3,70})/i.exec(message); if (tl) { d.tagline = tl[1].trim(); notes.push('headline'); }
@@ -1739,9 +1793,11 @@ function basicBuild(message, data, lead, source, first) {
 
 // Local testing only (STUDIO_FAKE_AI=1): acts like a model, including trying to sneak in fake facts.
 function fakeAi(message, data, source) {
-  const name = (/Business: (.*)/.exec(source) || [])[1] || (data.name || 'Test Spot');
+  const lines = String(message).split('\n');
+  const name = (/Business: (.*)/.exec(source) || [])[1] || data.name || (lines.length > 1 ? lines[0] : 'Test Spot');
+  const cat = data.category || (lines.length > 2 ? lines[1] : 'Barber');
   return '```json\n' + JSON.stringify({ reply: 'Built a ' + (/pink/i.test(message) ? 'Glow' : 'Noir') + ' site for ' + name + '.', theme: /pink/i.test(message) ? 'glow' : 'noir', accent: '',
-    data: { name, tagline: /tagline/i.test(message) ? 'Sharp cuts. Zero wait.' : 'Fresh every single time.', category: data.category || 'Barber', city: data.city || '', about: 'A neighborhood shop that takes its time with every cut.',
+    data: { name, tagline: /tagline/i.test(message) ? 'Sharp cuts. Zero wait.' : 'Fresh every single time.', category: cat, rating: '4.9', city: data.city || '', about: 'A neighborhood shop that takes its time with every cut.',
       services: [{ name: 'Fade', price: '$35', desc: 'Clean blend, hot towel finish' }, { name: 'Beard trim', price: '$999', desc: 'Lined up sharp' }],
       highlights: [{ title: 'No rush', text: 'Every cut gets the time it needs.' }, { title: 'Walk-ins welcome', text: 'Swing by when it works for you.' }, { title: 'Award winning', text: 'Voted best in LA 5 years running.' }],
       cta: 'Pull up today.', hours: [{ day: 'Monday', time: '9 AM - 7 PM' }], phone: '(555) 123-4567', email: 'fake@made.up', address: '999 Fake St', rating: '5.0', reviews: '999', booking: 'https://booksy.com/made-up', instagram: '' } }) + '\n```';
@@ -1768,10 +1824,47 @@ const DEMO_THEMES = {
     display: "'Archivo Black', 'Arial Black', sans-serif", upper: true,
     bg: '#07080b', surface: '#11141a', ink: '#eef2f7', muted: '#8e96a6', line: 'rgba(238,242,247,.1)', accent: '#c6ff2e', onAccent: '#0b0f02',
   },
+  fresh: {
+    label: 'Fresh', fonts: 'family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700;800',
+    display: "'Bricolage Grotesque', 'Trebuchet MS', sans-serif", upper: false, rounded: true,
+    bg: '#fbf6ee', surface: '#ffffff', ink: '#1d2a25', muted: '#5c6b64', line: 'rgba(29,42,37,.1)', accent: '#ff6b3d', onAccent: '#ffffff',
+  },
 };
+
+/* Niche packs: words and photo ideas that fit the kind of business. */
+const NICHES = [
+  { key: 'pets', re: /(pet|dog|cat|groom|vet|kennel|puppy|paw|animal)/, theme: 'fresh', services: 'Grooming menu', book: 'Book a groom', eyebrow: 'For good boys & girls',
+    photos: ['a freshly groomed fluffy white dog sitting happily on a grooming table in a bright modern pet grooming salon', 'a professional groomer gently brushing a happy golden doodle dog', 'a small fluffy dog wrapped in a soft towel right after a bath, looking happy', 'a bright clean modern pet grooming salon interior with a bathing tub and grooming table'] },
+  { key: 'barber', re: /(barber|fade|cuts?\b|men's hair|shave)/, theme: 'noir', services: 'The cuts', book: 'Book a cut', eyebrow: 'Fresh every time',
+    photos: ['a barber giving a client a sharp skin fade haircut in a stylish modern barbershop, side view', 'close-up of barber clippers and a straight razor on a leather barber station', 'a classic leather barber chair in a moody upscale barbershop with warm lighting', 'a barber carefully lining up a client\'s beard with a trimmer'] },
+  { key: 'nails', re: /(nail|manicure|pedicure)/, theme: 'glow', services: 'Nail menu', book: 'Book your set', eyebrow: 'Nails that get noticed',
+    photos: ['close-up of a beautiful glossy pink almond-shaped manicure with delicate nail art', 'a nail technician painting nails in a bright elegant nail salon', 'a row of pastel nail polish bottles on a marble table', 'a chic modern nail salon interior with soft pink tones and plants'] },
+  { key: 'lash', re: /(lash|brow|esthetic|facial|skin|wax|spa|makeup|beauty)/, theme: 'glow', services: 'Treatments', book: 'Book now', eyebrow: 'Glow up',
+    photos: ['close-up of a woman with soft natural eyelash extensions, eyes closed, beauty photography', 'an esthetician working in a calm elegant beauty studio', 'a serene modern spa treatment room with soft lighting and fresh towels', 'skincare products arranged on a marble shelf with soft pink light'] },
+  { key: 'hair', re: /(hair|salon|braid|loc|stylist|weave|wig)/, theme: 'glow', services: 'Services', book: 'Book an appointment', eyebrow: 'Hair you love',
+    photos: ['a hairstylist styling a client\'s long glossy hair in a bright modern hair salon', 'beautiful neat knotless braids hairstyle, back view, beauty photography', 'a stylish hair salon interior with mirrors, chairs and warm lighting', 'close-up of hair styling tools and products on a salon station'] },
+  { key: 'tattoo', re: /(tattoo|ink|piercing)/, theme: 'noir', services: 'Work', book: 'Book a session', eyebrow: 'Art that lasts',
+    photos: ['a tattoo artist carefully working on a detailed black and grey forearm tattoo, moody lighting', 'a clean professional tattoo studio interior with art on the walls', 'close-up of a fresh fine-line tattoo on an arm', 'tattoo machine and ink caps on a sterile station'] },
+  { key: 'auto', re: /(auto|detail|car|tire|smog|mechanic|body shop|wash|tint|wrap)/, theme: 'drive', services: 'Packages', book: 'Book a detail', eyebrow: 'Showroom shine',
+    photos: ['a glossy black sports car freshly detailed with perfect reflections in a garage at night', 'a detailer polishing a car hood with a machine polisher', 'a spotless car interior with clean leather seats after a detail', 'water beading on a freshly ceramic coated car paint, close-up'] },
+  { key: 'food', re: /(taco|taquer|food|restaurant|grill|bbq|burger|pizza|cater|truck|kitchen|wings|soul|cafe|coffee|bakery|dessert)/, theme: 'drive', services: 'The menu', book: 'Order now', eyebrow: 'Made fresh daily',
+    photos: ['delicious street tacos with fresh cilantro, onion and lime on a plate, food photography', 'a busy food truck window at golden hour with people ordering', 'a chef cooking on a hot flat-top grill with flames, food photography', 'a table full of colorful plates of food, overhead shot'] },
+  { key: 'fitness', re: /(gym|fitness|training|trainer|yoga|pilates|boxing|crossfit)/, theme: 'drive', services: 'Programs', book: 'Start training', eyebrow: 'Stronger every day',
+    photos: ['an athlete training hard with battle ropes in a modern gym, dramatic lighting', 'a personal trainer coaching a client lifting dumbbells', 'a clean modern gym interior with racks and weights', 'close-up of hands chalked up gripping a barbell'] },
+  { key: 'home', re: /(clean|maid|landscap|lawn|garden|plumb|electric|roof|handyman|paint|hvac|pest|moving|pressure|pool|construct|contractor)/, theme: 'fresh', services: 'Services', book: 'Get a free quote', eyebrow: 'Done right the first time',
+    photos: ['a bright spotless modern living room after a professional cleaning, sunlight', 'a professional in uniform working carefully on a home project', 'a beautiful manicured green lawn and garden in front of a house', 'professional tools neatly arranged in a work van'] },
+];
+const NICHE_DEFAULT = { key: 'general', theme: 'noir', services: 'Services', book: 'Book now', eyebrow: 'Welcome in',
+  photos: ['a welcoming modern small business storefront with warm lighting', 'a friendly professional helping a customer in a modern local shop', 'a stylish clean modern interior of a small local business', 'close-up of quality handmade work on a wooden table'] };
+// the category decides first; the business name is only a fallback ("Smooth Ride Auto Spa" is auto, not a spa)
+function nicheFor(category, name) {
+  const c = String(category || '').toLowerCase(), n = String(name || '').toLowerCase();
+  return (c && NICHES.find((x) => x.re.test(c))) || NICHES.find((x) => x.re.test(n)) || NICHE_DEFAULT;
+}
 
 function pickTheme(category) {
   const c = String(category || '').toLowerCase();
+  if (/(pet|dog|cat|groom|vet|kennel|puppy|clean|maid|landscap|lawn|garden|daycare|kids|family|handyman|pool)/.test(c)) return 'fresh';
   if (/(nail|lash|brow|salon|spa|beauty|hair|braid|wax|esthetic|makeup|bridal|florist|bakery|cake)/.test(c)) return 'glow';
   if (/(auto|detail|car|tire|smog|mechanic|repair|body shop|gym|fitness|training|taco|food|restaurant|grill|bbq|catering|truck|moving|plumb|electric|roof|construct|clean)/.test(c)) return 'drive';
   return 'noir';
@@ -1794,6 +1887,7 @@ function cleanDemo(d, lead) {
     instagram: url(d.instagram), booking: url(d.booking), services, hours, photos, accent,
     highlights: (Array.isArray(d.highlights) ? d.highlights : []).slice(0, 4).map((x) => ({ title: s(x && x.title, 60), text: s(x && x.text, 220) })).filter((x) => x.title),
     cta: s(d.cta, 60),
+    images: (Array.isArray(d.images) ? d.images : []).filter((x) => /^[a-f0-9]{20}$/.test(String(x))).slice(0, 6),
   };
 }
 
@@ -1821,7 +1915,7 @@ function withDemoHeaders(res) {
   r.headers.set('X-Robots-Tag', 'noindex, nofollow');
   r.headers.set('X-Content-Type-Options', 'nosniff');
   r.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  r.headers.set('Content-Security-Policy', "default-src 'none'; img-src https: data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  r.headers.set('Content-Security-Policy', "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   return r;
 }
 
@@ -1839,7 +1933,12 @@ function renderDemo(d, themeKey) {
   const fitVw = (88 / (longest * ({ noir: 0.6, glow: 0.6, drive: 0.8 }[themeKey] || 0.6))).toFixed(1);
   const telHref = d.phone ? 'tel:' + String(d.phone).replace(/[^\d+]/g, '') : '';
   const book = d.booking || telHref;
-  const bookLabel = d.booking ? 'Book now' : (d.phone ? 'Call to book' : 'Get in touch');
+  const N = nicheFor(d.category, d.name);
+  const bookLabel = d.booking ? N.book : (d.phone ? (N.key === 'food' ? 'Call to order' : N.key === 'home' ? 'Call for a quote' : 'Call to book') : 'Get in touch');
+  const imgs = (d.images || []).map((id) => '/img/' + id + '.jpg');
+  const heroImg = imgs[0] || (d.photos || [])[0] || '';
+  const galleryImgs = imgs.length ? imgs.slice(1) : [];
+  const heroLayout = !heroImg ? 'plain' : { noir: 'full', glow: 'split', drive: 'slant', fresh: 'card' }[themeKey] || 'full';
   const mapHref = d.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name + ' ' + d.address) : '';
   const sub = [d.category, d.city].filter(Boolean).join(' · ');
   const tagline = d.tagline || (d.category && d.city ? `${d.city}'s go-to ${d.category.toLowerCase()}.` : 'Welcome in.');
@@ -1859,7 +1958,9 @@ function renderDemo(d, themeKey) {
   const hoursHtml = hours.map((h) => `<li data-day="${esc(h.day)}" data-time="${esc(h.time)}"><span>${esc(h.day)}</span><span>${esc(h.time)}</span></li>`).join('');
   const photoHtml = photos.map((u, i) => `<figure class="ph reveal" style="--i:${i % 4}"><img src="${esc(u)}" alt="${esc(name)} photo ${i + 1}" loading="lazy" referrerpolicy="no-referrer"></figure>`).join('');
 
-  const bgLayer = themeKey === 'glow'
+  const bgLayer = themeKey === 'fresh'
+    ? '<div class="wave w1"></div><div class="wave w2"></div><div class="dots"></div>'
+    : themeKey === 'glow'
     ? '<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>'
     : themeKey === 'drive'
       ? '<div class="grid"></div><div class="streaks"><i></i><i></i><i></i><i></i><i></i><i></i></div>'
@@ -1876,7 +1977,7 @@ function renderDemo(d, themeKey) {
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?${T.fonts}&display=swap" rel="stylesheet">
 <style>
-:root{--bg:${T.bg};--surface:${T.surface};--ink:${T.ink};--muted:${T.muted};--line:${T.line};--accent:${esc(accent)};--on-accent:${T.onAccent};--display:${T.display};--body:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:${themeKey === 'glow' ? 'light' : 'dark'}}
+:root{--bg:${T.bg};--surface:${T.surface};--ink:${T.ink};--muted:${T.muted};--line:${T.line};--accent:${esc(accent)};--on-accent:${T.onAccent};--display:${T.display};--body:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:${themeKey === 'glow' || themeKey === 'fresh' ? 'light' : 'dark'}}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -1932,6 +2033,46 @@ nav .btn{height:42px;padding:0 18px;font-size:14px}
 .streaks i{position:absolute;height:2px;width:30vw;left:-30vw;background:linear-gradient(90deg,transparent,var(--accent));border-radius:2px;animation:streak 2.6s linear infinite;opacity:.8}
 .streaks i:nth-child(1){top:18%;animation-delay:0s}.streaks i:nth-child(2){top:34%;animation-delay:.7s;width:18vw}.streaks i:nth-child(3){top:52%;animation-delay:1.3s}.streaks i:nth-child(4){top:66%;animation-delay:.3s;width:22vw}.streaks i:nth-child(5){top:80%;animation-delay:1.9s}.streaks i:nth-child(6){top:44%;animation-delay:2.2s;width:12vw}
 @keyframes streak{to{transform:translateX(160vw)}}
+/* photo hero layouts */
+.hero-copy{position:relative;z-index:2;min-width:0}
+.hero.full{min-height:min(96svh,920px)}
+.hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.08);animation:kb 18s ease-out forwards}
+@keyframes kb{to{transform:scale(1)}}
+.hero-shade{position:absolute;inset:0;background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 92%,transparent) 0%,color-mix(in srgb,var(--bg) 70%,transparent) 45%,color-mix(in srgb,var(--bg) 25%,transparent) 100%),linear-gradient(0deg,var(--bg) 0%,transparent 35%)}
+@media(max-width:819px){.hero-shade{background:linear-gradient(0deg,var(--bg) 8%,color-mix(in srgb,var(--bg) 78%,transparent) 55%,color-mix(in srgb,var(--bg) 45%,transparent) 100%)}}
+.hero.full .halo{opacity:.25}
+.hero-grid{display:grid;gap:44px;align-items:center}
+@media(min-width:900px){.hero-grid{grid-template-columns:1.05fr .95fr}}
+.hero-grid .hero-copy h1{font-size:clamp(34px,min(12vw,7.2vw),112px)!important;max-width:none}
+@media(max-width:899px){.hero-grid .hero-copy h1{font-size:clamp(34px,13vw,88px)!important}}
+.hero-art{position:relative;animation:fade 1.2s .3s both}
+.hero-frame{position:relative;overflow:hidden;aspect-ratio:4/5;max-height:72svh;margin:0 auto;box-shadow:0 40px 90px -40px color-mix(in srgb,var(--accent) 70%,transparent)}
+.hero-frame img{width:100%;height:100%;object-fit:cover;transform:scale(1.06);animation:kb 16s ease-out forwards}
+.hero.split .hero-frame{border-radius:999px 999px 28px 28px;border:8px solid var(--surface)}
+.hero.slant .hero-frame{border-radius:6px;clip-path:polygon(14% 0,100% 0,86% 100%,0 100%);aspect-ratio:5/6}
+.hero.slant .hero-art::before{content:'';position:absolute;inset:-14px;clip-path:polygon(14% 0,100% 0,86% 100%,0 100%);background:linear-gradient(135deg,var(--accent),transparent 60%);opacity:.7;filter:blur(1px)}
+.hero.card .hero-frame{border-radius:36px;transform:rotate(2deg);border:10px solid #fff}
+.float{position:absolute;display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:18px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 20px 50px -20px rgba(0,0,0,.45);font-size:14px;animation:bob 5s ease-in-out infinite}
+.float b{font-family:var(--display);font-size:20px;color:var(--accent);${T.italic ? 'font-style:italic;' : ''}}
+.float span{color:var(--muted);font-weight:600}
+.float i{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.f1{left:-14px;bottom:18%}.f2{right:-10px;top:12%;animation-delay:-2.5s}
+@media(max-width:899px){.f1{left:6px}.f2{right:6px}.hero-frame{max-height:56svh}}
+@keyframes bob{50%{transform:translateY(-10px)}}
+.sample{position:absolute;right:10px;bottom:10px;z-index:3;font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:99px;background:rgba(0,0,0,.55);color:#fff}
+.sample.corner{right:16px;bottom:16px}
+.shot-grid{display:grid;gap:14px;grid-template-columns:repeat(6,1fr)}
+.shot{overflow:hidden;border-radius:24px;border:1px solid var(--line);aspect-ratio:4/3;grid-column:span 6}
+@media(min-width:760px){.shot.s0{grid-column:span 4;grid-row:span 2;aspect-ratio:auto}.shot.s1,.shot.s2{grid-column:span 2}}
+.shot img{width:100%;height:100%;object-fit:cover;transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.shot:hover img{transform:scale(1.06)}
+${T.rounded ? '.btn,.chip{border-radius:16px}.svc,.card,.why{border-radius:28px}.svc{box-shadow:0 18px 40px -28px rgba(29,42,37,.35)}' : ''}
+/* fresh bg */
+.wave{position:absolute;border-radius:42% 58% 63% 37% / 41% 44% 56% 59%;opacity:.55;animation:morph 16s ease-in-out infinite}
+.w1{width:60vmax;height:60vmax;right:-22vmax;top:-26vmax;background:color-mix(in srgb,var(--accent) 22%,#ffe2c8)}
+.w2{width:46vmax;height:46vmax;left:-20vmax;bottom:-24vmax;background:#cfeedd;animation-delay:-6s}
+.dots{position:absolute;inset:0;background-image:radial-gradient(color-mix(in srgb,var(--ink) 14%,transparent) 1.2px,transparent 1.4px);background-size:26px 26px;mask-image:linear-gradient(180deg,#000,transparent 70%);-webkit-mask-image:linear-gradient(180deg,#000,transparent 70%)}
+@keyframes morph{50%{border-radius:58% 42% 38% 62% / 55% 61% 39% 45%;transform:rotate(12deg) scale(1.05)}}
 /* marquee */
 .marquee{border-block:1px solid var(--line);overflow:hidden;padding:18px 0;background:var(--surface)}
 .marquee .track{display:flex;gap:44px;width:max-content;animation:scroll 28s linear infinite}
@@ -2000,10 +2141,10 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
   ${book ? `<a class="btn main" href="${esc(book)}"${d.booking ? ' target="_blank" rel="noopener"' : ''}>${esc(bookLabel)}</a>` : ''}
 </div></nav>
 
-<header class="hero" id="top">
-  <div class="bg" aria-hidden="true">${bgLayer}</div>
-  <div class="wrap">
-    <div class="meta">${sub ? `<span class="chip">${esc(sub)}</span>` : ''}${ratingChip}</div>
+<header class="hero ${heroLayout}" id="top">
+  <div class="bg" aria-hidden="true">${bgLayer}${heroLayout === 'full' ? `<img class="hero-photo" src="${esc(heroImg)}" alt="" fetchpriority="high"><div class="hero-shade"></div>` : ''}</div>
+  <div class="wrap${heroLayout !== 'plain' && heroLayout !== 'full' ? ' hero-grid' : ''}"><div class="hero-copy">
+    <div class="meta">${sub ? `<span class="chip">${esc(sub)}</span>` : ''}${heroLayout === 'plain' || heroLayout === 'full' ? ratingChip : ''}</div>
     <h1 class="disp" style="font-size:clamp(34px,min(14vw,${fitVw}vw),168px)">${words.map((w, i) => `<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ')}</h1>
     <p class="lead">${esc(tagline)}</p>
     <div class="cta">
@@ -2011,12 +2152,17 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
       ${mapHref ? `<a class="btn ghost" href="${esc(mapHref)}" target="_blank" rel="noopener">Get directions</a>` : ''}
     </div>
   </div>
+  ${heroLayout !== 'plain' && heroLayout !== 'full' ? `<div class="hero-art"><figure class="hero-frame"><img src="${esc(heroImg)}" alt="${esc(name)}" fetchpriority="high"></figure>
+    ${d.rating ? `<div class="float f1"><b>${esc(d.rating)} ★</b><span>on Google</span></div>` : ''}<div class="float f2" id="openFloat"><i></i><span>${esc(N.eyebrow)}</span></div>
+    ${imgs.length ? '<small class="sample">Sample photo</small>' : ''}</div>` : ''}
+  </div>
+  ${heroLayout === 'full' && imgs.length ? '<small class="sample corner">Sample photo</small>' : ''}
 </header>
 
 <div class="marquee" aria-hidden="true"><div class="track">${[...marquee, ...marquee, ...marquee, ...marquee].map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
 
 ${services.length ? `<section class="block" id="services"><div class="wrap">
-  <div class="head reveal"><div><span class="eyebrow">Services</span><h2 class="disp">What we do</h2></div><p>Prices are a starting point. Ask about anything you don't see.</p></div>
+  <div class="head reveal"><div><span class="eyebrow">${esc(N.eyebrow)}</span><h2 class="disp">${esc(N.services)}</h2></div><p>Prices are a starting point. Ask about anything you don't see.</p></div>
   <div class="svcs">${svcHtml}</div>
 </div></section>` : ''}
 
@@ -2030,6 +2176,10 @@ ${d.about ? `<section class="block" id="about"><div class="wrap about">
   <p class="reveal" style="--i:1">${esc(d.about)}</p>
 </div></section>` : ''}
 
+${galleryImgs.length ? `<section class="block shots"><div class="wrap">
+  <div class="head reveal"><div><span class="eyebrow">A look inside</span><h2 class="disp">The vibe</h2></div><p>Sample photos for this preview. We'd swap in your real ones.</p></div>
+  <div class="shot-grid">${galleryImgs.map((u, i) => `<figure class="shot reveal s${i}" style="--i:${i}"><img src="${esc(u)}" alt="" loading="lazy"></figure>`).join('')}</div>
+</div></section>` : ''}
 ${photos.length ? `<section class="block" style="padding-top:0"><div class="wrap"><div class="gallery">${photoHtml}</div></div></section>` : ''}
 
 <section class="block" id="visit"><div class="wrap">
@@ -2117,6 +2267,16 @@ export default {
         console.error(e);
         return withDemoHeaders(new Response('<!doctype html><meta charset=utf-8><title>Preview unavailable</title><p style="font-family:system-ui;padding:40px">This preview is not available right now.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
       }
+    }
+    const im = url.pathname.match(/^\/img\/([a-f0-9]{20})\.jpg$/);
+    if (im && request.method === 'GET') {
+      try {
+        await ensureSchema(env);
+        const row = await env.DB.prepare('SELECT mime, data FROM demo_images WHERE id = ?').bind(im[1]).first();
+        if (!row) return new Response('Not found', { status: 404 });
+        const body = row.data instanceof ArrayBuffer ? row.data : new Uint8Array(row.data).buffer;
+        return new Response(body, { headers: { 'Content-Type': row.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" } });
+      } catch (e) { console.error(e); return new Response('Image unavailable', { status: 500 }); }
     }
     const pv = url.pathname.match(/^\/p\/(\d{1,9})$/);
     if (pv && request.method === 'GET') {
