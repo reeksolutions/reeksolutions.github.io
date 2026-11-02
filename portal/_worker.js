@@ -90,7 +90,7 @@ const SCHEMA = [
 // Stage 2 columns added to the existing deals table. Only added if missing — never drops data.
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
+const LEAD_COLUMNS = { tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -121,6 +121,16 @@ async function ensureSchema(env) {
     }
   }
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS demos_creator ON demos(created_by, created_at)').run();
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prefix TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE,
+      created_by INTEGER, created_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS ingest_log (id INTEGER PRIMARY KEY AUTOINCREMENT, key_id INTEGER, batch_id INTEGER, received INTEGER NOT NULL DEFAULT 0,
+      inserted INTEGER NOT NULL DEFAULT 0, duplicates INTEGER NOT NULL DEFAULT 0, dnc INTEGER NOT NULL DEFAULT 0, invalid INTEGER NOT NULL DEFAULT 0,
+      has_site INTEGER NOT NULL DEFAULT 0, error TEXT, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS ingest_key_time ON ingest_log(key_id, created_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS saved_views (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, filters TEXT NOT NULL, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_next ON leads(next_action_at)'),
+  ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
   schemaReady = true;
@@ -360,6 +370,171 @@ function pickRep(loads) {
   return best.id;
 }
 
+
+/* ---- shared lead import (CSV upload + scraper/n8n endpoint) ---- */
+async function importRows(env, { batchId, rows, startStatus, assign, skipWithSite, source }) {
+  rows = Array.isArray(rows) ? rows.slice(0, 500) : [];
+  startStatus = startStatus === 'new' ? 'new' : 'demo_needed';
+  skipWithSite = skipWithSite !== false;
+  let loads = null, fixedRep = null;
+  if (assign === 'auto') loads = await repLoads(env);
+  else if (assign && assign !== 'none') {
+    const r = await env.DB.prepare(`SELECT id FROM users WHERE id=? AND role IN ('rep','admin') AND active=1`).bind(+assign).first();
+    if (!r) bad('That rep was not found');
+    fixedRep = r.id;
+  }
+  const phones = rows.map((r) => normPhone(r && r.phone)).filter(Boolean);
+  const emails = rows.map((r) => cleanEmail(r && r.email)).filter(Boolean);
+  const seen = new Set(), dncSet = new Set(), seenEmail = new Set();
+  for (let i = 0; i < emails.length; i += 90) {
+    const chunk = emails.slice(i, i + 90);
+    (await env.DB.prepare(`SELECT email FROM leads WHERE email IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all()).results.forEach((r) => seenEmail.add(r.email));
+  }
+  for (let i = 0; i < phones.length; i += 90) {
+    const chunk = phones.slice(i, i + 90);
+    const q = chunk.map(() => '?').join(',');
+    (await env.DB.prepare(`SELECT phone_norm FROM leads WHERE phone_norm IN (${q})`).bind(...chunk).all()).results.forEach((r) => seen.add(r.phone_norm));
+    (await env.DB.prepare(`SELECT phone_norm FROM dnc WHERE phone_norm IN (${q})`).bind(...chunk).all()).results.forEach((r) => dncSet.add(r.phone_norm));
+  }
+  let inserted = 0, dup = 0, dncSkipped = 0, invalid = 0, hasSite = 0;
+  const stmts = [], t = now();
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') { invalid++; continue; }
+    const business = str(r.business, 200);
+    if (!business) { invalid++; continue; }
+    const pn = normPhone(r.phone), em = cleanEmail(r.email), site = cleanUrl(r.website);
+    if (!pn && !em) { invalid++; continue; }
+    // a Facebook / Instagram / Linktree / booking page is not a real website: those are still good leads
+    if (site && skipWithSite && !NOT_A_SITE.test(site)) { hasSite++; continue; }
+    if (pn && dncSet.has(pn)) { dncSkipped++; continue; }
+    if ((pn && seen.has(pn)) || (em && seenEmail.has(em))) { dup++; continue; }
+    if (pn) seen.add(pn);
+    if (em) seenEmail.add(em);
+    const rep = loads ? pickRep(loads) : fixedRep;
+    stmts.push(env.DB.prepare(
+      `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?)`
+    ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null, source || 'csv'));
+    inserted++;
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  return { inserted, duplicates: dup, dnc: dncSkipped, invalid, hasSite };
+}
+
+// Scraper / n8n rows come with all kinds of column names. Map the common ones.
+const INGEST_ALIASES = {
+  business: ['business', 'businessname', 'name', 'title', 'company', 'companyname', 'place', 'placename'],
+  owner: ['owner', 'ownername', 'contact', 'contactname'],
+  phone: ['phone', 'phonenumber', 'telephone', 'tel', 'mobile', 'phoneunformatted', 'internationalphonenumber'],
+  email: ['email', 'emailaddress', 'emails', 'mail'],
+  website: ['website', 'site', 'web', 'websiteurl', 'domain'],
+  address: ['address', 'street', 'fulladdress', 'streetaddress', 'formattedaddress'],
+  city: ['city', 'town', 'locality'],
+  category: ['category', 'categoryname', 'type', 'industry', 'niche', 'categories'],
+  rating: ['rating', 'stars', 'totalscore', 'score'],
+  link: ['link', 'url', 'mapsurl', 'googlemapsurl', 'placeurl', 'maps', 'googleurl'],
+};
+function normalizeIngestRow(r) {
+  if (!r || typeof r !== 'object') return null;
+  const flat = {};
+  for (const [k, v] of Object.entries(r)) {
+    let val = v;
+    if (Array.isArray(val)) val = val[0];
+    if (val && typeof val === 'object') continue;
+    if (val === null || val === undefined) continue;
+    flat[String(k).toLowerCase().replace(/[^a-z]/g, '')] = String(val);
+  }
+  const out = {};
+  for (const [field, names] of Object.entries(INGEST_ALIASES)) for (const n of names) if (flat[n] && !out[field]) out[field] = flat[n];
+  if (out.link && !/google\.|goo\.gl|maps\.app/i.test(out.link) && !out.website) { out.website = out.link; delete out.link; }
+  return out;
+}
+
+async function sha256Hex(s) { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))); }
+
+async function handleIngest(request, env) {
+  if (request.method !== 'POST') throw new HttpError(405, 'Send leads with POST');
+  const auth = request.headers.get('Authorization') || '';
+  const key = (/^Bearer\s+(\S+)$/i.exec(auth) || [])[1] || request.headers.get('X-Api-Key') || '';
+  if (!/^rk_[a-f0-9]{40}$/.test(key)) throw new HttpError(401, 'Missing or invalid API key');
+  const k = await env.DB.prepare('SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL').bind(await sha256Hex(key)).first();
+  if (!k) throw new HttpError(401, 'Missing or invalid API key');
+  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM ingest_log WHERE key_id = ? AND created_at > ?').bind(k.id, new Date(Date.now() - 3600e3).toISOString()).first();
+  if (recent.n >= 120) throw new HttpError(429, 'Too many requests. Max 120 per hour per key.');
+  const text = await request.text();
+  if (text.length > 2_000_000) throw new HttpError(413, 'Too much data in one request. Send 500 leads or fewer at a time.');
+  let body;
+  try { body = JSON.parse(text); } catch { throw new HttpError(400, 'Body must be JSON'); }
+  const list = Array.isArray(body) ? body : Array.isArray(body.leads) ? body.leads : Array.isArray(body.rows) ? body.rows : body && typeof body === 'object' && !Array.isArray(body) && (body.business || body.name || body.title) ? [body] : null;
+  if (!list) throw new HttpError(400, 'Send {"leads": [ ... ]} or a list of leads');
+  if (list.length > 500) throw new HttpError(413, 'Send 500 leads or fewer at a time');
+  const opts = Array.isArray(body) ? {} : body;
+  const day = new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric' });
+  const batchName = str(opts.batch, 100) || (k.name + ' · ' + day);
+  let batch = await env.DB.prepare('SELECT id FROM batches WHERE name = ? ORDER BY id DESC LIMIT 1').bind(batchName).first();
+  if (!batch) {
+    const r = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind(batchName, k.created_by, now()).run();
+    batch = { id: r.meta.last_row_id };
+  }
+  const rows = list.map(normalizeIngestRow);
+  const assign = opts.assign === 'none' ? 'none' : 'auto';
+  let res, err = null;
+  try {
+    res = await importRows(env, { batchId: batch.id, rows, startStatus: opts.start_status === 'new' ? 'new' : 'demo_needed', assign, skipWithSite: opts.skip_with_site !== false, source: 'api' });
+  } catch (e) { err = e instanceof HttpError ? e.message : 'Server error'; res = { inserted: 0, duplicates: 0, dnc: 0, invalid: 0, hasSite: 0 }; if (!(e instanceof HttpError)) console.error(e); }
+  const t = now();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO ingest_log (key_id, batch_id, received, inserted, duplicates, dnc, invalid, has_site, error, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .bind(k.id, batch.id, list.length, res.inserted, res.duplicates, res.dnc, res.invalid, res.hasSite, err, t),
+    env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').bind(t, k.id),
+  ]);
+  if (err) throw new HttpError(400, err);
+  return json({ ok: true, batch: batchName, batch_id: batch.id, received: list.length, added: res.inserted, duplicates: res.duplicates, do_not_call: res.dnc, has_website: res.hasSite, invalid: res.invalid });
+}
+
+// shared lead filters (list + export)
+function leadFilter(p, user) {
+  const where = [], args = [];
+  if (user.role === 'rep') { where.push('l.assigned_to = ?', "l.status != 'dnc'"); args.push(user.id); }
+  const status = p.get('status');
+  if (status === 'open') { where.push(`l.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`); args.push(...OPEN_STATUSES); }
+  else if (status && STATUSES.includes(status)) { where.push('l.status = ?'); args.push(status); }
+  else if (!(user.role === 'admin' && status === 'all')) { where.push("l.status != 'dnc'"); }
+  if (user.role === 'admin' && p.get('rep')) {
+    if (p.get('rep') === 'none') where.push('l.assigned_to IS NULL');
+    else { where.push('l.assigned_to = ?'); args.push(+p.get('rep')); }
+  }
+  if (user.role === 'admin' && p.get('batch')) { where.push('l.batch_id = ?'); args.push(+p.get('batch')); }
+  if (p.get('city')) { where.push('l.city = ?'); args.push(p.get('city')); }
+  if (p.get('heat') && HEATS.includes(p.get('heat'))) { where.push("COALESCE(l.heat,'cold') = ?"); args.push(p.get('heat')); }
+  if (p.get('contact') === 'email') where.push("l.email IS NOT NULL AND l.email != ''");
+  if (p.get('contact') === 'phone') where.push("l.phone_norm IS NOT NULL AND l.phone_norm != ''");
+  if (p.get('contact') === 'unemailed') where.push("l.email IS NOT NULL AND l.email != '' AND l.emailed_at IS NULL");
+  const tag = cleanTag(p.get('tag'));
+  if (tag) { where.push('l.tags LIKE ?'); args.push('%,' + tag + ',%'); }
+  if (p.get('due') === '1') { where.push('l.next_action_at IS NOT NULL AND l.next_action_at < ?'); args.push(validIso(p.get('due_before')) || now()); }
+  if (p.get('source') === 'api' || p.get('source') === 'csv') { where.push("COALESCE(l.source,'csv') = ?"); args.push(p.get('source')); }
+  const q = str(p.get('q'), 80);
+  if (q) {
+    where.push('(l.business LIKE ? OR l.owner LIKE ? OR l.phone_norm LIKE ? OR l.category LIKE ? OR l.email LIKE ? OR l.tags LIKE ?)');
+    const like = '%' + q.replace(/[%_]/g, '') + '%';
+    const digits = normPhone(q);
+    args.push(like, like, digits.length >= 4 ? '%' + digits + '%' : '§none§', like, like, like.toLowerCase());
+  }
+  return { w: where.length ? 'WHERE ' + where.join(' AND ') : '', args };
+}
+function cleanTag(t) { return String(t || '').toLowerCase().replace(/[^a-z0-9 _-]/g, '').trim().replace(/\s+/g, '-').slice(0, 30); }
+function tagsToDb(list) {
+  const tags = [...new Set((Array.isArray(list) ? list : []).map(cleanTag).filter(Boolean))].slice(0, 12);
+  return tags.length ? ',' + tags.join(',') + ',' : null;
+}
+const tagsFromDb = (s) => String(s || '').split(',').filter(Boolean);
+function csvCell(v) {
+  let s = v === null || v === undefined ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;   // stop spreadsheet formula injection
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
   const path = url.pathname.replace(/^\/api/, '');
@@ -517,7 +692,9 @@ async function api(request, env, url) {
     const cities = user.role === 'admin'
       ? (await env.DB.prepare(`SELECT DISTINCT city FROM leads WHERE city != '' ORDER BY city`).all()).results
       : (await env.DB.prepare(`SELECT DISTINCT city FROM leads WHERE assigned_to = ? AND status != 'dnc' AND city != '' ORDER BY city`).bind(user.id).all()).results;
-    return json({ reps, batches, cities: cities.map((c) => c.city) });
+    const tagRows = (await env.DB.prepare(`SELECT tags FROM leads WHERE tags IS NOT NULL${user.role === 'admin' ? '' : ' AND assigned_to = ?'} LIMIT 5000`).bind(...(user.role === 'admin' ? [] : [user.id])).all()).results;
+    const tags = [...new Set(tagRows.flatMap((r) => tagsFromDb(r.tags)))].sort();
+    return json({ reps, batches, cities: cities.map((c) => c.city), tags });
   }
 
   /* ---- batches (admin) ---- */
@@ -545,96 +722,104 @@ async function api(request, env, url) {
 
   if ((m = path.match(/^\/batches\/(\d+)\/leads$/)) && method === 'POST') {
     need(user, 'admin');
-    const batchId = +m[1];
-    const batch = await env.DB.prepare('SELECT id FROM batches WHERE id=?').bind(batchId).first();
+    const batch = await env.DB.prepare('SELECT id FROM batches WHERE id=?').bind(+m[1]).first();
     if (!batch) throw new HttpError(404, 'Batch not found');
-    const rows = Array.isArray(body.rows) ? body.rows.slice(0, 500) : [];
-    const startStatus = body.startStatus === 'new' ? 'new' : 'demo_needed';
-    const assign = body.assign; // 'auto' | 'none' | rep id
-    let loads = null, fixedRep = null;
-    if (assign === 'auto') loads = await repLoads(env);
-    else if (assign && assign !== 'none') {
-      const r = await env.DB.prepare(`SELECT id FROM users WHERE id=? AND role IN ('rep','admin') AND active=1`).bind(+assign).first();
-      if (!r) bad('That rep was not found');
-      fixedRep = r.id;
-    }
-    // existing phones + DNC phones, to skip duplicates
-    const skipWithSite = body.skipWithSite !== false;
-    const phones = rows.map((r) => normPhone(r.phone)).filter(Boolean);
-    const emails = rows.map((r) => cleanEmail(r.email)).filter(Boolean);
-    const seen = new Set(), dncSet = new Set(), seenEmail = new Set();
-    for (let i = 0; i < emails.length; i += 90) {
-      const chunk = emails.slice(i, i + 90);
-      (await env.DB.prepare(`SELECT email FROM leads WHERE email IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all()).results.forEach((r) => seenEmail.add(r.email));
-    }
-    for (let i = 0; i < phones.length; i += 90) {
-      const chunk = phones.slice(i, i + 90);
-      const q = chunk.map(() => '?').join(',');
-      (await env.DB.prepare(`SELECT phone_norm FROM leads WHERE phone_norm IN (${q})`).bind(...chunk).all()).results.forEach((r) => seen.add(r.phone_norm));
-      (await env.DB.prepare(`SELECT phone_norm FROM dnc WHERE phone_norm IN (${q})`).bind(...chunk).all()).results.forEach((r) => dncSet.add(r.phone_norm));
-    }
-    let inserted = 0, dup = 0, dncSkipped = 0, invalid = 0, hasSite = 0;
-    const stmts = [], t = now();
-    for (const r of rows) {
-      const business = str(r.business, 200);
-      if (!business) { invalid++; continue; }
-      const pn = normPhone(r.phone), em = cleanEmail(r.email), site = cleanUrl(r.website);
-      if (!pn && !em) { invalid++; continue; }
-      // a Facebook / Instagram / Linktree / booking page is not a real website: those are still good leads
-      if (site && skipWithSite && !NOT_A_SITE.test(site)) { hasSite++; continue; }
-      if (pn && dncSet.has(pn)) { dncSkipped++; continue; }
-      if ((pn && seen.has(pn)) || (em && seenEmail.has(em))) { dup++; continue; }
-      if (pn) seen.add(pn);
-      if (em) seenEmail.add(em);
-      const rep = loads ? pickRep(loads) : fixedRep;
-      stmts.push(env.DB.prepare(
-        `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold')`
-      ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null));
-      inserted++;
-    }
-    for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
-    return json({ inserted, duplicates: dup, dnc: dncSkipped, invalid, hasSite });
+    return json(await importRows(env, { batchId: batch.id, rows: body.rows, startStatus: body.startStatus, assign: body.assign, skipWithSite: body.skipWithSite, source: 'csv' }));
   }
 
   /* ---- leads ---- */
   if (path === '/leads' && method === 'GET') {
     need(user, 'admin', 'rep');
     const p = url.searchParams;
-    const where = [], args = [];
-    if (user.role === 'rep') { where.push('l.assigned_to = ?', "l.status != 'dnc'"); args.push(user.id); }
-    const status = p.get('status');
-    if (status === 'open') { where.push(`l.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`); args.push(...OPEN_STATUSES); }
-    else if (status && STATUSES.includes(status)) { where.push('l.status = ?'); args.push(status); }
-    else if (!(user.role === 'admin' && status === 'all')) { where.push("l.status != 'dnc'"); }
-    if (user.role === 'admin' && p.get('rep')) {
-      if (p.get('rep') === 'none') where.push('l.assigned_to IS NULL');
-      else { where.push('l.assigned_to = ?'); args.push(+p.get('rep')); }
-    }
-    if (user.role === 'admin' && p.get('batch')) { where.push('l.batch_id = ?'); args.push(+p.get('batch')); }
-    if (p.get('city')) { where.push('l.city = ?'); args.push(p.get('city')); }
-    if (p.get('heat') && HEATS.includes(p.get('heat'))) { where.push("COALESCE(l.heat,'cold') = ?"); args.push(p.get('heat')); }
-    if (p.get('contact') === 'email') where.push("l.email IS NOT NULL AND l.email != ''");
-    if (p.get('contact') === 'phone') where.push("l.phone_norm IS NOT NULL AND l.phone_norm != ''");
-    if (p.get('contact') === 'unemailed') where.push("l.email IS NOT NULL AND l.email != '' AND l.emailed_at IS NULL");
-    const q = str(p.get('q'), 80);
-    if (q) {
-      where.push('(l.business LIKE ? OR l.owner LIKE ? OR l.phone_norm LIKE ? OR l.category LIKE ? OR l.email LIKE ?)');
-      const like = '%' + q.replace(/[%_]/g, '') + '%';
-      const digits = normPhone(q);
-      args.push(like, like, digits.length >= 4 ? '%' + digits + '%' : '§none§', like, like);
-    }
+    const { w, args } = leadFilter(p, user);
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
-    const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const order = `ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
               l.attempts, l.last_call_at, l.demo_url, l.demo_sent, l.assigned_to, u.name AS rep_name,
-              l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at
+              l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at, l.tags, l.next_action_at, l.next_action
        FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${w} ${order} LIMIT ? OFFSET ?`
     ).bind(...args, limit + 1, offset).all();
     const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first();
-    return json({ leads: results.slice(0, limit), more: results.length > limit, total: total.n });
+    return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
+  }
+
+  if (path === '/leads/export' && method === 'GET') {
+    need(user, 'admin');
+    const { w, args } = leadFilter(url.searchParams, user);
+    const { results } = await env.DB.prepare(
+      `SELECT l.id, l.business, l.owner, l.phone, l.email, l.website, l.address, l.city, l.category, l.rating, l.status, COALESCE(l.heat,'cold') AS heat, l.tags,
+              u.name AS rep, l.attempts, l.last_call_at, l.next_action_at, l.next_action, l.demo_url, l.demo_views, l.emailed_at, l.link, b.name AS batch, COALESCE(l.source,'csv') AS source, l.created_at
+       FROM leads l LEFT JOIN users u ON u.id = l.assigned_to LEFT JOIN batches b ON b.id = l.batch_id ${w} ORDER BY l.id LIMIT 20000`
+    ).bind(...args).all();
+    const cols = ['id', 'business', 'owner', 'phone', 'email', 'website', 'address', 'city', 'category', 'rating', 'status', 'heat', 'tags', 'rep', 'attempts', 'last_call_at', 'next_action_at', 'next_action', 'demo_url', 'demo_views', 'emailed_at', 'link', 'batch', 'source', 'created_at'];
+    const lines = [cols.join(',')].concat(results.map((r) => cols.map((c) => csvCell(c === 'tags' ? tagsFromDb(r.tags).join(' ') : r[c])).join(',')));
+    return new Response('\ufeff' + lines.join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="reekon-leads-' + now().slice(0, 10) + '.csv"', 'Cache-Control': 'no-store' } });
+  }
+
+  /* ---- saved views (per person) ---- */
+  if (path === '/views' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const { results } = await env.DB.prepare('SELECT id, name, filters FROM saved_views WHERE user_id = ? ORDER BY id').bind(user.id).all();
+    return json(results.map((v) => { let f = {}; try { f = JSON.parse(v.filters); } catch { /* ignore */ } return { id: v.id, name: v.name, filters: f }; }));
+  }
+  if (path === '/views' && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const name = str(body.name, 40);
+    if (!name) bad('Give the view a name');
+    const allowed = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
+    const f = Object.fromEntries(allowed.filter((k) => body.filters && body.filters[k] !== undefined && body.filters[k] !== '').map((k) => [k, str(body.filters[k], 80)]));
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM saved_views WHERE user_id = ?').bind(user.id).first();
+    if (n.n >= 20) bad('You can save up to 20 views');
+    const r = await env.DB.prepare('INSERT INTO saved_views (user_id, name, filters, created_at) VALUES (?,?,?,?)').bind(user.id, name, JSON.stringify(f), now()).run();
+    return json({ id: r.meta.last_row_id, name, filters: f });
+  }
+  if ((m = path.match(/^\/views\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin', 'rep');
+    await env.DB.prepare('DELETE FROM saved_views WHERE id = ? AND user_id = ?').bind(+m[1], user.id).run();
+    return json({ ok: true });
+  }
+
+  /* ---- tags + next action (admin and the lead's rep) ---- */
+  if ((m = path.match(/^\/leads\/(\d+)\/meta$/)) && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const lead = await loadLead(env, user, +m[1]);
+    const sets = [], args = [];
+    if (body.tags !== undefined) { sets.push('tags = ?'); args.push(tagsToDb(body.tags)); }
+    if (body.next_action_at !== undefined) {
+      const v = body.next_action_at ? validIso(body.next_action_at) : null;
+      if (body.next_action_at && !v) bad('Pick a valid date');
+      sets.push('next_action_at = ?'); args.push(v);
+    }
+    if (body.next_action !== undefined) { sets.push('next_action = ?'); args.push(str(body.next_action, 140) || null); }
+    if (!sets.length) return json({ ok: true });
+    sets.push('updated_at = ?'); args.push(now());
+    await env.DB.prepare(`UPDATE leads SET ${sets.join(', ')} WHERE id = ?`).bind(...args, lead.id).run();
+    return json({ ok: true });
+  }
+
+  /* ---- API keys + scraper log (admin) ---- */
+  if (path === '/keys' && method === 'GET') {
+    need(user, 'admin');
+    const keys = (await env.DB.prepare(`SELECT k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, u.name AS created_by_name,
+        (SELECT COALESCE(SUM(inserted),0) FROM ingest_log i WHERE i.key_id = k.id) AS added
+      FROM api_keys k LEFT JOIN users u ON u.id = k.created_by ORDER BY k.revoked_at IS NOT NULL, k.id DESC`).all()).results;
+    const log = (await env.DB.prepare(`SELECT i.*, k.name AS key_name, b.name AS batch_name FROM ingest_log i LEFT JOIN api_keys k ON k.id = i.key_id LEFT JOIN batches b ON b.id = i.batch_id ORDER BY i.id DESC LIMIT 50`).all()).results;
+    return json({ keys, log });
+  }
+  if (path === '/keys' && method === 'POST') {
+    need(user, 'admin');
+    const name = str(body.name, 40) || 'Scraper';
+    const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM api_keys WHERE revoked_at IS NULL').first();
+    if (live.n >= 10) bad('You have 10 active keys. Revoke one first.');
+    const key = 'rk_' + hex(crypto.getRandomValues(new Uint8Array(20)));
+    await env.DB.prepare('INSERT INTO api_keys (name, prefix, key_hash, created_by, created_at) VALUES (?,?,?,?,?)').bind(name, key.slice(0, 9), await sha256Hex(key), user.id, now()).run();
+    return json({ name, key });
+  }
+  if ((m = path.match(/^\/keys\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin');
+    await env.DB.prepare('UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').bind(now(), +m[1]).run();
+    return json({ ok: true });
   }
 
   if (path === '/callbacks' && method === 'GET') {
@@ -657,7 +842,7 @@ async function api(request, env, url) {
   if ((m = path.match(/^\/leads\/(\d+)$/)) && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const lead = await loadLead(env, user, +m[1]);
-    if (user.role === 'dev') return json({ lead, calls: [], notes: [] });
+    if (user.role === 'dev') return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls: [], notes: [] });
     const calls = (await env.DB.prepare(
       `SELECT c.id, c.outcome, c.from_status, c.to_status, c.created_at, u.name AS user_name FROM calls c LEFT JOIN users u ON u.id = c.user_id WHERE c.lead_id = ? ORDER BY c.id DESC LIMIT 100`
     ).bind(lead.id).all()).results;
@@ -669,7 +854,8 @@ async function api(request, env, url) {
        WHERE d.lead_id = ? ${user.role === 'rep' ? 'AND d.rep_id = ?' : ''} ORDER BY d.id DESC`
     ).bind(...(user.role === 'rep' ? [lead.id, user.id] : [lead.id])).all()).results
       .map((d) => ({ ...d, commission_cents: commissionCents(d) }));
-    return json({ lead, calls, notes, deals });
+    const demo = await env.DB.prepare('SELECT d.created_at, d.updated_at, d.views, d.theme, u.name AS by_name FROM demos d LEFT JOIN users u ON u.id = d.created_by WHERE d.lead_id = ? ORDER BY d.id DESC LIMIT 1').bind(lead.id).first();
+    return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls, notes, deals, demo: demo || null });
   }
 
   if ((m = path.match(/^\/leads\/(\d+)$/)) && method === 'PATCH') {
@@ -726,6 +912,20 @@ async function api(request, env, url) {
       for (const id of ids) stmts.push(env.DB.prepare('UPDATE leads SET assigned_to=?, updated_at=? WHERE id=?').bind(loads ? pickRep(loads) : rep, t, id));
     } else if (action === 'demo_needed') {
       for (const id of ids) stmts.push(env.DB.prepare(`UPDATE leads SET status='demo_needed', updated_at=? WHERE id=? AND status='new'`).bind(t, id));
+    } else if (action === 'heat') {
+      if (!HEATS.includes(body.heat)) bad('Pick hot, warm, cold or dead');
+      for (const id of ids) stmts.push(env.DB.prepare('UPDATE leads SET heat=?, updated_at=? WHERE id=?').bind(body.heat, t, id));
+    } else if (action === 'tag' || action === 'untag') {
+      const tag = cleanTag(body.tag);
+      if (!tag) bad('Type a tag');
+      if (action === 'tag') for (const id of ids) stmts.push(env.DB.prepare(`UPDATE leads SET tags = CASE WHEN tags IS NULL OR tags = '' THEN ? WHEN tags LIKE ? THEN tags ELSE tags || ? END, updated_at=? WHERE id=?`).bind(',' + tag + ',', '%,' + tag + ',%', tag + ',', t, id));
+      else for (const id of ids) stmts.push(env.DB.prepare(`UPDATE leads SET tags = NULLIF(REPLACE(tags, ?, ','), ','), updated_at=? WHERE id=?`).bind(',' + tag + ',', t, id));
+    } else if (action === 'status') {
+      if (!['new', 'demo_needed', 'lost'].includes(body.status)) bad('Bulk status can be New, Demo needed or Closed lost');
+      for (const id of ids) stmts.push(env.DB.prepare(`UPDATE leads SET status=?, updated_at=? WHERE id=? AND status NOT IN ('won','dnc')`).bind(body.status, t, id));
+    } else if (action === 'next_action') {
+      const v = body.next_action_at ? validIso(body.next_action_at) : null;
+      for (const id of ids) stmts.push(env.DB.prepare('UPDATE leads SET next_action_at=?, next_action=COALESCE(?, next_action), updated_at=? WHERE id=?').bind(v, str(body.next_action, 140) || null, t, id));
     } else bad('Unknown action');
     for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
     return json({ ok: true, count: ids.length });
@@ -1536,6 +1736,17 @@ export default {
       } catch (e) {
         console.error(e);
         return withDemoHeaders(new Response('<!doctype html><meta charset=utf-8><title>Preview unavailable</title><p style="font-family:system-ui;padding:40px">This preview is not available right now.</p>', { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+      }
+    }
+    if (url.pathname === '/api/ingest') {
+      try {
+        if (!env.DB) throw new HttpError(500, 'Database not connected');
+        await ensureSchema(env);
+        return withHeaders(await handleIngest(request, env));
+      } catch (e) {
+        if (e instanceof HttpError) return withHeaders(json({ error: e.message }, e.status));
+        console.error(e);
+        return withHeaders(json({ error: 'Something went wrong on the server. Try again.' }, 500));
       }
     }
     if (url.pathname.startsWith('/api/')) {

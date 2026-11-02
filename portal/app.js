@@ -4,7 +4,7 @@
 
   /* ================= basics ================= */
   const $app = document.getElementById('app');
-  const S = { me: null, options: null, leadFilters: { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '' }, selected: new Set(), selecting: false,
+  const S = { me: null, options: null, leadFilters: { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' }, selected: new Set(), selecting: false,
     script: null, period: 'today', boardSort: 'closes', dealsFilter: '0' };
 
   const STATUS = {
@@ -146,15 +146,15 @@
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['demos', 'Demos'], ['deals', 'Deals & commissions']]],
       ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
-      ['Tools', [['upload', 'Upload leads'], ['batches', 'Batches'], ['script', 'Call script']]],
+      ['Tools', [['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
     return [[null, [['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'demos' : 'home');
-  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches' };
+  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals'];
+  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,13 +199,14 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations'], rep: ['lead', 'script', 'demo'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
       switch (route) {
         case 'home': return await viewHome();
         case 'team': return await viewTeam();
+        case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
         case 'deals': return await viewDeals();
         case 'earnings': return await viewEarnings();
@@ -291,7 +292,37 @@
       isAdmin ? sel('rep', [['', 'All reps'], ['none', 'Unassigned']], opts.reps.map((r) => [String(r.id), r.name + (r.active ? '' : ' (off)')])) : null,
       isAdmin ? sel('batch', [['', 'All batches']], opts.batches.map((b) => [String(b.id), b.name])) : null,
       sel('city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
-      sel('contact', [['', 'Any contact']], [['email', 'Has email'], ['unemailed', 'Email not sent yet'], ['phone', 'Has phone']]));
+      sel('contact', [['', 'Any contact']], [['email', 'Has email'], ['unemailed', 'Email not sent yet'], ['phone', 'Has phone']]),
+      (opts.tags || []).length ? sel('tag', [['', 'Any tag']], opts.tags.map((t) => [t, '#' + t])) : null,
+      isAdmin ? sel('source', [['', 'Any source']], [['api', 'From scraper / n8n'], ['csv', 'From CSV upload']]) : null);
+
+    // saved views: a few built in + your own
+    const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
+    const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
+    const applyView = (f) => { Object.assign(F, BLANK, f); viewLeads(); };
+    const same = (f) => FKEYS.every((k) => String(F[k] || '') === String((Object.assign({}, BLANK, f))[k] || ''));
+    const builtIn = [['All open', {}], ['⏰ Due now', { due: '1' }], ['🔥 Hot', { heat: 'hot' }], ['✉ Not emailed', { contact: 'unemailed' }]];
+    if (isAdmin) builtIn.push(['⚡ From scraper', { source: 'api', status: 'open' }]);
+    let myViews = [];
+    try { myViews = await api('GET', '/views'); } catch { /* ignore */ }
+    const viewsRow = h('div', { class: 'views-row' },
+      builtIn.map(([l, f]) => { const b = h('button', { class: 'vchip' + (same(f) ? ' on' : ''), onclick: () => applyView(f) }, l); b._f = f; return b; }),
+      myViews.map((v) => { const c = h('span', { class: 'vchip mine' + (same(v.filters) ? ' on' : '') }, h('button', { onclick: () => applyView(v.filters) }, v.name),
+        h('button', { class: 'x', 'aria-label': 'Delete view ' + v.name, onclick: async () => {
+          if (!(await confirmSheet('Delete "' + v.name + '"?', 'This only removes the saved view. No leads change.', 'Delete', true))) return;
+          try { await api('DELETE', '/views/' + v.id); viewLeads(); } catch (e) { fail(e); }
+        } }, '×')); c._f = v.filters; return c; }),
+      h('button', { class: 'vchip add', onclick: async () => {
+        const name = await sheet((box, close) => {
+          const inp = h('input', { placeholder: 'e.g. Inglewood barbers, hot', maxlength: 40 });
+          box.append(h('h2', null, 'Save this view'), h('p', { class: 'sub' }, 'Saves the filters and search you have on right now, so you can get back here in one tap.'),
+            h('div', { class: 'field' }, h('label', null, 'Name'), inp),
+            h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value.trim() || null) }, 'Save view')));
+          setTimeout(() => inp.focus(), 50);
+        });
+        if (!name) return;
+        try { await api('POST', '/views', { name, filters: Object.fromEntries(FKEYS.map((k) => [k, F[k]])) }); toast('View saved'); viewLeads(); } catch (e) { fail(e); }
+      } }, '+ Save view'));
     const heatChips = h('div', { class: 'heat-chips' }, [['', 'All']].concat(HEAT.map(([k, l, e]) => [k, e + ' ' + l])).map(([k, l]) =>
       h('button', { class: 'hchip ' + (k || 'all') + (F.heat === k ? ' on' : ''), onclick: (e) => {
         F.heat = k; heatChips.querySelectorAll('.hchip').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); load(true);
@@ -310,19 +341,29 @@
       bulk.hidden = false;
       const repSel = h('select', null, h('option', { value: 'auto' }, 'Auto-assign (spread evenly)'), h('option', { value: 'none' }, 'Unassign'),
         opts.reps.filter((r) => r.active).map((r) => h('option', { value: r.id }, r.name)));
+      const run = async (body, msg) => { try { await api('POST', '/leads/bulk', Object.assign({ ids: [...S.selected] }, body)); toast(msg); S.selected.clear(); load(true); } catch (e) { fail(e); } };
+      const heatSel = h('select', null, h('option', { value: '' }, 'Set heat…'), HEAT.map(([k, l, e]) => h('option', { value: k }, e + ' ' + l)));
+      heatSel.onchange = () => heatSel.value && run({ action: 'heat', heat: heatSel.value }, 'Heat updated');
+      const stSel = h('select', null, h('option', { value: '' }, 'Set status…'), [['new', 'New'], ['demo_needed', 'Demo needed'], ['lost', 'Closed lost']].map(([k, l]) => h('option', { value: k }, l)));
+      stSel.onchange = () => stSel.value && run({ action: 'status', status: stSel.value }, 'Status updated');
+      const tagIn = h('input', { placeholder: 'tag', list: 'tagList', maxlength: 30 });
       bulk.replaceChildren(
         h('div', { class: 'row' }, h('b', null, S.selected.size + ' selected'), h('span', { style: 'flex:1' }),
-          h('button', { class: 'btn small', onclick: async () => { try { await api('POST', '/leads/bulk', { ids: [...S.selected], action: 'demo_needed' }); toast('Sent to demo queue'); S.selected.clear(); load(true); } catch (e) { fail(e); } } }, 'Send to demos')),
-        h('div', { class: 'row' }, repSel, h('button', { class: 'btn primary small', onclick: async () => {
-          try { await api('POST', '/leads/bulk', { ids: [...S.selected], action: 'assign', rep: repSel.value }); toast('Assigned ' + S.selected.size + ' leads'); S.selected.clear(); load(true); } catch (e) { fail(e); }
-        } }, 'Assign')));
+          h('button', { class: 'btn small', onclick: () => { listEl.querySelectorAll('.lead input[type=checkbox]').forEach((cb) => { cb.checked = true; S.selected.add(+cb.dataset.id); }); renderBulk(); } }, 'Select all'),
+          h('button', { class: 'btn small', onclick: () => run({ action: 'demo_needed' }, 'Sent to demo queue') }, 'Send to demos')),
+        h('div', { class: 'row' }, repSel, h('button', { class: 'btn primary small', onclick: () => run({ action: 'assign', rep: repSel.value }, 'Assigned ' + S.selected.size + ' leads') }, 'Assign')),
+        h('div', { class: 'row' }, heatSel, stSel),
+        h('div', { class: 'row' }, tagIn, h('button', { class: 'btn small', onclick: () => tagIn.value.trim() && run({ action: 'tag', tag: tagIn.value }, 'Tag added') }, '+ Tag'),
+          h('button', { class: 'btn small', onclick: () => tagIn.value.trim() && run({ action: 'untag', tag: tagIn.value }, 'Tag removed') }, '− Tag')),
+        h('datalist', { id: 'tagList' }, (opts.tags || []).map((t) => h('option', { value: t }))));
     }
 
     async function load(reset) {
       if (reset) { offset = 0; listEl.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' }))); }
       const qs = new URLSearchParams({ limit: 50, offset });
-      for (const k of ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact']) if (F[k]) qs.set(k, F[k]);
+      for (const k of FKEYS) if (F[k]) qs.set(k, F[k]);
       if (F.status === '') qs.delete('status');
+      viewsRow.querySelectorAll('.vchip').forEach((c) => { if (c._f) c.classList.toggle('on', same(c._f)); });
       try {
         const r = await api('GET', '/leads?' + qs);
         if (reset) listEl.replaceChildren();
@@ -343,8 +384,10 @@
       tags.push(l.demo_url ? h('span', { class: 'tag good' }, 'Demo ✓') : h('span', { class: 'tag' }, 'No demo'));
       if (l.attempts) tags.push(h('span', { class: 'tag' }, l.attempts + (l.attempts === 1 ? ' call' : ' calls')));
       if (isAdmin) tags.push(h('span', { class: 'tag' }, l.rep_name || 'Unassigned'));
+      if (l.next_action_at) tags.unshift(h('span', { class: 'tag next' + (new Date(l.next_action_at) < new Date() ? ' due' : '') }, '⏰ ' + fmt(l.next_action_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' })));
+      (l.tags || []).forEach((t) => tags.push(h('span', { class: 'tag hash' }, '#' + t)));
       const card = h('a', { class: 'lead', href: '#/lead/' + l.id },
-        S.selecting ? h('input', { type: 'checkbox', checked: S.selected.has(l.id), onclick: (e) => { e.stopPropagation(); e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } }) : null,
+        S.selecting ? h('input', { type: 'checkbox', 'data-id': l.id, checked: S.selected.has(l.id), onclick: (e) => { e.stopPropagation(); e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } }) : null,
         h('div', { class: 'body' }, h('div', { class: 'name' }, l.business),
           h('div', { class: 'meta' }, [l.owner, l.city, l.category].filter(Boolean).join(' · ') || '—'),
           !l.phone && l.email ? h('div', { class: 'meta' }, '✉ ' + l.email) : null,
@@ -357,16 +400,32 @@
     moreBtn.onclick = () => load(false);
     shell('leads', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, isAdmin ? 'Leads' : 'My leads'), h('p', { class: 'sub' }, isAdmin ? 'Every lead across all batches.' : 'Tap a lead to call and log the outcome.')),
-        isAdmin ? h('div', { class: 'row' }, selectBtn, h('a', { class: 'btn small primary', href: '#/upload' }, 'Upload')) : null),
-      search, heatChips, filters, countEl, listEl, moreBtn, bulk,
+        isAdmin ? h('div', { class: 'row wrap' }, selectBtn, h('button', { class: 'btn small', onclick: () => exportCsv(F, FKEYS) }, icon('batches'), 'Export'), h('a', { class: 'btn small primary', href: '#/upload' }, 'Upload')) : null),
+      viewsRow, search, heatChips, filters, countEl, listEl, moreBtn, bulk,
     ]);
     load(true);
+  }
+
+  async function exportCsv(F, keys) {
+    const qs = new URLSearchParams();
+    for (const k of keys) if (F[k]) qs.set(k, F[k]);
+    if (F.status === '') qs.delete('status');
+    try {
+      toast('Preparing export…');
+      const res = await fetch('/api/leads/export?' + qs, { credentials: 'same-origin' });
+      if (!res.ok) { let m = 'Export failed'; try { m = (await res.json()).error || m; } catch { /* ignore */ } throw new Error(m); }
+      const blob = await res.blob();
+      const a = h('a', { href: URL.createObjectURL(blob), download: 'reekon-leads-' + new Date().toISOString().slice(0, 10) + '.csv' });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('Exported ✓');
+    } catch (e) { fail(e); }
   }
 
   /* ================= lead detail ================= */
   async function viewLead(id) {
     const isAdmin = S.me.role === 'admin';
-    const [{ lead: L, calls, notes, deals = [] }, script] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript()]);
+    const [{ lead: L, calls, notes, deals = [], demo = null }, script] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript()]);
     const reload = () => viewLead(id);
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
@@ -457,14 +516,78 @@
       try { await api('POST', '/leads/' + id + '/notes', { body: noteBox.value }); toast('Note saved'); reload(); } catch (e) { fail(e); saveNote.disabled = false; }
     } }, 'Save note');
 
-    const hist = [...calls.map((c) => ({ t: c.created_at, kind: 'call', c })), ...notes.map((n) => ({ t: n.created_at, kind: 'note', n }))]
+    const hist = [...calls.map((c) => ({ t: c.created_at, kind: 'call', c })), ...notes.map((n) => ({ t: n.created_at, kind: 'note', n })),
+      ...deals.map((d) => ({ t: d.created_at, kind: 'deal', d })),
+      demo ? { t: demo.created_at, kind: 'demo', d: demo } : null,
+      L.demo_viewed_at ? { t: L.demo_viewed_at, kind: 'view' } : null,
+      L.created_at ? { t: L.created_at, kind: 'added' } : null].filter(Boolean)
       .sort((a, b) => (a.t < b.t ? 1 : -1));
-    const timeline = hist.length ? h('ul', { class: 'timeline' }, hist.map((x) => x.kind === 'note'
-      ? h('li', { class: 'note' }, h('b', null, x.n.user_name || 'Someone'), ' added a note', h('div', { class: 'when' }, fmt(x.t)), h('div', { class: 'text' }, x.n.body))
-      : h('li', null, h('b', null, OUTCOME_LABEL[x.c.outcome] || x.c.outcome),
+    const li = (cls, title, rest, when, extra) => h('li', { class: cls }, h('b', null, title), rest || null, h('div', { class: 'when' }, when), extra || null);
+    const timeline = hist.length ? h('ul', { class: 'timeline' }, hist.map((x) => {
+      if (x.kind === 'note') return li('note', x.n.user_name || 'Someone', ' added a note', fmt(x.t), h('div', { class: 'text' }, x.n.body));
+      if (x.kind === 'deal') return li('deal', 'Deal closed · ' + money(x.d.amount_cents), x.d.package ? h('span', { class: 'muted' }, ' · ' + x.d.package) : null, (x.d.rep_name || '') + ' · ' + fmt(x.t));
+      if (x.kind === 'demo') return li('demo', 'Demo built', h('span', { class: 'muted' }, ' · ' + (x.d.theme || '') + ' theme'), (x.d.by_name || '') + ' · ' + fmt(x.t) + (x.d.updated_at && x.d.updated_at !== x.d.created_at ? ' · edited ' + fmt(x.d.updated_at) : ''));
+      if (x.kind === 'view') return li('view', 'They opened the demo', h('span', { class: 'muted' }, ' · ' + (L.demo_views || 1) + (L.demo_views === 1 ? ' time' : ' times') + ' total'), 'last ' + fmt(x.t));
+      if (x.kind === 'added') return li('added', 'Lead added', h('span', { class: 'muted' }, L.source === 'api' ? ' by the scraper' : ' from CSV upload'), (L.batch_name ? L.batch_name + ' · ' : '') + fmt(x.t));
+      return li(x.c.outcome === 'booked' ? 'ok' : x.c.outcome === 'emailed' ? 'demo' : '', OUTCOME_LABEL[x.c.outcome] || x.c.outcome,
         x.c.to_status && x.c.to_status !== x.c.from_status ? h('span', { class: 'muted' }, ' → ' + (STATUS[x.c.to_status] || x.c.to_status)) : null,
-        h('div', { class: 'when' }, (x.c.user_name || '') + ' · ' + fmt(x.t)))))
-      : h('p', { class: 'dim' }, 'No calls or notes yet.');
+        (x.c.user_name || '') + ' · ' + fmt(x.t));
+    })) : h('p', { class: 'dim' }, 'No activity yet.');
+
+    // tags + next step (admin and the lead's rep)
+    const canEdit = S.me.role === 'admin' || S.me.role === 'rep';
+    const saveMeta = async (body, msg) => { try { await api('POST', '/leads/' + id + '/meta', body); toast(msg); reload(); } catch (x) { fail(x); } };
+    const tagRow = h('div', { class: 'tag-row' },
+      (L.tags || []).map((t) => h('span', { class: 'tchip' }, '#' + t, canEdit ? h('button', { 'aria-label': 'Remove tag ' + t, onclick: () => saveMeta({ tags: L.tags.filter((x) => x !== t) }, 'Tag removed') }, '×') : null)),
+      canEdit ? h('button', { class: 'tchip add', onclick: async () => {
+        const opts2 = await getOptions();
+        const tag = await sheet((box, close) => {
+          const inp = h('input', { placeholder: 'e.g. spanish, follow-up, big-shop', maxlength: 30 });
+          const sugg = (opts2.tags || []).filter((t) => !(L.tags || []).includes(t)).slice(0, 12);
+          box.append(h('h2', null, 'Add a tag'), h('p', { class: 'sub' }, 'Short labels you can filter by later.'),
+            h('div', { class: 'field' }, h('label', null, 'Tag'), inp),
+            sugg.length ? h('div', { class: 'row wrap', style: 'margin-bottom:12px' }, sugg.map((t) => h('button', { class: 'btn small', type: 'button', onclick: () => close(t) }, '#' + t))) : null,
+            h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value.trim() || null) }, 'Add tag')));
+          setTimeout(() => inp.focus(), 50);
+        });
+        if (tag) saveMeta({ tags: (L.tags || []).concat(tag) }, 'Tag added');
+      } }, '+ Tag') : null);
+
+    const nextDue = L.next_action_at && new Date(L.next_action_at) < new Date();
+    const setNext = async () => {
+      const t0 = L.next_action_at ? new Date(L.next_action_at) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; })();
+      const v = await sheet((box, close) => {
+        const what = h('input', { placeholder: 'e.g. Call back about pricing', value: L.next_action || '', maxlength: 140 });
+        const when = h('input', { type: 'datetime-local', value: toLocalInput(t0) });
+        const quick = (label, fn) => h('button', { class: 'btn small', type: 'button', onclick: () => { const d = new Date(); fn(d); when.value = toLocalInput(d); } }, label);
+        box.append(h('h2', null, 'Next step'), h('p', { class: 'sub' }, 'What happens next with ' + L.business + ', and when.'),
+          h('div', { class: 'field' }, h('label', null, 'What'), what),
+          h('div', { class: 'row wrap', style: 'margin-bottom:10px' },
+            quick('In 2 hours', (d) => d.setHours(d.getHours() + 2, 0, 0, 0)), quick('Tomorrow 10am', (d) => { d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); }),
+            quick('In 3 days', (d) => { d.setDate(d.getDate() + 3); d.setHours(10, 0, 0, 0); }), quick('Next week', (d) => { d.setDate(d.getDate() + 7); d.setHours(10, 0, 0, 0); })),
+          h('div', { class: 'field' }, h('label', null, 'When'), when),
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'),
+            h('button', { class: 'btn primary', onclick: () => { if (!when.value) return toast('Pick a time', true); close({ next_action_at: new Date(when.value).toISOString(), next_action: what.value }); } }, 'Save')));
+      });
+      if (v) saveMeta(v, 'Next step saved');
+    };
+    const nextBox = canEdit ? h('div', { class: 'next-box' + (nextDue ? ' due' : '') + (L.next_action_at ? '' : ' empty') },
+      h('span', { class: 'kic' }, icon('cal')),
+      h('div', { class: 'nb-body' }, L.next_action_at
+        ? [h('b', null, L.next_action || 'Follow up'), h('div', { class: 'sub' }, (nextDue ? 'Overdue · ' : '') + fmt(L.next_action_at, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))]
+        : [h('b', null, 'No next step set'), h('div', { class: 'sub' }, 'Every open lead should have one.')]),
+      h('div', { class: 'row' }, L.next_action_at ? h('button', { class: 'btn small', onclick: () => saveMeta({ next_action_at: null, next_action: null }, 'Cleared') }, 'Done') : null,
+        h('button', { class: 'btn small ' + (L.next_action_at ? '' : 'primary'), onclick: setNext }, L.next_action_at ? 'Change' : 'Set'))) : null;
+
+    // admin: quick reassign right in the header
+    let repQuick = null;
+    if (isAdmin) {
+      const o = await getOptions();
+      const rs = h('select', { class: 'rep-quick', 'aria-label': 'Assigned rep' }, h('option', { value: '' }, 'Unassigned'), o.reps.filter((r) => r.active || r.id === L.assigned_to).map((r) => h('option', { value: r.id }, r.name)));
+      rs.value = L.assigned_to || '';
+      rs.onchange = async () => { try { await api('PATCH', '/leads/' + id, { assigned_to: rs.value ? +rs.value : null }); toast(rs.value ? 'Assigned to ' + rs.selectedOptions[0].textContent : 'Unassigned'); reload(); } catch (x) { fail(x); } };
+      repQuick = h('label', { class: 'rep-pick' }, h('span', null, 'Rep'), rs);
+    }
 
     let adminPanel = null;
     if (isAdmin) {
@@ -505,8 +628,9 @@
       h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
       h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
         L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
-        h('h1', null, L.business)),
+        h('h1', null, L.business), h('div', { class: 'detail-meta' }, repQuick, tagRow)),
       heatSeg,
+      nextBox,
       actions,
       emailCue,
       scriptPanel,
@@ -783,6 +907,82 @@
     if (/(nail|lash|brow|salon|spa|beauty|hair|braid|wax|esthetic|makeup|bridal|florist|bakery|cake)/.test(c)) return 'glow';
     if (/(auto|detail|car|tire|smog|mechanic|repair|body shop|gym|fitness|training|taco|food|restaurant|grill|bbq|catering|truck|moving|plumb|electric|roof|construct|clean)/.test(c)) return 'drive';
     return 'noir';
+  }
+
+  /* ================= scraper & n8n (admin) ================= */
+  async function viewIntegrations() {
+    const r = await api('GET', '/keys');
+    const endpoint = location.origin + '/api/ingest';
+    const copy = async (text, msg) => { try { await navigator.clipboard.writeText(text); toast(msg || 'Copied'); } catch { prompt('Copy this:', text); } };
+    const codeBox = (text, label) => h('div', { class: 'code' }, h('pre', null, text), h('button', { class: 'btn small', onclick: () => copy(text, (label || 'Text') + ' copied') }, icon('copy'), 'Copy'));
+
+    const newKey = async () => {
+      const name = await sheet((box, close) => {
+        const inp = h('input', { placeholder: 'e.g. n8n Google Maps', maxlength: 40 });
+        box.append(h('h2', null, 'New API key'), h('p', { class: 'sub' }, 'Name it after where it will be used, so you know which one to revoke later.'),
+          h('div', { class: 'field' }, h('label', null, 'Name'), inp),
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value.trim() || 'Scraper') }, 'Create key')));
+        setTimeout(() => inp.focus(), 50);
+      });
+      if (!name) return;
+      try {
+        const k = await api('POST', '/keys', { name });
+        await sheet((box, close) => box.append(h('h2', null, 'Copy your key now'),
+          h('p', { class: 'sub' }, 'This is the only time it is shown. Paste it into n8n or your scraper. If you lose it, revoke it and make a new one.'),
+          h('div', { class: 'secret' }, k.key),
+          h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => copy(k.key, 'Key copied') }, icon('copy'), 'Copy key'), h('button', { class: 'btn', onclick: () => close(true) }, 'Done'))));
+        viewIntegrations();
+      } catch (e) { fail(e); }
+    };
+
+    const keysP = panel('API keys', h('button', { class: 'btn small primary', onclick: newKey }, '+ New key'),
+      r.keys.length ? h('div', { class: 'keys' }, r.keys.map((k) => h('div', { class: 'krow' + (k.revoked_at ? ' off' : '') },
+        h('span', { class: 'kic' }, icon('bolt')),
+        h('div', { class: 'kbody' }, h('b', null, k.name), h('div', { class: 'sub' }, h('span', { class: 'mono' }, k.prefix + '…'), ' · ',
+          k.revoked_at ? 'revoked ' + ago(k.revoked_at) : k.last_used_at ? 'last used ' + ago(k.last_used_at) : 'never used', ' · ', k.added + ' leads added')),
+        k.revoked_at ? h('span', { class: 'tag' }, 'Revoked') : h('button', { class: 'btn small danger', onclick: async () => {
+          if (!(await confirmSheet('Revoke "' + k.name + '"?', 'Anything using this key stops working right away. Leads already added stay.', 'Revoke', true))) return;
+          try { await api('DELETE', '/keys/' + k.id); toast('Key revoked'); viewIntegrations(); } catch (e) { fail(e); }
+        } }, 'Revoke')))) : h('div', { class: 'empty-sm' }, 'No keys yet. Make one to connect n8n or your scraper.'));
+
+    const example = JSON.stringify({ batch: 'Inglewood barbers', leads: [{ business: 'Fresh Cutz Barbershop', phone: '(310) 555-0101', email: '', website: '', city: 'Inglewood', category: 'Barber shop', rating: '4.8', address: '4512 W Century Blvd', link: 'https://maps.google.com/?cid=123' }] }, null, 2);
+    const curl = `curl -X POST ${endpoint} \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"leads":[{"business":"Fresh Cutz","phone":"3105550101","city":"Inglewood"}]}'`;
+    const howP = panel('How to connect', null,
+      h('div', { class: 'steps' },
+        h('div', { class: 'step' }, h('i', null, '1'), h('div', null, h('b', null, 'Send a POST to this address'), codeBox(endpoint, 'Address'))),
+        h('div', { class: 'step' }, h('i', null, '2'), h('div', null, h('b', null, 'Add your key as a header'), codeBox('Authorization: Bearer YOUR_KEY', 'Header'))),
+        h('div', { class: 'step' }, h('i', null, '3'), h('div', null, h('b', null, 'Send the leads as JSON (up to 500 per request)'),
+          h('p', { class: 'sub' }, 'Column names are flexible: name or title work for business, phoneNumber works for phone, url or website for the site, and so on. Each lead needs a business name plus a phone or email.'),
+          codeBox(example, 'Example')))),
+      h('details', { class: 'more-info' }, h('summary', null, 'In n8n'),
+        h('ol', null,
+          h('li', null, 'Add an ', h('b', null, 'HTTP Request'), ' node after your scraper. Method: POST. URL: the address above.'),
+          h('li', null, 'Authentication: ', h('b', null, 'Generic → Header Auth'), '. Name: Authorization. Value: Bearer + a space + your key.'),
+          h('li', null, 'Send Body: on. Body Content Type: JSON. Specify Body: Using JSON. Switch the JSON box to Expression and paste: ', h('code', null, '{{ { "leads": $input.all().map(i => i.json) } }}')),
+          h('li', null, 'Under Settings, turn on ', h('b', null, 'Execute Once'), ' so all leads go in one request.'),
+          h('li', null, 'Run it. The log below shows what came in.'))),
+      h('details', { class: 'more-info' }, h('summary', null, 'Options you can add'),
+        h('ul', null,
+          h('li', null, h('code', null, '"batch": "name"'), ' groups the leads into that batch. Default: the key name plus today’s date.'),
+          h('li', null, h('code', null, '"assign": "none"'), ' keeps them unassigned. Default: spread evenly across active reps.'),
+          h('li', null, h('code', null, '"start_status": "new"'), ' holds them back. Default: Demo needed, so they land in the demo queue.'),
+          h('li', null, h('code', null, '"skip_with_site": false'), ' keeps businesses that already have a website. Default: skip them.'))),
+      h('details', { class: 'more-info' }, h('summary', null, 'Test it with curl'), codeBox(curl, 'Command')));
+
+    const logP = panel('What came in', h('span', { class: 'dim small' }, 'Last 50 requests'),
+      r.log.length ? h('div', { class: 'ilog' },
+        h('div', { class: 'irow head' }, h('span', null, 'When'), h('span', null, 'Key'), h('span', null, 'Got'), h('span', null, 'Added'), h('span', null, 'Skipped')),
+        r.log.map((x) => h('div', { class: 'irow' + (x.error ? ' err' : '') },
+          h('span', null, ago(x.created_at)), h('span', { class: 'ell' }, x.key_name || '—', x.batch_name ? h('small', null, x.batch_name) : null),
+          h('span', null, String(x.received)), h('b', null, String(x.inserted)),
+          h('span', { class: 'ell' }, x.error ? x.error : [x.duplicates ? x.duplicates + ' dupes' : null, x.dnc ? x.dnc + ' DNC' : null, x.has_site ? x.has_site + ' have site' : null, x.invalid ? x.invalid + ' bad' : null].filter(Boolean).join(', ') || '—')))) :
+        h('div', { class: 'empty-sm' }, 'Nothing yet. Requests show up here as soon as they arrive.'));
+
+    shell('integrations', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Scraper & n8n'),
+        h('p', { class: 'sub' }, 'Send leads in automatically. Duplicates, Do Not Call numbers and businesses that already have a website are skipped, same as CSV upload.'))),
+      h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, keysP, howP), h('div', { class: 'col' }, logP)),
+    ]);
   }
 
   /* ================= batches + upload ================= */
@@ -1688,6 +1888,7 @@
         row('#/deals', 'deals', 'Deals & commissions', 'Closes, payouts and what you owe'),
         row('#/batches', 'batches', 'Batches', 'Lead uploads and how each batch is doing'),
         row('#/upload', 'batches', 'Upload CSV', 'Add a new batch of leads'),
+        row('#/integrations', 'bolt', 'Scraper & n8n', 'Send leads in automatically with an API key'),
         row('#/users', 'users', 'Team members', 'Add reps and devs, set commission %'),
         row('#/script', 'script', 'Call script', 'Edit what reps say on the phone'),
         row('#/account', 'account', 'Account', 'Password and log out')),
