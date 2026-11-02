@@ -1024,11 +1024,11 @@
           lead ? `Let's build ${lead.business} a site they can't say no to, with photos made for their kind of business. I already have their ${[lead.phone && 'phone', lead.city && 'city', lead.category && 'category', lead.rating && 'rating'].filter(Boolean).join(', ') || 'name'}. Paste anything else you've got (prices, hours, their Instagram bio), or just hit build.`
             : "Paste everything you've got on a business: their Google listing, Instagram bio, menu or price list. I'll write the site and pick a look. Then tell me what to change.")),
         ...list.map((m) => bubble(m.role, m.text, m.engine)));
-      if (!list.length) msgs.append(h('div', { class: 'suggest' }, (lead ? ['Build it from the lead info', 'Make it soft and pink', 'Make it dark and luxe'] : ['Show me an example']).map((s) => h('button', { onclick: () => {
+      if (!list.length) msgs.append(h('div', { class: 'suggest' }, (lead ? ['Build it from the lead info', 'Build it, make it bold', 'Build it, soft and elegant'] : ['Show me an example']).map((s) => h('button', { onclick: () => {
         if (s === 'Show me an example') { input.value = 'Fresh Cutz Barbershop\n4.8 (213) · Barber shop\n4512 W Century Blvd, Inglewood, CA\n(310) 555-0101\nFade $35\nBeard trim $15\nKids cut $25\nMon-Sat 9 AM–8 PM\nSunday Closed'; autosize(); input.focus(); return; }
         send(s === 'Build it from the lead info' ? 'Build the first version of the site from the business info.' : 'Build the first version. ' + s + '.');
       } }, s))));
-      else msgs.append(h('div', { class: 'suggest' }, ['Punchier headline', 'Change the colors', 'Shorter about section', 'Add a "why us" section'].map((s) => h('button', { onclick: () => send(s) }, s))));
+      else msgs.append(h('div', { class: 'suggest' }, ['Surprise me with a new design', 'Make it more playful', 'Make it feel more luxury', 'Punchier headline', 'Different photos'].map((s) => h('button', { onclick: () => send(s) }, s))));
       msgs.scrollTop = msgs.scrollHeight;
     }
     function renderLeadBar() {
@@ -1037,10 +1037,17 @@
         : h('div', { class: 'for' }, h('small', null, 'No lead picked'), h('button', { class: 'linkish', onclick: pickLead }, 'Pick a lead'), h('span', { class: 'dim small' }, 'or just paste info below')));
     }
     function renderTheme() {
-      const cur = draft ? draft.theme : null;
-      themeRow.replaceChildren(...Object.entries(THEMES).map(([k, t]) => h('button', { class: 'tchoice' + (cur === k ? ' on' : ''), disabled: !draft, style: `--tb:${t.bg};--ta:${(draft && draft.data.accent && cur === k) ? draft.data.accent : t.accent}`, onclick: async () => {
-        try { const x = await api('PATCH', '/studio/' + draft.id, { theme: k }); draft.theme = x.theme; renderTheme(); refresh(); } catch (e) { fail(e); }
-      } }, h('i'), t.label)));
+      const ds = draft && draft.data && draft.data.design;
+      const patch = async (body, msg) => {
+        if (!draft || !draft.id) return;
+        shellEl.classList.add('building');
+        try { const x = await api('PATCH', '/studio/' + draft.id, body); draft.data = x.data; renderTheme(); refresh(); if (msg) toast(msg); } catch (e) { fail(e); }
+        shellEl.classList.remove('building');
+      };
+      themeRow.replaceChildren(
+        h('button', { class: 'tchoice dice', disabled: !draft, title: 'Give it a whole new design', onclick: () => patch({ shuffle: true }, 'New design 🎲') }, h('span', { class: 'die' }, '🎲'), 'New design'),
+        h('div', { class: 'dev-seg mode-seg' }, [['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => h('button', { class: ds && ds.mode === k ? 'on' : null, disabled: !draft, onclick: () => patch({ mode: k }) }, l))),
+        ds ? h('span', { class: 'ds-tag', title: 'This site\'s design' }, h('i', { style: 'background:hsl(' + ds.accent_hue + ',' + ds.sat + '%,55%)' }), ds.display + ' · ' + ds.hero) : null);
     }
     function refresh() {
       if (!draft || !draft.id) { frameWrap.hidden = true; emptyPv.hidden = false; return; }

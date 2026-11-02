@@ -1522,13 +1522,17 @@ async function api(request, env, url) {
     const source = [lead ? leadSource(lead) : '', d ? d.source : '', message].filter(Boolean).join('\n\n').slice(-12000);
     const out = await studioRun(env, { message, data, theme, lead, source, messages, first: !Object.keys(data).length });
     const clean = cleanDemo(factCheck(out.data, data, source), lead || {});
+    // the design: invent one on the first build, then apply only the changes asked for
+    const reroll = /\b(new|different|another|fresh|random)\b.{0,12}\b(design|look|style|vibe|layout)\b|\b(redesign|shuffle|surprise me|start fresh)\b/i.test(message);
+    if (reroll || !clean.design) clean.design = makeDesign(clean, reroll ? {} : (out.design || {}), crypto.getRandomValues(new Uint32Array(1))[0]);
+    else if (out.design && typeof out.design === 'object') clean.design = makeDesign(clean, Object.assign({}, clean.design, out.design), 'keep');
     let newTheme = DEMO_THEMES[out.theme] ? out.theme : theme || pickTheme(clean.category);
     // first build: use the look made for this kind of business, unless they asked for a style
-    if (!Object.keys(data).length && !/\b(dark|black|gold|luxe|pink|soft|elegant|bold|neon|lime|bright|friendly|noir|glow|drive|fresh)\b/i.test(message)) newTheme = nicheFor(clean.category, clean.name).theme;
+    if (!Object.keys(data).length) newTheme = nicheFor(clean.category, clean.name).theme;
     // photos: make them on the first build, or when asked for new ones
     const wantPhotos = /\b(new|different|other|more|better|change|redo|swap)\b.{0,20}\b(photos?|pictures?|pics|images?)\b|\b(photos?|pictures?|pics|images?)\b.{0,20}\b(new|different|again|redo)\b/i.test(message);
     if ((wantPhotos || !(clean.images || []).length) && aiImagesReady(env)) {
-      const ids = await makeDemoPhotos(env, user.id, clean, newTheme, message);
+      const ids = await makeDemoPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, message);
       if (ids.length) { clean.images = ids; if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
     }
     messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
@@ -1548,6 +1552,8 @@ async function api(request, env, url) {
     if (!d) throw new HttpError(404, 'Draft not found');
     const data = JSON.parse(d.data || '{}');
     if (body.accent !== undefined) data.accent = /^#[0-9a-f]{6}$/i.test(String(body.accent)) ? body.accent : '';
+    if (body.shuffle) { data.design = makeDesign(data, body.mode ? { mode: body.mode } : {}, crypto.getRandomValues(new Uint32Array(1))[0]); data.accent = ''; }
+    else if (body.mode === 'dark' || body.mode === 'light') { data.design = makeDesign(data, Object.assign({}, data.design || {}, { mode: body.mode }), 'mode'); data.accent = ''; }
     const theme = DEMO_THEMES[body.theme] ? body.theme : d.theme;
     let leadId = d.lead_id;
     if (body.lead_id) { const lead = await loadLead(env, user, +body.lead_id); leadId = lead.id; }
@@ -1566,7 +1572,7 @@ async function api(request, env, url) {
     if (!d) throw new HttpError(404, 'Draft not found');
     if (!aiImagesReady(env)) bad('Photo making needs Cloudflare AI. It is not connected right now.');
     const data = JSON.parse(d.data || '{}');
-    const ids = await makeDemoPhotos(env, user.id, data, d.theme, str(body.hint, 200));
+    const ids = await makeDemoPhotos(env, user.id, data, data.design ? data.design.mode : d.theme, str(body.hint, 200));
     if (!ids.length) bad("Couldn't make photos right now. Try again in a minute.");
     data.images = ids;
     await env.DB.prepare('UPDATE studio_drafts SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), d.id).run();
@@ -1590,7 +1596,12 @@ async function api(request, env, url) {
 async function saveDemo(env, user, lead, themeIn, dataIn, origin) {
   {
     const theme = DEMO_THEMES[themeIn] ? themeIn : pickTheme(lead.category);
-    const data = cleanDemo(dataIn || {}, lead);
+    const prev = await env.DB.prepare('SELECT data FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
+    const prevData = prev ? JSON.parse(prev.data || '{}') : {};
+    const data = cleanDemo(Object.assign({}, dataIn || {}, {
+      design: (dataIn && dataIn.design) || prevData.design,
+      images: dataIn && Array.isArray(dataIn.images) && dataIn.images.length ? dataIn.images : prevData.images,
+    }), lead);
     const t = now();
     const existing = await env.DB.prepare('SELECT id, slug FROM demos WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
     let slug;
@@ -1611,9 +1622,487 @@ async function saveDemo(env, user, lead, themeIn, dataIn, origin) {
   }
 }
 
+/* ================= Unique site designs (design DNA) =================
+   Every demo gets its own design: palette, fonts, hero, section styles,
+   order, shapes, texture and motion. The AI suggests it; anything missing
+   or invalid is filled in at random (biased by the kind of business). */
+
+const DFONTS = {
+  anton: { q: 'family=Anton', css: "'Anton', Impact, sans-serif", upper: true, w: 400, k: 0.5 },
+  bebas: { q: 'family=Bebas+Neue', css: "'Bebas Neue', Impact, sans-serif", upper: true, w: 400, k: 0.44 },
+  archivo: { q: 'family=Archivo+Black', css: "'Archivo Black', 'Arial Black', sans-serif", upper: true, w: 400, k: 0.8 },
+  oswald: { q: 'family=Oswald:wght@600;700', css: "'Oswald', 'Arial Narrow', sans-serif", upper: true, w: 700, k: 0.52 },
+  fraunces: { q: 'family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,800', css: "'Fraunces', Georgia, serif", italic: true, w: 700, k: 0.58 },
+  playfair: { q: 'family=Playfair+Display:ital,wght@0,800;1,700', css: "'Playfair Display', Georgia, serif", w: 800, k: 0.6 },
+  dmserif: { q: 'family=DM+Serif+Display:ital@0;1', css: "'DM Serif Display', Georgia, serif", w: 400, k: 0.54 },
+  cormorant: { q: 'family=Cormorant+Garamond:ital,wght@1,600;1,700', css: "'Cormorant Garamond', Georgia, serif", italic: true, w: 700, k: 0.5 },
+  abril: { q: 'family=Abril+Fatface', css: "'Abril Fatface', Georgia, serif", w: 400, k: 0.64 },
+  syne: { q: 'family=Syne:wght@700;800', css: "'Syne', 'Trebuchet MS', sans-serif", w: 800, k: 0.72 },
+  spacegrotesk: { q: 'family=Space+Grotesk:wght@600;700', css: "'Space Grotesk', 'Trebuchet MS', sans-serif", w: 700, k: 0.62 },
+  bricolage: { q: 'family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800', css: "'Bricolage Grotesque', 'Trebuchet MS', sans-serif", w: 800, k: 0.62 },
+  unbounded: { q: 'family=Unbounded:wght@600;800', css: "'Unbounded', 'Arial Black', sans-serif", w: 800, k: 0.84 },
+  outfit: { q: 'family=Outfit:wght@700;800', css: "'Outfit', 'Trebuchet MS', sans-serif", w: 800, k: 0.6 },
+  sora: { q: 'family=Sora:wght@700;800', css: "'Sora', 'Trebuchet MS', sans-serif", w: 800, k: 0.68 },
+  chakra: { q: 'family=Chakra+Petch:wght@600;700', css: "'Chakra Petch', 'Trebuchet MS', sans-serif", upper: true, w: 700, k: 0.64 },
+  righteous: { q: 'family=Righteous', css: "'Righteous', 'Trebuchet MS', sans-serif", w: 400, k: 0.62 },
+  rubik: { q: 'family=Rubik:wght@800;900', css: "'Rubik', 'Trebuchet MS', sans-serif", w: 900, k: 0.64 },
+};
+const DBODY = {
+  manrope: { q: 'family=Manrope:wght@400;500;600;700;800', css: "'Manrope', system-ui, sans-serif" },
+  inter: { q: 'family=Inter:wght@400;500;600;700;800', css: "'Inter', system-ui, sans-serif" },
+  dmsans: { q: 'family=DM+Sans:wght@400;500;600;700', css: "'DM Sans', system-ui, sans-serif" },
+  jakarta: { q: 'family=Plus+Jakarta+Sans:wght@400;500;600;700;800', css: "'Plus Jakarta Sans', system-ui, sans-serif" },
+  karla: { q: 'family=Karla:wght@400;500;600;700;800', css: "'Karla', system-ui, sans-serif" },
+  outfitb: { q: 'family=Outfit:wght@400;500;600;700', css: "'Outfit', system-ui, sans-serif" },
+};
+const DOPTS = {
+  hero: ['fullbleed', 'split', 'splitleft', 'arch', 'slant', 'tilt', 'circle', 'stack', 'poster'],
+  services: ['cards', 'menu', 'rows', 'tiles'],
+  why: ['numbered', 'bordered', 'quote'],
+  gallery: ['mosaic', 'strip', 'polaroid'],
+  texture: ['grain', 'dots', 'grid', 'blobs', 'halo', 'lines', 'rays', 'none'],
+  radius: [0, 10, 22, 34],
+  buttons: ['pill', 'rounded', 'square'],
+  nav: ['bar', 'float'],
+  motion: ['rise', 'fade', 'slide'],
+};
+// what tends to fit each kind of business (random picks lean this way)
+const NICHE_STYLE = {
+  pets: { dark: 0.15, hues: [25, 35, 160, 190, 200, 330], fonts: ['bricolage', 'outfit', 'righteous', 'rubik', 'syne', 'fraunces'] },
+  barber: { dark: 0.85, hues: [30, 40, 0, 210, 150, 45], fonts: ['anton', 'bebas', 'oswald', 'archivo', 'abril', 'playfair', 'chakra'] },
+  nails: { dark: 0.3, hues: [330, 340, 10, 280, 300, 20], fonts: ['fraunces', 'playfair', 'dmserif', 'cormorant', 'syne', 'abril'] },
+  lash: { dark: 0.35, hues: [330, 20, 30, 280, 350], fonts: ['cormorant', 'fraunces', 'dmserif', 'playfair', 'syne'] },
+  hair: { dark: 0.4, hues: [330, 20, 35, 270, 45, 160], fonts: ['playfair', 'dmserif', 'fraunces', 'abril', 'syne', 'bebas'] },
+  tattoo: { dark: 0.9, hues: [0, 350, 30, 200, 120], fonts: ['anton', 'abril', 'chakra', 'bebas', 'unbounded'] },
+  auto: { dark: 0.85, hues: [80, 200, 0, 25, 190, 270], fonts: ['archivo', 'chakra', 'unbounded', 'bebas', 'oswald', 'sora'] },
+  food: { dark: 0.5, hues: [10, 25, 40, 120, 0, 350], fonts: ['rubik', 'righteous', 'archivo', 'bebas', 'abril', 'bricolage'] },
+  fitness: { dark: 0.8, hues: [0, 25, 80, 200, 270], fonts: ['archivo', 'bebas', 'unbounded', 'anton', 'chakra'] },
+  home: { dark: 0.2, hues: [200, 150, 210, 30, 120, 180], fonts: ['outfit', 'sora', 'spacegrotesk', 'bricolage', 'rubik'] },
+  general: { dark: 0.5, hues: [210, 30, 160, 270, 0, 45], fonts: Object.keys(DFONTS) },
+};
+
+function seededRandom(seed) {
+  let s = 0;
+  for (const c of String(seed)) s = (Math.imul(s ^ c.charCodeAt(0), 2654435761) >>> 0) || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+}
+const pickOne = (rnd, list) => list[Math.floor(rnd() * list.length) % list.length];
+
+// Build (or repair) a design. `want` is what the AI or the person asked for.
+function makeDesign(data, want, seed) {
+  want = want && typeof want === 'object' ? want : {};
+  const rnd = seededRandom(seed || Math.random());
+  const N = nicheFor(data.category, data.name);
+  const st = NICHE_STYLE[N.key] || NICHE_STYLE.general;
+  const ok = (k, v) => DOPTS[k].includes(v);
+  const num = (v, lo, hi) => (Number.isFinite(+v) && +v >= lo && +v <= hi ? Math.round(+v) : null);
+  const mode = want.mode === 'dark' || want.mode === 'light' ? want.mode : (rnd() < st.dark ? 'dark' : 'light');
+  const hue = num(want.hue, 0, 360) ?? (pickOne(rnd, st.hues) + Math.round(rnd() * 16 - 8) + 360) % 360;
+  const accentHue = num(want.accent_hue, 0, 360) ?? (rnd() < 0.55 ? hue : (hue + pickOne(rnd, [30, 150, 180, 200, 330])) % 360);
+  let order = Array.isArray(want.order) ? want.order.filter((x) => ['services', 'why', 'gallery', 'about'].includes(x)) : [];
+  order = [...new Set(order)];
+  if (order.length !== 4) {
+    const rest = ['why', 'gallery', 'about'].sort(() => rnd() - 0.5);
+    order = rnd() < 0.75 ? ['services', ...rest] : [rest[0], 'services', rest[1], rest[2]];
+  }
+  return {
+    v: 1, mode, hue, accent_hue: accentHue,
+    sat: num(want.sat, 30, 100) ?? Math.round(55 + rnd() * 40),
+    display: DFONTS[want.display] ? want.display : pickOne(rnd, st.fonts.filter((f) => DFONTS[f])),
+    body: DBODY[want.body] ? want.body : pickOne(rnd, Object.keys(DBODY)),
+    hero: ok('hero', want.hero) ? want.hero : pickOne(rnd, DOPTS.hero),
+    services: ok('services', want.services) ? want.services : pickOne(rnd, DOPTS.services),
+    why: ok('why', want.why) ? want.why : pickOne(rnd, DOPTS.why),
+    gallery: ok('gallery', want.gallery) ? want.gallery : pickOne(rnd, DOPTS.gallery),
+    texture: ok('texture', want.texture) ? want.texture : pickOne(rnd, DOPTS.texture),
+    radius: DOPTS.radius.includes(+want.radius) ? +want.radius : pickOne(rnd, DOPTS.radius),
+    buttons: ok('buttons', want.buttons) ? want.buttons : pickOne(rnd, DOPTS.buttons),
+    nav: ok('nav', want.nav) ? want.nav : pickOne(rnd, DOPTS.nav),
+    motion: ok('motion', want.motion) ? want.motion : pickOne(rnd, DOPTS.motion),
+    marquee: typeof want.marquee === 'boolean' ? want.marquee : rnd() < 0.6,
+    order,
+  };
+}
+
+/* ---- color: build a palette that always passes contrast ---- */
+function hslToRgb(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0), f(8), f(4)].map((x) => Math.round(x * 255));
+}
+const toHex = (rgb) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).join('');
+const hsl = (h, s, l) => toHex(hslToRgb(((h % 360) + 360) % 360, s, l));
+function lum(hexc) {
+  const v = hexc.replace('#', '').match(/../g).map((x) => parseInt(x, 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+}
+const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function palette(D, accentOverride) {
+  const h = D.hue, dark = D.mode === 'dark';
+  const P = dark
+    ? { bg: hsl(h, 22, 6), surface: hsl(h, 18, 10.5), surface2: hsl(h, 16, 14), ink: hsl(h, 25, 95), muted: hsl(h, 10, 68) }
+    : { bg: hsl(h, 45, 96.5), surface: hsl(h, 60, 99.3), surface2: hsl(h, 38, 92), ink: hsl(h, 32, 11), muted: hsl(h, 12, 36) };
+  let accent = /^#[0-9a-f]{6}$/i.test(accentOverride || '') ? accentOverride : null;
+  if (!accent) {
+    // walk lightness until the accent stands out from the background
+    for (let i = 0; i < 40; i++) {
+      const l = dark ? 58 + i : 46 - i;
+      const c = hsl(D.accent_hue, D.sat, l);
+      if (contrast(c, P.bg) >= 3.2) { accent = c; break; }
+    }
+    accent = accent || (dark ? '#ffffff' : '#111111');
+  }
+  P.accent = accent;
+  P.onAccent = contrast(accent, '#ffffff') >= contrast(accent, '#0b0b0b') ? '#ffffff' : '#0b0b0b';
+  P.line = dark ? 'rgba(255,255,255,.11)' : 'rgba(0,0,0,.09)';
+  return P;
+}
+
+const SITE_SCRIPT = String.raw`<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var els=document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12,rootMargin:'0px 0px -40px 0px'});
+    els.forEach(function(el){io.observe(el);});
+  } else els.forEach(function(el){el.classList.add('in');});
+  function fitHero(){var h=document.querySelector('.hero h1');if(!h)return;if(h.dataset.fs===undefined)h.dataset.fs=h.style.fontSize;h.style.fontSize=h.dataset.fs;var ws=[].slice.call(h.querySelectorAll('.w')),box=h.parentElement.getBoundingClientRect().width||document.documentElement.clientWidth-44,s=parseFloat(getComputedStyle(h).fontSize),n=0;
+    function widest(){return Math.max.apply(null,ws.map(function(w){return w.getBoundingClientRect().width;}).concat([0]));}
+    while(widest()>box&&s>26&&n++<50){s-=2;h.style.fontSize=s+'px';}}
+  fitHero();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitHero);addEventListener('resize',fitHero);
+  var list=document.getElementById('hours'); if(!list) return;
+  var days=['sun','mon','tue','wed','thu','fri','sat'], now=new Date(), today=days[now.getDay()];
+  function mins(t){var m=/(\d{1,2})(?::(\d{2}))?\s*(a|p)?/i.exec(t); if(!m) return null; var h=+m[1]%12, mi=+(m[2]||0); if(m[3]&&m[3].toLowerCase()==='p') h+=12; return h*60+mi;}
+  var open=null;
+  Array.prototype.forEach.call(list.children,function(li){
+    var d=(li.getAttribute('data-day')||'').toLowerCase().slice(0,3);
+    if(d!==today) return; li.classList.add('today');
+    var t=li.getAttribute('data-time')||''; if(/closed/i.test(t)){open=false;return;}
+    var parts=t.split(/[-–—]|to/i); if(parts.length<2) return;
+    var a=mins(parts[0]), b=mins(parts[1]); if(a==null||b==null) return;
+    if(!/(a|p)/i.test(parts[1])&&b<a) b+=720;
+    var n=now.getHours()*60+now.getMinutes(); open=n>=a&&n<b;
+  });
+  var st=document.getElementById('status');
+  if(st&&open!==null){st.classList.toggle('open',open);st.querySelector('span').textContent=open?'Open now':'Closed right now';}
+})();
+</script>`;
+
+function renderSite(d, D) {
+  const P = palette(D, d.accent);
+  const F = DFONTS[D.display] || DFONTS.anton, B = DBODY[D.body] || DBODY.manrope;
+  const dark = D.mode === 'dark';
+  const name = d.name || 'Your business';
+  const words = name.split(/\s+/).filter(Boolean);
+  const longest = Math.max(4, ...words.map((w) => w.length));
+  const N = nicheFor(d.category, d.name);
+  const telHref = d.phone ? 'tel:' + String(d.phone).replace(/[^\d+]/g, '') : '';
+  const book = d.booking || telHref;
+  const bookLabel = d.booking ? N.book : (d.phone ? (N.key === 'food' ? 'Call to order' : N.key === 'home' ? 'Call for a quote' : 'Call to book') : 'Get in touch');
+  const ext = d.booking ? ' target="_blank" rel="noopener"' : '';
+  const imgs = (d.images || []).map((id) => '/img/' + id + '.jpg').concat(d.photos || []);
+  const heroImg = imgs[0] || '';
+  const gal = imgs.slice(1);
+  const hero = heroImg ? D.hero : 'poster';
+  const sideBySide = ['split', 'splitleft', 'arch', 'slant', 'tilt', 'circle'].includes(hero);
+  const fitVw = (sideBySide ? 52 : 88) / (longest * F.k);
+  const mapHref = d.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name + ' ' + d.address) : '';
+  const sub = [d.category, d.city].filter(Boolean).join(' · ');
+  const tagline = d.tagline || (d.category && d.city ? `${d.city}'s go-to ${d.category.toLowerCase()}.` : 'Welcome in.');
+  const services = d.services || [], hours = d.hours || [], hl = d.highlights || [];
+  const marquee = services.length ? services.map((x) => x.name) : [d.category || 'Quality', d.city || 'Local', N.book];
+  const rating = d.rating ? `<span class="chip"><b>${esc(d.rating)}</b> ★ on Google${d.reviews ? ` · ${esc(d.reviews)} reviews` : ''}</span>` : '';
+  const R = D.radius, BR = D.buttons === 'pill' ? 999 : D.buttons === 'rounded' ? 14 : 3;
+  const sample = d.images && d.images.length ? '<small class="sample">Sample photo</small>' : '';
+  const btnMain = (extra) => book ? `<a class="btn main${extra || ''}" href="${esc(book)}"${ext}>${esc(bookLabel)} <span aria-hidden="true">→</span></a>` : '';
+  const head = (eyebrow, title, note) => `<div class="head reveal"><div><span class="eyebrow">${esc(eyebrow)}</span><h2 class="disp">${esc(title)}</h2></div>${note ? `<p>${esc(note)}</p>` : ''}</div>`;
+  const disp = `font-family:${F.css};font-weight:${F.w};${F.upper ? 'text-transform:uppercase;letter-spacing:.01em;' : 'letter-spacing:-.02em;'}${F.italic ? 'font-style:italic;' : ''}`;
+
+  const texture = {
+    grain: `<div class="tx-grain"></div><div class="tx-glow"></div>`,
+    dots: `<div class="tx-dots"></div><div class="tx-glow"></div>`,
+    grid: `<div class="tx-grid"></div><div class="tx-glow"></div>`,
+    blobs: `<div class="tx-blob b1"></div><div class="tx-blob b2"></div><div class="tx-blob b3"></div>`,
+    halo: `<div class="tx-halo"></div><div class="tx-grain"></div>`,
+    lines: `<div class="tx-lines"></div><div class="tx-glow"></div>`,
+    rays: `<div class="tx-rays"></div>`,
+    none: `<div class="tx-glow soft"></div>`,
+  }[D.texture] || '';
+
+  const h1 = `<h1 class="disp" style="font-size:clamp(34px,min(${sideBySide ? 9 : 14}vw,${fitVw.toFixed(1)}vw),${sideBySide ? 120 : 170}px)">${words.map((w, i) => `<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ')}</h1>`;
+  const copy = `<div class="hero-copy">
+      <div class="meta">${sub ? `<span class="chip">${esc(sub)}</span>` : ''}${rating}</div>
+      ${h1}
+      <p class="lead">${esc(tagline)}</p>
+      <div class="cta">${btnMain()}${mapHref ? `<a class="btn ghost" href="${esc(mapHref)}" target="_blank" rel="noopener">Get directions</a>` : ''}</div>
+    </div>`;
+  let heroHtml;
+  if (hero === 'fullbleed') {
+    heroHtml = `<header class="hero h-full" id="top"><div class="bg" aria-hidden="true"><img class="hero-photo" src="${esc(heroImg)}" alt="" fetchpriority="high"><div class="shade"></div></div><div class="wrap">${copy}</div>${sample}</header>`;
+  } else if (hero === 'stack') {
+    heroHtml = `<header class="hero h-stack" id="top"><div class="bg" aria-hidden="true">${texture}</div><div class="wrap">${copy}<figure class="stack-photo reveal"><img src="${esc(heroImg)}" alt="${esc(name)}" fetchpriority="high">${sample}</figure></div></header>`;
+  } else if (hero === 'poster') {
+    heroHtml = `<header class="hero h-poster" id="top"><div class="bg" aria-hidden="true">${texture}</div><div class="wrap">${copy}${heroImg ? `<div class="poster-strip">${imgs.slice(0, 3).map((u, i) => `<figure style="--i:${i}"><img src="${esc(u)}" alt="" ${i ? 'loading="lazy"' : 'fetchpriority="high"'}></figure>`).join('')}</div>` : ''}</div></header>`;
+  } else {
+    heroHtml = `<header class="hero h-side h-${hero}" id="top"><div class="bg" aria-hidden="true">${texture}</div><div class="wrap hero-grid">${copy}
+      <div class="hero-art"><figure class="frame"><img src="${esc(heroImg)}" alt="${esc(name)}" fetchpriority="high"></figure>
+        ${d.rating ? `<div class="float f1"><b>${esc(d.rating)} ★</b><span>on Google</span></div>` : ''}<div class="float f2"><i></i><span>${esc(N.eyebrow)}</span></div>${sample}</div></div></header>`;
+  }
+
+  const svcItems = services.map((x, i) => {
+    if (D.services === 'menu') return `<div class="mi reveal" style="--i:${i % 6}"><div class="mi-top"><h3>${esc(x.name)}</h3><span class="dots"></span>${x.price ? `<b>${esc(x.price)}</b>` : ''}</div>${x.desc ? `<p>${esc(x.desc)}</p>` : ''}</div>`;
+    if (D.services === 'rows') return `<div class="row reveal" style="--i:${i % 6}"><span class="no">${String(i + 1).padStart(2, '0')}</span><div><h3>${esc(x.name)}</h3>${x.desc ? `<p>${esc(x.desc)}</p>` : ''}</div>${x.price ? `<b>${esc(x.price)}</b>` : '<b></b>'}</div>`;
+    if (D.services === 'tiles') return `<article class="tile reveal t${i % 4}" style="--i:${i % 6}">${x.price ? `<b>${esc(x.price)}</b>` : ''}<h3>${esc(x.name)}</h3>${x.desc ? `<p>${esc(x.desc)}</p>` : ''}</article>`;
+    return `<article class="svc reveal" style="--i:${i % 6}"><div class="svc-top"><h3>${esc(x.name)}</h3>${x.price ? `<span class="price">${esc(x.price)}</span>` : ''}</div>${x.desc ? `<p>${esc(x.desc)}</p>` : ''}</article>`;
+  }).join('');
+  const sections = {
+    services: services.length ? `<section class="block" id="services"><div class="wrap">${head(N.eyebrow, N.services, services.some((x) => x.price) ? 'Prices are a starting point. Ask about anything you don’t see.' : '')}<div class="svc-${D.services}">${svcItems}</div></div></section>` : '',
+    why: hl.length ? `<section class="block alt" id="why"><div class="wrap">${D.why === 'quote'
+      ? `<div class="whyq">${hl.map((x, i) => `<div class="reveal" style="--i:${i}"><h3 class="disp">${esc(x.title)}</h3>${x.text ? `<p>${esc(x.text)}</p>` : ''}</div>`).join('')}</div>`
+      : `${head('Why ' + (words[0] || 'us'), 'The difference')}<div class="whys why-${D.why}">${hl.map((x, i) => `<article class="why reveal" style="--i:${i}">${D.why === 'numbered' ? `<span class="num disp">0${i + 1}</span>` : '<span class="dot"></span>'}<h3>${esc(x.title)}</h3>${x.text ? `<p>${esc(x.text)}</p>` : ''}</article>`).join('')}</div>`}</div></section>` : '',
+    about: d.about ? `<section class="block" id="about"><div class="wrap about"><blockquote class="disp reveal">${esc(name)}${d.city ? `<br><em>in ${esc(d.city)}.</em>` : ''}</blockquote><p class="reveal" style="--i:1">${esc(d.about)}</p></div></section>` : '',
+    gallery: gal.length ? `<section class="block" id="gallery"><div class="wrap">${head('A look inside', 'The vibe', d.images && d.images.length ? 'Sample photos for this preview. We’d swap in your real ones.' : '')}
+      <div class="gal-${D.gallery}">${gal.map((u, i) => `<figure class="g reveal g${i}" style="--i:${i}"><img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer"></figure>`).join('')}</div></div></section>` : '',
+  };
+  const hoursHtml = hours.map((h) => `<li data-day="${esc(h.day)}" data-time="${esc(h.time)}"><span>${esc(h.day)}</span><span>${esc(h.time)}</span></li>`).join('');
+  const motion = { rise: 'translateY(30px)', fade: 'scale(.97)', slide: 'translateX(-30px)' }[D.motion] || 'translateY(30px)';
+  const fontQ = [F.q, B.q].join('&');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="${P.bg}">
+<title>${esc(name)}${sub ? ' | ' + esc(sub) : ''}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?${fontQ}&display=swap" rel="stylesheet">
+<style>
+:root{--bg:${P.bg};--surface:${P.surface};--surface2:${P.surface2};--ink:${P.ink};--muted:${P.muted};--line:${P.line};--accent:${P.accent};--on:${P.onAccent};--r:${R}px;--br:${BR}px;--body:${B.css};color-scheme:${dark ? 'dark' : 'light'}}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+.disp{${disp}line-height:.95}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:54px;padding:0 26px;border-radius:var(--br);font-weight:800;font-size:16px;border:1.5px solid var(--line);transition:transform .2s,box-shadow .25s,background .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn.main{background:var(--accent);color:var(--on);border-color:transparent;box-shadow:0 16px 40px -14px var(--accent)}
+.btn.main:hover{box-shadow:0 22px 50px -12px var(--accent)}
+.btn.ghost{background:color-mix(in srgb,var(--surface) 60%,transparent);color:var(--ink);backdrop-filter:blur(8px)}
+.btn:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--br);border:1px solid var(--line);font-size:14px;color:var(--muted);background:color-mix(in srgb,var(--surface) 75%,transparent);backdrop-filter:blur(6px)}
+.chip b{color:var(--ink)}
+.eyebrow{font-size:12.5px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.ribbon{position:relative;z-index:30;background:var(--accent);color:var(--on);text-align:center;font-size:13px;font-weight:700;padding:8px 44px}
+.ribbon button{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;color:inherit;font-size:18px;cursor:pointer;width:30px;height:30px}
+nav{position:sticky;top:0;z-index:20}
+nav .in{display:flex;align-items:center;justify-content:space-between;gap:12px;height:68px}
+.nav-bar{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--line)}
+.nav-float{padding-top:12px}
+.nav-float .in{height:58px;padding:0 10px 0 22px;border-radius:calc(var(--br) + 6px);border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 18px 40px -24px rgba(0,0,0,.5)}
+nav .logo{${disp}font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56%}
+nav .links{display:none;gap:28px;font-weight:600;font-size:15px;color:var(--muted)}
+nav .links a:hover{color:var(--ink)}
+nav .btn{height:42px;padding:0 18px;font-size:14px}
+@media(min-width:860px){nav .links{display:flex}}
+/* hero */
+.hero{position:relative;overflow:hidden;isolation:isolate;padding:70px 0 80px}
+.hero .bg{position:absolute;inset:0;z-index:-1;overflow:hidden}
+.hero>.wrap{width:100%}
+.hero h1{margin:18px 0 22px}
+.hero h1 .w{display:inline-block;overflow:hidden;vertical-align:top;padding-bottom:.08em}
+.hero h1 .w>span{display:inline-block;animation:rise 1s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 90ms + 150ms)}
+.hero h1 .w:last-child>span{color:var(--accent)}
+.lead{font-size:clamp(18px,2.3vw,22px);color:var(--muted);max-width:36ch;animation:fade 1s .6s both}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;animation:fade 1s .8s both}
+.meta{display:flex;flex-wrap:wrap;gap:10px;animation:fade 1s .4s both}
+@keyframes rise{from{transform:translateY(105%)}to{transform:none}}
+@keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes kb{from{transform:scale(1.1)}to{transform:scale(1)}}
+.h-full{min-height:min(96svh,940px);display:flex;align-items:flex-end;padding-bottom:90px}
+.h-full .hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kb 18s ease-out both}
+.h-full .shade{position:absolute;inset:0;background:linear-gradient(0deg,var(--bg) 4%,color-mix(in srgb,var(--bg) 70%,transparent) 45%,color-mix(in srgb,var(--bg) 20%,transparent) 100%)}
+@media(min-width:900px){.h-full .shade{background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 94%,transparent),color-mix(in srgb,var(--bg) 55%,transparent) 55%,transparent),linear-gradient(0deg,var(--bg),transparent 30%)}.h-full{align-items:center}}
+.h-side{min-height:min(92svh,900px);display:flex;align-items:center}
+.hero-grid{display:grid;gap:46px;align-items:center}
+@media(min-width:900px){.hero-grid{grid-template-columns:1.05fr .95fr}.h-splitleft .hero-art{order:-1}}
+.hero-art{position:relative;animation:fade 1.2s .3s both}
+.frame{position:relative;overflow:hidden;aspect-ratio:4/5;max-height:74svh;margin:0 auto;border-radius:var(--r);box-shadow:0 50px 100px -50px color-mix(in srgb,var(--accent) 80%,#000)}
+.frame img{width:100%;height:100%;object-fit:cover;animation:kb 16s ease-out both}
+.h-arch .frame{border-radius:999px 999px var(--r) var(--r);border:8px solid var(--surface)}
+.h-slant .frame{border-radius:4px;clip-path:polygon(16% 0,100% 0,84% 100%,0 100%);aspect-ratio:5/6}
+.h-slant .hero-art::before{content:'';position:absolute;inset:-14px;clip-path:polygon(16% 0,100% 0,84% 100%,0 100%);background:linear-gradient(135deg,var(--accent),transparent 60%);opacity:.75}
+.h-tilt .frame{transform:rotate(2.5deg);border:10px solid var(--surface)}
+.h-circle .frame{border-radius:50%;aspect-ratio:1;outline:2px dashed color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:14px;max-width:480px}
+.float{position:absolute;display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:calc(var(--r) * .6 + 8px);background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 20px 50px -20px rgba(0,0,0,.5);font-size:14px;animation:bob 5s ease-in-out infinite}
+.float b{${disp}font-size:20px;color:var(--accent)}
+.float span{color:var(--muted);font-weight:600}
+.float i{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.f1{left:-12px;bottom:16%}.f2{right:-8px;top:10%;animation-delay:-2.5s}
+@media(max-width:899px){.f1{left:6px}.f2{right:6px}.frame{max-height:58svh}}
+@keyframes bob{50%{transform:translateY(-10px)}}
+.sample{position:absolute;right:12px;bottom:12px;z-index:3;font:700 10.5px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;padding:6px 9px;border-radius:99px;background:rgba(0,0,0,.55);color:#fff}
+.h-stack .stack-photo{position:relative;margin-top:50px;border-radius:var(--r);overflow:hidden;aspect-ratio:16/8}
+.h-stack .stack-photo img{width:100%;height:100%;object-fit:cover}
+@media(max-width:700px){.h-stack .stack-photo{aspect-ratio:4/3}}
+.h-poster{padding-top:90px}
+.h-poster .hero-copy{text-align:center;display:flex;flex-direction:column;align-items:center}
+.h-poster .lead{margin:0 auto}
+.h-poster .meta,.h-poster .cta{justify-content:center}
+.poster-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:56px}
+.poster-strip figure{overflow:hidden;border-radius:var(--r);aspect-ratio:3/4;animation:fade 1s both;animation-delay:calc(var(--i) * 120ms + 500ms)}
+.poster-strip figure:nth-child(2){transform:translateY(-26px)}
+.poster-strip img{width:100%;height:100%;object-fit:cover}
+/* textures */
+.tx-glow{position:absolute;inset:-20%;background:radial-gradient(600px 380px at 15% 20%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%),radial-gradient(520px 420px at 90% 85%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 70%)}
+.tx-glow.soft{opacity:.6}
+.tx-grain{position:absolute;inset:0;opacity:${dark ? '.09' : '.06'};background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.tx-dots{position:absolute;inset:0;background-image:radial-gradient(color-mix(in srgb,var(--ink) 16%,transparent) 1.2px,transparent 1.5px);background-size:24px 24px;mask-image:linear-gradient(180deg,#000,transparent 75%);-webkit-mask-image:linear-gradient(180deg,#000,transparent 75%)}
+.tx-grid{position:absolute;inset:-40% -10% 0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;transform:perspective(600px) rotateX(55deg);transform-origin:center bottom;animation:road 3s linear infinite;mask-image:linear-gradient(to top,#000 10%,transparent 75%);-webkit-mask-image:linear-gradient(to top,#000 10%,transparent 75%)}
+@keyframes road{to{background-position:0 56px}}
+.tx-blob{position:absolute;border-radius:42% 58% 63% 37%/41% 44% 56% 59%;filter:blur(${dark ? 70 : 50}px);opacity:${dark ? .45 : .6};animation:morph 16s ease-in-out infinite}
+.tx-blob.b1{width:50vmax;height:50vmax;background:color-mix(in srgb,var(--accent) 60%,var(--bg));left:-14vmax;top:-16vmax}
+.tx-blob.b2{width:40vmax;height:40vmax;background:color-mix(in srgb,var(--accent) 35%,#fff0);right:-12vmax;top:12vmax;animation-delay:-6s}
+.tx-blob.b3{width:30vmax;height:30vmax;background:var(--surface2);left:35%;bottom:-14vmax;animation-delay:-10s}
+@keyframes morph{50%{border-radius:58% 42% 38% 62%/55% 61% 39% 45%;transform:rotate(14deg) scale(1.06)}}
+.tx-halo{position:absolute;width:140vmax;height:140vmax;left:50%;top:50%;translate:-50% -50%;background:conic-gradient(from 0deg,transparent 0 60%,color-mix(in srgb,var(--accent) 36%,transparent) 72%,transparent 84%);animation:spin 24s linear infinite;opacity:.5;filter:blur(40px)}
+@keyframes spin{to{rotate:360deg}}
+.tx-lines{position:absolute;inset:0;background:repeating-linear-gradient(115deg,transparent 0 38px,color-mix(in srgb,var(--accent) 10%,transparent) 38px 39px);mask-image:radial-gradient(70% 70% at 30% 30%,#000,transparent);-webkit-mask-image:radial-gradient(70% 70% at 30% 30%,#000,transparent)}
+.tx-rays{position:absolute;inset:-30%;background:repeating-conic-gradient(from 0deg at 80% 0%,color-mix(in srgb,var(--accent) 14%,transparent) 0deg 6deg,transparent 6deg 18deg);animation:spin 80s linear infinite;mask-image:radial-gradient(closest-side,#000,transparent);-webkit-mask-image:radial-gradient(closest-side,#000,transparent)}
+/* marquee */
+.marquee{border-block:1px solid var(--line);overflow:hidden;padding:18px 0;background:var(--surface)}
+.marquee .track{display:flex;gap:44px;width:max-content;animation:scroll 30s linear infinite}
+.marquee span{${disp}font-size:clamp(22px,4vw,34px);white-space:nowrap}
+.marquee span::after{content:'✦';color:var(--accent);margin-left:44px;font-style:normal}
+@keyframes scroll{to{transform:translateX(-50%)}}
+/* sections */
+section.block{padding:100px 0}
+section.alt{background:var(--surface2)}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:40px}
+.head h2{font-size:clamp(40px,7vw,78px);margin-top:10px}
+.head p{color:var(--muted);max-width:40ch}
+.svc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.svc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:26px;transition:transform .3s,border-color .3s,box-shadow .3s}
+.svc:hover{transform:translateY(-6px);border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 30px 60px -30px color-mix(in srgb,var(--accent) 60%,transparent)}
+.svc-top{display:flex;justify-content:space-between;align-items:baseline;gap:14px}
+.svc h3,.mi h3,.row h3,.tile h3{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.price{${disp}font-size:26px;color:var(--accent);white-space:nowrap}
+.svc p,.mi p,.row p,.tile p{color:var(--muted);margin-top:6px;font-size:15.5px}
+.svc-menu{max-width:820px;display:grid;gap:26px}
+.mi-top{display:flex;align-items:baseline;gap:12px}
+.mi .dots{flex:1;border-bottom:2px dotted color-mix(in srgb,var(--ink) 30%,transparent);transform:translateY(-5px)}
+.mi b{${disp}font-size:24px;color:var(--accent);white-space:nowrap}
+.svc-rows{border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:56px 1fr auto;gap:18px;align-items:center;padding:24px 4px;border-bottom:1px solid var(--line);transition:background .25s,padding .25s}
+.row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent);padding-left:14px}
+.row .no{${disp}font-size:22px;color:var(--accent)}
+.row b{${disp}font-size:26px;white-space:nowrap}
+.svc-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.tile{position:relative;padding:28px 24px;border-radius:var(--r);min-height:200px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;background:var(--surface);border:1px solid var(--line)}
+.tile.t0{background:var(--accent);color:var(--on);border-color:transparent}.tile.t0 p{color:color-mix(in srgb,var(--on) 75%,transparent)}
+.tile.t2{background:var(--surface2)}
+.tile b{position:absolute;top:22px;right:22px;${disp}font-size:28px}
+.whys{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.why{padding:30px 26px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line)}
+.why-bordered .why{background:transparent;border:0;border-top:3px solid var(--accent);border-radius:0;padding:22px 0}
+.why .num{font-size:50px;line-height:1;color:var(--accent)}
+.why .dot{display:block;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 22%,transparent)}
+.why h3{font-size:21px;font-weight:800;margin:16px 0 6px}
+.why p{color:var(--muted);font-size:15.5px}
+.whyq{display:grid;gap:44px}
+.whyq h3{font-size:clamp(34px,6vw,64px)}
+.whyq h3::before{content:'“';color:var(--accent);margin-right:.08em}
+.whyq p{color:var(--muted);max-width:52ch;margin-top:10px;font-size:18px}
+.about{display:grid;gap:40px;align-items:center}
+@media(min-width:860px){.about{grid-template-columns:1.1fr .9fr}}
+.about blockquote{font-size:clamp(32px,5vw,58px);line-height:1.02}
+.about blockquote em{color:var(--accent);font-style:inherit}
+.about p{color:var(--muted);font-size:18px;white-space:pre-line}
+.g{overflow:hidden;border-radius:var(--r);border:1px solid var(--line)}
+.g img{width:100%;height:100%;object-fit:cover;transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.g:hover img{transform:scale(1.06)}
+.gal-mosaic{display:grid;gap:14px;grid-template-columns:repeat(6,1fr)}
+.gal-mosaic .g{grid-column:span 6;aspect-ratio:4/3}
+@media(min-width:760px){.gal-mosaic .g0{grid-column:span 4;grid-row:span 2;aspect-ratio:auto}.gal-mosaic .g1,.gal-mosaic .g2{grid-column:span 2}.gal-mosaic .g3,.gal-mosaic .g4{grid-column:span 3}}
+.gal-strip{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:10px;scrollbar-width:none}
+.gal-strip::-webkit-scrollbar{display:none}
+.gal-strip .g{flex:0 0 min(78vw,420px);aspect-ratio:3/4;scroll-snap-align:start}
+.gal-polaroid{display:grid;gap:26px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));padding:10px}
+.gal-polaroid .g{background:#fff;padding:12px 12px 46px;border-radius:6px;aspect-ratio:4/5;box-shadow:0 30px 50px -30px rgba(0,0,0,.6);border:0}
+.gal-polaroid .g:nth-child(odd){transform:rotate(-2.5deg)}.gal-polaroid .g:nth-child(even){transform:rotate(2deg)}
+.visit{display:grid;gap:14px}
+@media(min-width:860px){.visit{grid-template-columns:1fr 1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:30px}
+.hours{list-style:none}
+.hours li{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.hours li:last-child{border-bottom:0}
+.hours li.today{color:var(--accent);font-weight:800}
+.status{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:14px;margin-bottom:12px}
+.status i{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.status.open i{background:#35d07f;box-shadow:0 0 0 6px rgba(53,208,127,.18)}
+.contact a{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid var(--line);font-weight:700}
+.contact a span:last-child{color:var(--muted);font-weight:500;text-align:right;overflow-wrap:anywhere}
+.contact a:last-child{border-bottom:0}
+.final{text-align:center;padding:130px 0;position:relative;overflow:hidden;isolation:isolate}
+.final::before{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(60% 70% at 50% 100%,color-mix(in srgb,var(--accent) 32%,transparent),transparent 70%)}
+.final h2{font-size:clamp(46px,10vw,124px);margin-bottom:30px}
+footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
+.js .reveal{opacity:0;transform:${motion};transition:opacity .8s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1);transition-delay:calc(var(--i,0) * 80ms)}
+.js .reveal.in{opacity:1;transform:none}
+.gal-polaroid .g.reveal.in:nth-child(odd){transform:rotate(-2.5deg)}.gal-polaroid .g.reveal.in:nth-child(even){transform:rotate(2deg)}
+.sticky-call{position:fixed;left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;display:flex}
+.sticky-call .btn{flex:1}
+@media(min-width:860px){.sticky-call{display:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="ribbon">Free website preview made for ${esc(name)}<button type="button" aria-label="Hide" onclick="this.parentNode.remove()">×</button></div>
+<nav class="nav-${D.nav}"><div class="wrap"><div class="in">
+  <a class="logo" href="#top">${esc(name)}</a>
+  <div class="links">${services.length ? `<a href="#services">${esc(N.services)}</a>` : ''}${d.about ? '<a href="#about">About</a>' : ''}<a href="#visit">Visit</a></div>
+  ${book ? `<a class="btn main" href="${esc(book)}"${ext}>${esc(bookLabel)}</a>` : ''}
+</div></div></nav>
+${heroHtml}
+${D.marquee ? `<div class="marquee" aria-hidden="true"><div class="track">${[...marquee, ...marquee, ...marquee, ...marquee].map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>` : ''}
+${D.order.map((k) => sections[k] || '').join('\n')}
+<section class="block" id="visit"><div class="wrap">
+  ${head('Visit', 'Come through')}
+  <div class="visit">
+    ${hours.length ? `<div class="card reveal"><div class="status" id="status"><i></i><span>Hours</span></div><ul class="hours" id="hours">${hoursHtml}</ul></div>` : ''}
+    <div class="card contact reveal" style="--i:1">
+      ${d.phone ? `<a href="${esc(telHref)}"><span>Call</span><span>${esc(d.phone)}</span></a>` : ''}
+      ${d.address ? `<a href="${esc(mapHref)}" target="_blank" rel="noopener"><span>Address</span><span>${esc(d.address)}</span></a>` : ''}
+      ${d.email ? `<a href="mailto:${esc(d.email)}"><span>Email</span><span>${esc(d.email)}</span></a>` : ''}
+      ${d.instagram ? `<a href="${esc(d.instagram)}" target="_blank" rel="noopener"><span>Instagram</span><span>Follow us →</span></a>` : ''}
+      ${!d.phone && !d.address && !d.email && !d.instagram ? '<p style="color:var(--muted)">Contact details go here.</p>' : ''}
+    </div>
+  </div>
+</div></section>
+<section class="final"><div class="wrap">
+  <h2 class="disp reveal">${d.cta ? esc(d.cta) : 'Ready when<br>you are.'}</h2>
+  ${book ? `<div class="reveal" style="--i:1">${btnMain()}</div>` : ''}
+</div></section>
+<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${esc(name)}</span><span>Preview site by Reekon Systems</span></div></footer>
+${book ? `<div class="sticky-call"><a class="btn main" href="${esc(book)}"${ext}>${esc(bookLabel)}</a></div>` : ''}
+${SITE_SCRIPT}
+</body>
+</html>`;
+}
+
+function cleanDesign(x) {
+  if (!x || typeof x !== 'object' || !x.v) return null;
+  return makeDesign({}, x, 'repair');
+}
+
 /* ================= Demo photos (free Cloudflare AI image model) ================= */
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
-const PHOTO_MOOD = { noir: 'moody warm cinematic lighting, dark rich tones', glow: 'soft airy pastel light, elegant, dreamy', drive: 'dramatic high-contrast lighting, bold, energetic', fresh: 'bright cheerful natural daylight, clean, warm and friendly' };
+const PHOTO_MOOD = { dark: 'moody cinematic lighting, rich deep tones', light: 'bright airy natural daylight, clean and fresh', noir: 'moody warm cinematic lighting, dark rich tones', glow: 'soft airy pastel light, elegant, dreamy', drive: 'dramatic high-contrast lighting, bold, energetic', fresh: 'bright cheerful natural daylight, clean, warm and friendly' };
 function aiImagesReady(env) { return !!env.AI || env.STUDIO_FAKE_AI === '1'; }
 async function makeDemoPhotos(env, userId, data, theme, hint) {
   const N = nicheFor(data.category, data.name);
@@ -1665,7 +2154,7 @@ You only write the CONTENT as JSON. A design engine turns it into an animated pr
 
 Return ONLY one JSON object, no markdown, shaped like:
 {"reply":"1-2 short friendly sentences telling the user what you built or changed",
- "theme":"noir|glow|drive|fresh",
+ "design":{"mode":"dark|light","hue":0-360,"accent_hue":0-360,"display":"FONT","body":"BODYFONT","hero":"HERO","services":"cards|menu|rows|tiles","why":"numbered|bordered|quote","gallery":"mosaic|strip|polaroid","texture":"grain|dots|grid|blobs|halo|lines|rays|none","radius":0|10|22|34,"buttons":"pill|rounded|square","nav":"bar|float","motion":"rise|fade|slide","marquee":true|false,"order":["services","why","gallery","about"]},
  "accent":"#rrggbb or empty",
  "data":{"name":"","tagline":"","category":"","city":"","about":"","cta":"",
    "services":[{"name":"","price":"","desc":""}],
@@ -1673,7 +2162,12 @@ Return ONLY one JSON object, no markdown, shaped like:
    "hours":[{"day":"Monday","time":"9 AM - 7 PM"}],
    "phone":"","email":"","address":"","rating":"","reviews":"","booking":"","instagram":""}}
 
-Themes: noir = dark, gold, luxe (barbers, tattoo, lounges, pros). glow = soft light pink, elegant (nails, lashes, salons, bakeries, florists). drive = dark with neon lime, bold (auto, food, fitness). fresh = bright, warm and friendly (pet groomers, cleaning, landscaping, home services, family businesses).
+DESIGN: invent a look that fits THIS business's personality, so no two sites look alike. Be bold and specific.
+- FONT is one of: anton, bebas, archivo, oswald (tall, loud, all caps); fraunces, cormorant (elegant italic); playfair, dmserif, abril (classy serif); syne, unbounded (fashion, futuristic); spacegrotesk, sora, outfit, bricolage, rubik (modern, friendly); chakra (techy); righteous (fun, retro).
+- BODYFONT is one of: manrope, inter, dmsans, jakarta, karla, outfitb.
+- HERO is one of: fullbleed (photo behind the name), split, splitleft, arch (arched photo), slant (angled panel), tilt (tilted photo card), circle (round photo), stack (photo under the headline), poster (centered type with 3 photos).
+- hue/accent_hue are color wheel degrees (0 red, 30 orange, 50 gold, 120 green, 180 teal, 210 blue, 270 purple, 330 pink).
+- On the first build, choose every design field. Later, when the user asks for a visual change ("darker", "more playful", "different font", "make it pink"), change only the design fields that need to change.
 Writing: tagline max 7 words, punchy, no cliches like "Welcome to". about 2-4 short sentences, warm and plain. 3 highlights with a 2-4 word title and one sentence. Service descriptions max 12 words. cta max 5 words.
 HARD RULES:
 - Never invent facts. Phone, email, address, prices, hours, rating, review counts, years in business, awards, staff names, booking and instagram links must come from the BUSINESS INFO. If not given, leave them empty. Never write a made-up price.
@@ -1707,11 +2201,19 @@ async function studioRun(env, { message, data, theme, lead, source, messages, fi
   } catch (e) { console.error('studio ai', e); text = null; }
   const parsed = text ? parseJsonLoose(text) : null;
   if (parsed && parsed.data && typeof parsed.data === 'object') {
-    return { reply: str(parsed.reply, 400) || 'Done. Take a look at the preview.', theme: parsed.theme, data: Object.assign({}, data, parsed.data, { photos: data.photos || [] }, parsed.accent !== undefined ? { accent: parsed.accent } : {}), engine };
+    return { reply: str(parsed.reply, 400) || 'Done. Take a look at the preview.', theme: parsed.theme, design: parsed.design,
+      data: Object.assign({}, data, parsed.data, { photos: data.photos || [], images: data.images || [], design: data.design }), engine };
   }
   // no AI (or it failed): basic builder
   const b = basicBuild(message, data, lead, source, first);
-  return { ...b, engine: 'basic', reply: (engine === 'basic' ? '' : "The AI didn't answer this time, so I used the basic builder. ") + b.reply };
+  const m2 = message.toLowerCase();
+  const want = {};
+  if (/\b(dark|darker|black|moody|night)\b/.test(m2)) want.mode = 'dark';
+  if (/\b(light|lighter|bright|brighter|white|airy|clean)\b/.test(m2)) want.mode = 'light';
+  if (/\b(round|rounder|soft|softer|bubbly)\b/.test(m2)) want.radius = 34;
+  if (/\b(sharp|sharper|square|edgy)\b/.test(m2)) { want.radius = 0; want.buttons = 'square'; }
+  if (Object.keys(want).length) b.reply = 'Updated the look. ' + b.reply;
+  return { ...b, design: Object.keys(want).length ? want : undefined, engine: 'basic', reply: (engine === 'basic' ? '' : "The AI didn't answer this time, so I used the basic builder. ") + b.reply };
 }
 
 function parseJsonLoose(t) {
@@ -1893,6 +2395,7 @@ function cleanDemo(d, lead) {
     highlights: (Array.isArray(d.highlights) ? d.highlights : []).slice(0, 4).map((x) => ({ title: s(x && x.title, 60), text: s(x && x.text, 220) })).filter((x) => x.title),
     cta: s(d.cta, 60),
     images: (Array.isArray(d.images) ? d.images : []).filter((x) => /^[a-f0-9]{20}$/.test(String(x))).slice(0, 6),
+    design: cleanDesign(d.design),
   };
 }
 
@@ -1929,6 +2432,7 @@ function esc(v) {
 }
 
 function renderDemo(d, themeKey) {
+  if (d.design) return renderSite(d, cleanDesign(d.design) || makeDesign(d, {}, d.name));
   const T = DEMO_THEMES[themeKey];
   const accent = d.accent || T.accent;
   const name = d.name || 'Your business';
