@@ -90,7 +90,7 @@ const SCHEMA = [
 // Stage 2 columns added to the existing deals table. Only added if missing — never drops data.
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -107,6 +107,7 @@ async function ensureSchema(env) {
     }
   }
   const lcols = new Set((await env.DB.prepare('PRAGMA table_info(leads)').all()).results.map((c) => c.name));
+  const newEmailCols = !lcols.has('email_status');
   for (const [name, type] of Object.entries(LEAD_COLUMNS)) {
     if (!lcols.has(name)) {
       try { await env.DB.prepare(`ALTER TABLE leads ADD COLUMN ${name} ${type}`).run(); }
@@ -139,6 +140,20 @@ async function ensureSchema(env) {
   ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email ON leads(email)').run();
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS email_log (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, step INTEGER, kind TEXT NOT NULL,
+      subject TEXT, detail TEXT, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS email_log_time ON email_log(created_at)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS email_log_lead ON email_log(lead_id)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email_seq ON leads(email_status, email_next_at)'),
+  ]);
+  if (newEmailCols) {
+    // leads the first robot already emailed join the sequence at step 1, so they get follow-ups
+    await env.DB.prepare(`UPDATE leads SET email_step = 1, email_last_at = emailed_at,
+      email_status = CASE WHEN tags LIKE '%,opted-out,%' THEN 'opted_out' WHEN tags LIKE '%,replied,%' THEN 'replied' ELSE 'active' END,
+      email_next_at = CASE WHEN tags LIKE '%,opted-out,%' OR tags LIKE '%,replied,%' THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', emailed_at, '+3 days') END
+      WHERE emailed_at IS NOT NULL`).run();
+  }
   schemaReady = true;
 }
 
@@ -566,12 +581,193 @@ async function keyAuth(request, env) {
   await env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').bind(now(), k.id).run();
   return k;
 }
+/* ================= Email bot =================
+   The CRM decides who gets emailed, what it says and when. A tiny Google
+   Apps Script on the owner's Gmail asks /api/outreach/today every 30 min,
+   sends what it's handed, reports back, and forwards new replies. */
+const BOT_TZ = 'America/Los_Angeles';
+const BOT_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const BOT_DEFAULTS = {
+  enabled: false, daily_cap: 40, per_run: 8, days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'], start_hour: 6, end_hour: 10,
+  from_name: 'Marquise', company: 'Reekon Systems', address: '',
+  steps: [
+    { wait_days: 0, subject: 'Quick question about {business}',
+      body: "Hey {first_name},\n\nI came across {business} and noticed you don't have a website yet. I build sites for local businesses in {city}, and I'd like to make you a free preview. No cost, no catch.\n\nI already started one for you here: {demo_link}\n\nIf you like it, we hop on a quick 20-minute call. If not, you'll never hear from me again.\n\nWant me to finish it up?" },
+    { wait_days: 3, subject: 'Re: Quick question about {business}',
+      body: "Hey {first_name}, bumping this up in case it got buried. I'm still happy to build {business} a free website preview.\n\nHere's the one I started: {demo_link}\n\nWant me to send the finished version?" },
+    { wait_days: 4, subject: 'Re: Quick question about {business}',
+      body: "Last one from me, {first_name}. If a website isn't a priority right now, no worries at all. If it ever is, just reply and I'll build your free preview." },
+  ],
+};
+const NO_WORDS = /\b(stop|unsubscribe|remove me|take me off|not interested|no thanks|no thank you|don'?t (email|contact)|do not (email|contact)|leave me alone|wrong (person|email))\b/i;
+
+async function botConfig(env) {
+  let c = {};
+  try { c = JSON.parse((await getSetting(env, 'email_bot')) || '{}'); } catch { c = {}; }
+  const out = { ...BOT_DEFAULTS, ...c };
+  out.steps = Array.isArray(c.steps) && c.steps.length ? c.steps : BOT_DEFAULTS.steps;
+  return out;
+}
+function cleanBotConfig(b, cur) {
+  const n = (v, lo, hi, d) => { const x = parseInt(v, 10); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const out = { ...cur };
+  if (b.enabled !== undefined) out.enabled = !!b.enabled;
+  if (b.daily_cap !== undefined) out.daily_cap = n(b.daily_cap, 1, 90, cur.daily_cap);
+  if (b.per_run !== undefined) out.per_run = n(b.per_run, 1, 20, cur.per_run);
+  if (b.start_hour !== undefined) out.start_hour = n(b.start_hour, 0, 23, cur.start_hour);
+  if (b.end_hour !== undefined) out.end_hour = n(b.end_hour, 1, 24, cur.end_hour);
+  if (out.end_hour <= out.start_hour) bad('The sending window has to end after it starts');
+  if (Array.isArray(b.days)) { out.days = BOT_DAYS.filter((d) => b.days.includes(d)); if (!out.days.length) bad('Pick at least one day'); }
+  if (b.from_name !== undefined) out.from_name = str(b.from_name, 60) || 'Marquise';
+  if (b.company !== undefined) out.company = str(b.company, 80);
+  if (b.address !== undefined) out.address = str(b.address, 200);
+  if (Array.isArray(b.steps)) {
+    const steps = b.steps.slice(0, 5).map((x, i) => ({
+      wait_days: i === 0 ? 0 : n(x && x.wait_days, 1, 30, 3),
+      subject: str(x && x.subject, 150), body: str(x && x.body, 4000),
+    }));
+    steps.forEach((x, i) => { if (!x.subject || !x.body) bad('Email ' + (i + 1) + ' needs a subject and a message'); });
+    out.steps = steps;
+  }
+  return out;
+}
+function ptParts(d = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: BOT_TZ, weekday: 'short', hour: 'numeric', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: p.weekday.toLowerCase().slice(0, 3), hour: +p.hour % 24, date: `${p.year}-${p.month}-${p.day}` };
+}
+// UTC instant of midnight today in Pacific time
+function ptMidnightIso() {
+  const t = Date.now(), { date } = ptParts();
+  for (let back = 0; back <= 26; back++) {
+    const d = new Date(t - back * 3600e3); d.setUTCMinutes(0, 0, 0);
+    if (ptParts(d).date !== date) return new Date(d.getTime() + 3600e3).toISOString();
+  }
+  return new Date(t - 864e5).toISOString();
+}
+function firstName(owner, business) {
+  const o = str(owner, 80);
+  if (!o || o.toLowerCase() === str(business, 200).toLowerCase() || /\b(llc|inc|shop|salon|studio|barber|nails|auto|detail)/i.test(o)) return 'there';
+  const f = o.split(/\s+/)[0].replace(/[^A-Za-z'-]/g, '');
+  return f ? f[0].toUpperCase() + f.slice(1).toLowerCase() : 'there';
+}
+function renderBotEmail(cfg, lead, stepIdx) {
+  const st = cfg.steps[stepIdx];
+  const vars = {
+    business: lead.business || 'your business', first_name: firstName(lead.owner, lead.business), city: lead.city || 'your area',
+    category: (lead.category || 'business').toLowerCase(), demo_link: lead.demo_url || '', my_name: cfg.from_name, company: cfg.company,
+  };
+  const fill = (t) => t.replace(/\{(\w+)\}/g, (all, k) => (k in vars ? vars[k] : all));
+  // with no demo yet, drop any line that points to the demo link
+  let body = st.body.split('\n').filter((line) => vars.demo_link || !line.includes('{demo_link}')).join('\n').replace(/\n{3,}/g, '\n\n');
+  body = fill(body).trim();
+  const sig = [cfg.from_name, cfg.company, cfg.address].filter(Boolean).join('\n');
+  return { subject: fill(st.subject).trim(), body: body + '\n\n' + sig + '\n\nNot interested? Reply "stop" and I won\'t email you again.' };
+}
+// leads that can still be emailed at all
+const BOT_ELIGIBLE = `l.email IS NOT NULL AND l.email != '' AND l.status NOT IN ('dnc','lost','won') AND COALESCE(l.heat,'cold') != 'dead'
+  AND (l.tags IS NULL OR (l.tags NOT LIKE '%,opted-out,%' AND l.tags NOT LIKE '%,bounced,%'))`;
+async function botQueue(env, cfg, limit, at = now()) {
+  if (limit <= 0) return [];
+  const site = SOCIAL_SQL.replace(/website/g, 'l.website');
+  const cols = 'l.id, l.business, l.owner, l.email, l.city, l.category, l.demo_url, l.email_step, l.email_status';
+  const queued = (await env.DB.prepare(`SELECT ${cols} FROM leads l WHERE ${BOT_ELIGIBLE} AND l.email_status = 'queued' ORDER BY l.updated_at ASC LIMIT ?`).bind(limit).all()).results;
+  const follow = (await env.DB.prepare(`SELECT ${cols} FROM leads l WHERE ${BOT_ELIGIBLE} AND l.email_status = 'active'
+    AND l.email_next_at IS NOT NULL AND l.email_next_at <= ? AND COALESCE(l.email_step,0) < ? ORDER BY l.email_next_at ASC LIMIT ?`).bind(at, cfg.steps.length, limit).all()).results;
+  const fresh = (await env.DB.prepare(`SELECT ${cols} FROM leads l WHERE ${BOT_ELIGIBLE} AND l.emailed_at IS NULL AND (l.email_status IS NULL OR l.email_status = '')
+    AND (l.website IS NULL OR l.website = '' OR ${site}) ORDER BY (l.demo_url IS NOT NULL AND l.demo_url != '') DESC, l.id ASC LIMIT ?`).bind(limit).all()).results;
+  const seen = new Set(), out = [];
+  for (const l of [...queued, ...follow, ...fresh]) {
+    if (seen.has(l.email) || out.length >= limit) continue;
+    seen.add(l.email);
+    const step = Math.min(cfg.steps.length - 1, l.email_status === 'active' ? (l.email_step || 1) : 0);
+    out.push({ ...l, step });
+  }
+  return out;
+}
+async function sentToday(env) {
+  return (await env.DB.prepare("SELECT COUNT(*) AS n FROM email_log WHERE kind = 'sent' AND created_at >= ?").bind(ptMidnightIso()).first()).n;
+}
+async function botMarkSent(env, leadId, stepIdx, subject, cfg) {
+  const t = now(), next = stepIdx + 1;
+  const done = next >= cfg.steps.length;
+  const nextAt = done ? null : new Date(Date.now() + cfg.steps[next].wait_days * 864e5).toISOString();
+  return [
+    env.DB.prepare(`UPDATE leads SET email_step = ?, email_status = ?, email_next_at = ?, email_last_at = ?, emailed_at = COALESCE(emailed_at, ?), updated_at = ? WHERE id = ?`)
+      .bind(next, done ? 'done' : 'active', nextAt, t, t, t, leadId),
+    env.DB.prepare('INSERT INTO email_log (lead_id, step, kind, subject, created_at) VALUES (?,?,?,?,?)').bind(leadId, next, 'sent', str(subject, 150), t),
+    env.DB.prepare("INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) SELECT id, 1, 'emailed', status, status, ? FROM leads WHERE id = ?").bind(t, leadId),
+  ];
+}
+async function botHandleReplies(env, msgs, actor) {
+  const t = now(), stmts = [], out = { hot: 0, opted_out: 0, bounced: 0, ignored: 0 };
+  for (const mm of (Array.isArray(msgs) ? msgs : []).slice(0, 100)) {
+    const isBounce = !!(mm && mm.bounce);
+    const addr = cleanEmail(isBounce ? mm.bounce_for : mm && mm.from);
+    if (!addr) { out.ignored++; continue; }
+    const lead = await env.DB.prepare('SELECT id, email_status FROM leads WHERE email = ? AND emailed_at IS NOT NULL ORDER BY id DESC LIMIT 1').bind(addr).first();
+    if (!lead) { out.ignored++; continue; }
+    const text = str(mm.snippet, 600);
+    if (isBounce) {
+      out.bounced++;
+      stmts.push(env.DB.prepare(`UPDATE leads SET email_status = 'bounced', email_next_at = NULL,
+        tags = CASE WHEN tags IS NULL OR tags = '' THEN ',bounced,' WHEN tags LIKE '%,bounced,%' THEN tags ELSE tags || 'bounced,' END, updated_at = ? WHERE id = ?`).bind(t, lead.id));
+      stmts.push(env.DB.prepare('INSERT INTO email_log (lead_id, kind, detail, created_at) VALUES (?,?,?,?)').bind(lead.id, 'bounced', 'Email address doesn\'t work', t));
+      continue;
+    }
+    if (lead.email_status === 'replied' || lead.email_status === 'opted_out') { out.ignored++; continue; }
+    const no = NO_WORDS.test(text) || NO_WORDS.test(str(mm.subject, 200));
+    if (no) {
+      out.opted_out++;
+      stmts.push(env.DB.prepare(`UPDATE leads SET email_status = 'opted_out', email_next_at = NULL, heat = 'dead', status = CASE WHEN status IN ('won','dnc') THEN status ELSE 'lost' END,
+        tags = CASE WHEN tags IS NULL OR tags = '' THEN ',opted-out,' WHEN tags LIKE '%,opted-out,%' THEN tags ELSE tags || 'opted-out,' END, updated_at = ? WHERE id = ?`).bind(t, lead.id));
+    } else {
+      out.hot++;
+      stmts.push(env.DB.prepare(`UPDATE leads SET email_status = 'replied', email_next_at = NULL, heat = 'hot', next_action_at = ?, next_action = 'They replied to the email. Read it and send their demo or book the call',
+        tags = CASE WHEN tags IS NULL OR tags = '' THEN ',replied,' WHEN tags LIKE '%,replied,%' THEN tags ELSE tags || 'replied,' END, updated_at = ? WHERE id = ?`).bind(t, t, lead.id));
+    }
+    stmts.push(env.DB.prepare('INSERT INTO email_log (lead_id, kind, subject, detail, created_at) VALUES (?,?,?,?,?)').bind(lead.id, no ? 'opted_out' : 'replied', str(mm.subject, 150), text, t));
+    stmts.push(env.DB.prepare('INSERT INTO notes (lead_id,user_id,body,created_at) VALUES (?,?,?,?)').bind(lead.id, actor, (no ? 'Email reply (opted out): ' : 'Email reply: ') + (text || '(no text)'), t));
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  return out;
+}
+
 async function handleOutreach(request, env, url) {
   const k = await keyAuth(request, env);
   const path = url.pathname.replace(/^\/api\/outreach/, '');
   const actor = k.created_by || 1;
   let body = {};
   if (request.method === 'POST') { try { body = JSON.parse((await request.text()) || '{}'); } catch { throw new HttpError(400, 'Body must be JSON'); } }
+  if (path === '/today' && request.method === 'GET') {
+    const cfg = await botConfig(env), pt = ptParts();
+    await setSetting(env, 'email_bot_seen', now());
+    const base = { enabled: cfg.enabled, from_name: cfg.from_name, messages: [] };
+    if (!cfg.enabled) return json({ ...base, reason: 'paused' });
+    if (!cfg.days.includes(pt.day)) return json({ ...base, reason: 'not a sending day' });
+    if (pt.hour < cfg.start_hour || pt.hour >= cfg.end_hour) return json({ ...base, reason: 'outside the sending window' });
+    const left = cfg.daily_cap - (await sentToday(env));
+    if (left <= 0) return json({ ...base, reason: 'daily limit reached' });
+    const runsLeft = Math.max(1, (cfg.end_hour - pt.hour) * 2);
+    const n = Math.min(left, cfg.per_run, Math.max(1, Math.ceil(left / runsLeft) + 2));
+    const list = await botQueue(env, cfg, n);
+    return json({ ...base, messages: list.map((l) => ({ lead_id: l.id, step: l.step, to: l.email, ...renderBotEmail(cfg, l, l.step) })) });
+  }
+  if (path === '/done' && request.method === 'POST') {
+    const cfg = await botConfig(env), items = (Array.isArray(body.items) ? body.items : []).slice(0, 50);
+    let stmts = [], ok = 0, failed = 0;
+    for (const it of items) {
+      const id = +it.lead_id, step = Math.max(0, Math.min(cfg.steps.length - 1, +it.step || 0));
+      if (!id) continue;
+      if (it.ok) { ok++; stmts = stmts.concat(await botMarkSent(env, id, step, it.subject, cfg)); }
+      else { failed++; stmts.push(env.DB.prepare('INSERT INTO email_log (lead_id, step, kind, detail, created_at) VALUES (?,?,?,?,?)').bind(id, step + 1, 'failed', str(it.error, 300) || 'Gmail could not send it', now())); }
+    }
+    for (let i = 0; i < stmts.length; i += 99) await env.DB.batch(stmts.slice(i, i + 99));
+    return json({ ok: true, sent: ok, failed });
+  }
+  if (path === '/inbox' && request.method === 'POST') {
+    return json({ ok: true, ...(await botHandleReplies(env, body.messages, actor)) });
+  }
   if (path === '/batch' && request.method === 'GET') {
     const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit'), 10) || 40));
     const { results } = await env.DB.prepare(
@@ -587,7 +783,7 @@ async function handleOutreach(request, env, url) {
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number).filter(Boolean).slice(0, 100);
     const t = now(), stmts = [];
     for (const id of ids) {
-      stmts.push(env.DB.prepare('UPDATE leads SET emailed_at = ?, updated_at = ? WHERE id = ? AND emailed_at IS NULL').bind(t, t, id));
+      stmts.push(env.DB.prepare("UPDATE leads SET emailed_at = ?, email_step = 1, email_status = 'active', email_last_at = ?, email_next_at = ?, updated_at = ? WHERE id = ? AND emailed_at IS NULL").bind(t, t, new Date(Date.now() + 3 * 864e5).toISOString(), t, id));
       stmts.push(env.DB.prepare("INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) SELECT id, ?, 'emailed', status, status, ? FROM leads WHERE id = ?").bind(actor, t, id));
     }
     for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
@@ -597,9 +793,9 @@ async function handleOutreach(request, env, url) {
     const clean = (a) => [...new Set((Array.isArray(a) ? a : []).map(cleanEmail).filter(Boolean))].slice(0, 200);
     const yes = clean(body.yes), no = clean(body.no), t = now(), stmts = [];
     for (const e of no) stmts.push(env.DB.prepare(`UPDATE leads SET heat = 'dead', status = CASE WHEN status IN ('won','dnc') THEN status ELSE 'lost' END,
-      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',opted-out,' WHEN tags LIKE '%,opted-out,%' THEN tags ELSE tags || 'opted-out,' END, updated_at = ? WHERE email = ?`).bind(t, e));
+      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',opted-out,' WHEN tags LIKE '%,opted-out,%' THEN tags ELSE tags || 'opted-out,' END, email_status = 'opted_out', email_next_at = NULL, updated_at = ? WHERE email = ?`).bind(t, e));
     for (const e of yes) stmts.push(env.DB.prepare(`UPDATE leads SET heat = 'hot', next_action_at = ?, next_action = 'They replied to the email: send their demo / book the call',
-      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',replied,' WHEN tags LIKE '%,replied,%' THEN tags ELSE tags || 'replied,' END, updated_at = ? WHERE email = ? AND COALESCE(heat,'cold') != 'dead'`).bind(t, t, e));
+      tags = CASE WHEN tags IS NULL OR tags = '' THEN ',replied,' WHEN tags LIKE '%,replied,%' THEN tags ELSE tags || 'replied,' END, email_status = 'replied', email_next_at = NULL, updated_at = ? WHERE email = ? AND COALESCE(heat,'cold') != 'dead'`).bind(t, t, e));
     for (const e of [...yes, ...no]) stmts.push(env.DB.prepare("INSERT INTO notes (lead_id,user_id,body,created_at) SELECT id, ?, ?, ? FROM leads WHERE email = ?").bind(actor, no.includes(e) ? 'Replied to the email: not interested. Will not be emailed again.' : 'Replied to the email. Check Gmail and follow up.', t, e));
     for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
     return json({ ok: true, hot: yes.length, opted_out: no.length });
@@ -1180,6 +1376,75 @@ async function api(request, env, url) {
     if (!clean.length) bad('The script needs at least one section');
     clean.forEach((s) => { if (!s.title) bad('Every section needs a title'); });
     await setSetting(env, 'call_script', JSON.stringify(clean));
+    return json({ ok: true });
+  }
+
+  /* ---- email bot (admin) ---- */
+  if (path === '/emailbot' && method === 'GET') {
+    need(user, 'admin');
+    const cfg = await botConfig(env), since7 = new Date(Date.now() - 7 * 864e5).toISOString();
+    const c = (sql, ...a) => env.DB.prepare(sql).bind(...a).first().then((r) => r.n);
+    const [today, week, contacted, replied, opted, bounced, inSeq, ready, noEmail] = await Promise.all([
+      sentToday(env),
+      c("SELECT COUNT(*) AS n FROM email_log WHERE kind = 'sent' AND created_at >= ?", since7),
+      c('SELECT COUNT(*) AS n FROM leads WHERE emailed_at IS NOT NULL'),
+      c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'replied'"),
+      c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'opted_out'"),
+      c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'bounced'"),
+      c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'active'"),
+      c(`SELECT COUNT(*) AS n FROM leads l WHERE ${BOT_ELIGIBLE} AND l.emailed_at IS NULL AND (l.email_status IS NULL OR l.email_status IN ('','queued'))`),
+      c("SELECT COUNT(*) AS n FROM leads WHERE (email IS NULL OR email = '') AND status NOT IN ('dnc','lost','won')"),
+    ]);
+    const next = (await botQueue(env, cfg, 12, new Date(Date.now() + 864e5).toISOString())).map((l) => ({ id: l.id, business: l.business, email: l.email, step: l.step, queued: l.email_status === 'queued', has_demo: !!l.demo_url }));
+    const log = (await env.DB.prepare(`SELECT e.id, e.lead_id, e.step, e.kind, e.subject, e.detail, e.created_at, l.business FROM email_log e LEFT JOIN leads l ON l.id = e.lead_id ORDER BY e.id DESC LIMIT 40`).all()).results;
+    const sample = await env.DB.prepare("SELECT id, business, owner, city, category, demo_url FROM leads WHERE email IS NOT NULL AND email != '' ORDER BY (demo_url IS NOT NULL) DESC, id DESC LIMIT 1").first();
+    const key = await env.DB.prepare("SELECT name, prefix, last_used_at FROM api_keys WHERE revoked_at IS NULL AND name = 'Email bot' ORDER BY id DESC LIMIT 1").first();
+    return json({ config: cfg, last_seen: await getSetting(env, 'email_bot_seen'), key: key || null, now_pt: ptParts(),
+      stats: { today, week, contacted, replied, opted_out: opted, bounced, in_sequence: inSeq, ready, no_email: noEmail },
+      next, log, sample: sample || { business: 'Kings Cutz', owner: 'Andre Williams', city: 'Inglewood', category: 'Barber shop', demo_url: 'https://example.com/d/kings-cutz' } });
+  }
+  if (path === '/emailbot' && method === 'PUT') {
+    need(user, 'admin');
+    const cfg = cleanBotConfig(body, await botConfig(env));
+    await setSetting(env, 'email_bot', JSON.stringify(cfg));
+    return json({ ok: true, config: cfg });
+  }
+  if (path === '/emailbot/preview' && method === 'POST') {
+    need(user, 'admin');
+    const cfg = cleanBotConfig({ steps: body.steps, from_name: body.from_name, company: body.company, address: body.address }, await botConfig(env));
+    const lead = body.lead_id ? await env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(+body.lead_id).first() : null;
+    const sample = lead || { business: 'Kings Cutz', owner: 'Andre Williams', city: 'Inglewood', category: 'Barber shop', demo_url: body.no_demo ? '' : 'https://example.com/d/kings-cutz' };
+    return json({ emails: cfg.steps.map((_, i) => renderBotEmail(cfg, sample, i)) });
+  }
+  if (path === '/emailbot/key' && method === 'POST') {
+    need(user, 'admin');
+    await env.DB.prepare("UPDATE api_keys SET revoked_at = ? WHERE name = 'Email bot' AND revoked_at IS NULL").bind(now()).run();
+    const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM api_keys WHERE revoked_at IS NULL').first();
+    if (live.n >= 10) bad('You have 10 active keys. Revoke one on the Scraper & n8n page first.');
+    const key = 'rk_' + hex(crypto.getRandomValues(new Uint8Array(20)));
+    await env.DB.prepare('INSERT INTO api_keys (name, prefix, key_hash, created_by, created_at) VALUES (?,?,?,?,?)').bind('Email bot', key.slice(0, 9), await sha256Hex(key), user.id, now()).run();
+    return json({ key, portal: url.origin });
+  }
+  if ((m = path.match(/^\/leads\/(\d+)\/emailbot$/)) && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const lead = await loadLead(env, user, +m[1]);
+    const t = now(), a = str(body.action, 10);
+    if (a === 'queue') {
+      if (!cleanEmail(lead.email)) bad('This lead has no email address');
+      if (lead.email_status === 'opted_out' || /,opted-out,/.test(lead.tags || '')) bad('They asked not to be emailed');
+      if (lead.email_status === 'active') await env.DB.prepare('UPDATE leads SET email_next_at = ?, updated_at = ? WHERE id = ?').bind(t, t, lead.id).run();
+      else if (['done', 'replied', 'stopped', 'bounced'].includes(lead.email_status)) bad('Their emails are finished. Reach out by hand from the email box below.');
+      else await env.DB.prepare("UPDATE leads SET email_status = 'queued', updated_at = ? WHERE id = ?").bind(t, lead.id).run();
+    } else if (a === 'stop') {
+      await env.DB.prepare("UPDATE leads SET email_status = 'stopped', email_next_at = NULL, updated_at = ? WHERE id = ?").bind(t, lead.id).run();
+      await env.DB.prepare('INSERT INTO email_log (lead_id, kind, detail, created_at) VALUES (?,?,?,?)').bind(lead.id, 'stopped', 'Stopped by ' + user.name, t).run();
+    } else if (a === 'resume') {
+      if (lead.email_status !== 'stopped') bad('Only stopped emails can be resumed');
+      const cfg = await botConfig(env), stepNext = lead.email_step || 0;
+      if (!stepNext) await env.DB.prepare("UPDATE leads SET email_status = NULL, updated_at = ? WHERE id = ?").bind(t, lead.id).run();
+      else if (stepNext >= cfg.steps.length) await env.DB.prepare("UPDATE leads SET email_status = 'done', updated_at = ? WHERE id = ?").bind(t, lead.id).run();
+      else await env.DB.prepare("UPDATE leads SET email_status = 'active', email_next_at = ?, updated_at = ? WHERE id = ?").bind(new Date(Date.now() + 864e5).toISOString(), t, lead.id).run();
+    } else bad('Unknown action');
     return json({ ok: true });
   }
 
