@@ -17,6 +17,8 @@
     }
   ],
   "ai": { "binding": "AI" },
+  // Auto lead bot: every 20 min overnight (the bot only works midnight to 6 AM LA time)
+  "triggers": { "crons": ["*/20 7-14 * * *"] },
   "workers_dev": true,
   "preview_urls": false,
   "keep_vars": true

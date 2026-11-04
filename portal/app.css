@@ -755,3 +755,14 @@ ol.setup code{font:500 12.5px var(--mono);color:var(--accent-2);background:rgba(
 .ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bot-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .bot-row .eyebrow{display:block;margin-bottom:2px}
+
+/* ---- auto lead bot ---- */
+.auto-bot .dot{background:var(--dim)}
+.auto-bot .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(61,220,151,.18)}
+.auto-set{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 0;margin-bottom:12px}
+.auto-set summary{cursor:pointer;color:var(--accent-2);font-weight:600;font-size:14px}
+.auto-set[open] summary{margin-bottom:12px}
+.auto-set textarea{min-height:96px}
+.check{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+@media (max-width:600px){.auto-bot .grid2{grid-template-columns:1fr}}

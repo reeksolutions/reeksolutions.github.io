@@ -1302,10 +1302,67 @@
     shell('finder', [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Lead Finder'),
         h('p', { class: 'sub' }, st.provider === 'tomtom' ? 'Local businesses with no real website, from TomTom maps. Each search checks 40 businesses.' : 'Businesses with no real website and few reviews, straight from Google. Each search checks 20 businesses.')), usageEl),
+      autoBox,
       h('section', { class: 'panel' }, form, chips),
       summary, listEl, moreBtn, addBar,
     ]);
     if (F.results.length) render();
+    loadAuto();
+  }
+
+  /* ---- auto lead bot panel (on the Lead Finder page) ---- */
+  const autoBox = h('div');
+  async function loadAuto() {
+    let d; try { d = await api('GET', '/finder/auto'); } catch (e) { autoBox.replaceChildren(); return; }
+    const cfg = d.config;
+    const again = () => loadAuto();
+    const listEditor = (id, label, key, placeholder, hint) => {
+      const ta = h('textarea', { id, rows: 3, placeholder }); ta.value = cfg[key].join('\n');
+      ta.addEventListener('input', () => { cfg[key] = ta.value.split('\n').map((x) => x.trim()).filter(Boolean); dirty(); });
+      return h('div', { class: 'field' }, h('label', { for: id }, label), ta, h('span', { class: 'hint' }, hint));
+    };
+    const save = h('button', { class: 'btn primary small', hidden: true, onclick: async () => {
+      try { await api('PUT', '/finder/auto', cfg); toast('Saved'); again(); } catch (e) { fail(e); } } }, 'Save');
+    const dirty = () => (save.hidden = false);
+    const combos = cfg.niches.length * cfg.cities.length;
+    const status = !d.ready ? 'Connect Lead Finder first' : cfg.enabled
+      ? 'On · ' + cfg.per_night + ' searches a night, midnight to 6 AM' + (d.added_week ? ' · ' + d.added_week + ' leads added this week' : '')
+      : 'Off';
+    const toggle = h('button', { class: 'btn small ' + (cfg.enabled ? '' : 'primary'), disabled: !d.ready, onclick: async () => {
+      try { await api('PUT', '/finder/auto', { ...cfg, enabled: !cfg.enabled }); toast(cfg.enabled ? 'Auto lead bot off' : 'Auto lead bot on. Check your leads in the morning'); again(); } catch (e) { fail(e); } } },
+      cfg.enabled ? 'Turn off' : 'Turn on');
+    const runNow = h('button', { class: 'btn small', disabled: !d.ready, onclick: async () => {
+      runNow.disabled = true; runNow.textContent = 'Searching…';
+      try {
+        const r = await api('POST', '/finder/auto/run');
+        if (r.skipped) toast(r.skipped, true);
+        else if (r.run.error) toast(r.run.error, true);
+        else toast(r.run.search + ': ' + r.run.added + ' new lead' + (r.run.added === 1 ? '' : 's') + ' added');
+        again();
+      } catch (e) { fail(e); runNow.disabled = false; runNow.textContent = 'Run one search now'; }
+    } }, 'Run one search now');
+    const perNight = h('input', { id: 'auto-per', type: 'number', min: 1, max: 20, inputmode: 'numeric', value: cfg.per_night, oninput: (e) => { cfg.per_night = +e.target.value || 1; dirty(); } });
+    const maxRev = h('input', { id: 'auto-rev', type: 'number', min: 0, max: 5000, inputmode: 'numeric', value: cfg.max_reviews, oninput: (e) => { cfg.max_reviews = +e.target.value || 0; dirty(); } });
+    const social = h('input', { id: 'auto-social', type: 'checkbox', checked: cfg.include_social, onchange: (e) => { cfg.include_social = e.target.checked; dirty(); } });
+    const runs = (d.runs || []).slice(0, 8);
+    autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
+      h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
+        h('div', { class: 'row', style: 'gap:8px' }, toggle)),
+      h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'Every night it searches each type of business in each city, skips anyone with a real website or already in your CRM, and adds the rest to your leads, ready to call in the morning.'),
+      h('details', { class: 'auto-set' }, h('summary', null, 'Settings · ' + cfg.niches.length + ' types × ' + cfg.cities.length + ' cities = ' + combos + ' searches to rotate through'),
+        h('div', { class: 'grid2' },
+          listEditor('auto-niches', 'Types of business (one per line)', 'niches', 'barber shop', 'Like barber shop, nail salon, auto detailing, lash tech'),
+          listEditor('auto-cities', 'Cities (one per line)', 'cities', 'Palmdale, CA', 'Write them like Palmdale, CA')),
+        h('div', { class: 'grid2' },
+          h('div', { class: 'field' }, h('label', { for: 'auto-per' }, 'Searches per night'), perNight, h('span', { class: 'hint' }, 'Up to 20. Some daily searches are always saved for you.')),
+          d.provider === 'google' ? h('div', { class: 'field' }, h('label', { for: 'auto-rev' }, 'Most Google reviews'), maxRev, h('span', { class: 'hint' }, 'Skip businesses with more reviews than this.')) : h('div')),
+        h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
+        h('div', { class: 'row', style: 'justify-content:flex-end;margin-top:8px' }, save)),
+      h('div', { class: 'auto-runs' },
+        h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;margin-bottom:6px' }, h('span', { class: 'eyebrow' }, 'Recent searches'), runNow),
+        runs.length ? runs.map((r) => h('div', { class: 'list-row' }, h('div', { style: 'flex:1;min-width:0' }, h('b', { class: 'ellip', style: 'display:block' }, r.search), h('div', { class: 'sub' }, ago(r.at))),
+          r.error ? h('span', { class: 'tag', style: 'color:var(--bad)' }, 'Error') : h('span', { class: 'tag ' + (r.added ? 'good' : '') }, '+' + r.added + ' of ' + r.checked)))
+          : h('div', { class: 'sub', style: 'padding:8px 0' }, 'No searches yet. Turn it on, or tap Run one search now to try it.'))));
   }
 
   /* ================= batches + upload ================= */

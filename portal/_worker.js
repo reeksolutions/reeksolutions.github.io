@@ -393,6 +393,7 @@ function pickRep(loads) {
 
 
 /* ---- Lead Finder helpers ---- */
+
 // Stays inside Google's free monthly allowance (1,000 Enterprise searches) with room to spare.
 const FINDER_LIMITS = { day: 30, month: 900 };
 // TomTom free tier: 2,500 requests a month. Each search uses 2 (find the city, then the businesses).
@@ -581,6 +582,114 @@ async function keyAuth(request, env) {
   await env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').bind(now(), k.id).run();
   return k;
 }
+// one Lead Finder search: used by the Lead Finder page and the auto lead bot
+async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 20) {
+  const provider = finderProvider(env);
+  let g = {};
+  if (provider === 'tomtom') {
+    await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now()).run();
+    const t = await tomtomSearch(env, what, where, parseInt(pageToken, 10) || 0);
+    g = { places: t.places, nextPageToken: t.next };
+  } else {
+  const r = env.FINDER_FAKE === '1' ? fakePlaces(pageToken) : await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken' },
+    body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
+  });
+  await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now()).run();
+  try { g = await r.json(); } catch { g = {}; }
+  if (!r.ok) {
+    const msg = (g.error && g.error.message) || ('Google said ' + r.status);
+    bad(/API key|not authorized|PERMISSION|billing/i.test(msg) ? 'Google rejected the key: ' + msg.slice(0, 160) + '. Check the setup steps.' : msg.slice(0, 200));
+  }
+  }
+  const places = (g.places || []).filter((p) => !p.businessStatus || p.businessStatus === 'OPERATIONAL');
+  // what's already in the CRM / on the Do Not Call list
+  const phones = places.map((p) => normPhone(p.nationalPhoneNumber)).filter(Boolean);
+  const ids = places.map((p) => p.id).filter(Boolean);
+  const inCrm = new Set(), dnc = new Set(), idSeen = new Set();
+  if (phones.length) {
+    const q = phones.map(() => '?').join(',');
+    (await env.DB.prepare(`SELECT phone_norm FROM leads WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => inCrm.add(x.phone_norm));
+    (await env.DB.prepare(`SELECT phone_norm FROM dnc WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => dnc.add(x.phone_norm));
+  }
+  if (ids.length) (await env.DB.prepare(`SELECT place_id FROM leads WHERE place_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.forEach((x) => idSeen.add(x.place_id));
+  const out = places.map((p) => {
+    const site = p.websiteUri || '';
+    const pn = normPhone(p.nationalPhoneNumber);
+    return {
+      place_id: p.id, business: (p.displayName && p.displayName.text) || '', phone: p.nationalPhoneNumber || '', address: p.formattedAddress || '',
+      short_address: p.shortFormattedAddress || '', category: (p.primaryTypeDisplayName && p.primaryTypeDisplayName.text) || '', rating: p.rating || null,
+      reviews: p.userRatingCount == null ? null : p.userRatingCount, link: p.googleMapsUri || '', website: site,
+      site_status: !site ? 'none' : NOT_A_SITE.test(site) ? 'social' : 'site',
+      in_crm: (pn && inCrm.has(pn)) || idSeen.has(p.id), dnc: !!(pn && dnc.has(pn)),
+    };
+  });
+  // double-check "no website" ones: try the obvious domain names
+  const toCheck = out.filter((x) => x.site_status !== 'site' && !x.in_crm).slice(0, siteChecks);
+  await Promise.all(toCheck.map(async (x) => { const f = await guessSite(x.business); if (f) { x.site_status = 'found'; x.found_site = f; } }));
+  return { results: out, next: g.nextPageToken || null, provider };
+}
+
+/* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
+const AUTO_DEFAULTS = { enabled: false, niches: ['barber shop', 'nail salon', 'auto detailing'], cities: ['Palmdale, CA', 'Lancaster, CA'], per_night: 10, max_reviews: 50, include_social: true };
+async function autoConfig(env) {
+  let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
+  return { ...AUTO_DEFAULTS, ...c };
+}
+async function autoState(env) {
+  let st = {}; try { st = JSON.parse((await getSetting(env, 'auto_finder_state')) || '{}'); } catch { st = {}; }
+  return { i: 0, pages: {}, night: '', done_tonight: 0, runs: [], ...st };
+}
+// run one search for the next niche + city in the rotation, add the good ones to the CRM
+async function autoStep(env, { manual } = {}) {
+  const cfg = await autoConfig(env), st = await autoState(env);
+  const combos = []; for (const c of cfg.cities) for (const n of cfg.niches) combos.push([n, c]);
+  if (!combos.length) return { skipped: 'Add at least one type of business and one city' };
+  if (!finderProvider(env)) return { skipped: 'Lead Finder is not connected yet' };
+  const night = ptParts().date;
+  if (st.night !== night) { st.night = night; st.done_tonight = 0; }
+  if (!manual && st.done_tonight >= cfg.per_night) return { skipped: 'done for tonight' };
+  const LIM = finderLimits(env), u = await finderUsage(env);
+  // leave a few searches a day for you to use by hand
+  if (u.today >= LIM.day - (manual ? 0 : 5) || u.month >= LIM.month) return { skipped: 'Free search limit reached for now' };
+  // find the next combo that still has results
+  let pick = null;
+  for (let k = 0; k < combos.length; k++) {
+    const idx = (st.i + k) % combos.length, key = combos[idx].join(' | ');
+    if (st.pages[key] !== 'done') { pick = { idx, key, what: combos[idx][0], where: combos[idx][1] }; break; }
+  }
+  if (!pick) { st.pages = {}; pick = { idx: 0, key: combos[0].join(' | '), what: combos[0][0], where: combos[0][1] }; }
+  const run = { at: now(), search: pick.what + ' in ' + pick.where, checked: 0, added: 0, error: null };
+  try {
+    const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, 6);
+    run.checked = f.results.length;
+    const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
+      && (x.reviews == null || x.reviews <= cfg.max_reviews));
+    if (keep.length) {
+      const name = 'Auto lead bot · ' + new Date().toLocaleDateString('en-US', { timeZone: BOT_TZ, month: 'short', day: 'numeric' });
+      let b = await env.DB.prepare('SELECT id FROM batches WHERE name = ? ORDER BY id DESC LIMIT 1').bind(name).first();
+      if (!b) { const r = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind(name, 1, now()).run(); b = { id: r.meta.last_row_id }; }
+      const city = pick.where.split(',')[0].trim();
+      const rows = keep.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city, category: p.category, rating: p.rating == null ? '' : String(p.rating),
+        link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
+      const res = await importRows(env, { batchId: b.id, rows, startStatus: 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
+      run.added = res.inserted || 0;
+    }
+    st.pages[pick.key] = f.next || 'done';
+    if (!f.next) st.i = (pick.idx + 1) % combos.length;
+  } catch (e) {
+    run.error = e instanceof HttpError ? e.message : 'Something went wrong';
+    if (!(e instanceof HttpError)) console.error(e);
+    st.i = (pick.idx + 1) % combos.length;
+  }
+  st.done_tonight++;
+  st.runs = [run, ...(st.runs || [])].slice(0, 30);
+  await setSetting(env, 'auto_finder_state', JSON.stringify(st));
+  return { run };
+}
+
 /* ================= Email bot =================
    The CRM decides who gets emailed, what it says and when. A tiny Google
    Apps Script on the owner's Gmail asks /api/outreach/today every 30 min,
@@ -1805,52 +1914,32 @@ async function api(request, env, url) {
     const u = await finderUsage(env);
     if (u.today >= LIM.day) bad(`You've hit today's ${LIM.day} searches. This cap keeps it free. It resets at midnight.`);
     if (u.month >= LIM.month) bad(`You've used this month's ${LIM.month} free searches. It resets on the 1st.`);
-    const pageToken = str(body.page_token, 600) || undefined;
-    let g = {};
-    if (provider === 'tomtom') {
-      await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(user.id, what + ' | ' + where, 0, now()).run();
-      const t = await tomtomSearch(env, what, where, parseInt(pageToken, 10) || 0);
-      g = { places: t.places, nextPageToken: t.next };
-    } else {
-    const r = env.FINDER_FAKE === '1' ? fakePlaces(pageToken) : await fetch('https://places.googleapis.com/v1/places:searchText', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken' },
-      body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
-    });
-    await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(user.id, what + ' | ' + where, 0, now()).run();
-    try { g = await r.json(); } catch { g = {}; }
-    if (!r.ok) {
-      const msg = (g.error && g.error.message) || ('Google said ' + r.status);
-      bad(/API key|not authorized|PERMISSION|billing/i.test(msg) ? 'Google rejected the key: ' + msg.slice(0, 160) + '. Check the setup steps.' : msg.slice(0, 200));
-    }
-    }
-    const places = (g.places || []).filter((p) => !p.businessStatus || p.businessStatus === 'OPERATIONAL');
-    // what's already in the CRM / on the Do Not Call list
-    const phones = places.map((p) => normPhone(p.nationalPhoneNumber)).filter(Boolean);
-    const ids = places.map((p) => p.id).filter(Boolean);
-    const inCrm = new Set(), dnc = new Set(), idSeen = new Set();
-    if (phones.length) {
-      const q = phones.map(() => '?').join(',');
-      (await env.DB.prepare(`SELECT phone_norm FROM leads WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => inCrm.add(x.phone_norm));
-      (await env.DB.prepare(`SELECT phone_norm FROM dnc WHERE phone_norm IN (${q})`).bind(...phones).all()).results.forEach((x) => dnc.add(x.phone_norm));
-    }
-    if (ids.length) (await env.DB.prepare(`SELECT place_id FROM leads WHERE place_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.forEach((x) => idSeen.add(x.place_id));
-    const out = places.map((p) => {
-      const site = p.websiteUri || '';
-      const pn = normPhone(p.nationalPhoneNumber);
-      return {
-        place_id: p.id, business: (p.displayName && p.displayName.text) || '', phone: p.nationalPhoneNumber || '', address: p.formattedAddress || '',
-        short_address: p.shortFormattedAddress || '', category: (p.primaryTypeDisplayName && p.primaryTypeDisplayName.text) || '', rating: p.rating || null,
-        reviews: p.userRatingCount == null ? null : p.userRatingCount, link: p.googleMapsUri || '', website: site,
-        site_status: !site ? 'none' : NOT_A_SITE.test(site) ? 'social' : 'site',
-        in_crm: (pn && inCrm.has(pn)) || idSeen.has(p.id), dnc: !!(pn && dnc.has(pn)),
-      };
-    });
-    // double-check "no website" ones: try the obvious domain names
-    const toCheck = out.filter((x) => x.site_status !== 'site' && !x.in_crm).slice(0, 20);
-    await Promise.all(toCheck.map(async (x) => { const f = await guessSite(x.business); if (f) { x.site_status = 'found'; x.found_site = f; } }));
-    return json({ results: out, next_page_token: g.nextPageToken || null, usage: await finderUsage(env), city: where, provider });
+    const f = await finderSearch(env, user.id, what, where, str(body.page_token, 600) || undefined);
+    return json({ results: f.results, next_page_token: f.next, usage: await finderUsage(env), city: where, provider });
+  }
+  if (path === '/finder/auto' && method === 'GET') {
+    need(user, 'admin');
+    const cfg = await autoConfig(env), st = await autoState(env);
+    const added7 = await env.DB.prepare("SELECT COUNT(*) AS n FROM leads l JOIN batches b ON b.id = l.batch_id WHERE b.name LIKE 'Auto lead bot%' AND l.created_at >= ?").bind(new Date(Date.now() - 7 * 864e5).toISOString()).first();
+    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env) });
+  }
+  if (path === '/finder/auto' && method === 'PUT') {
+    need(user, 'admin');
+    const cur = await autoConfig(env), out = { ...cur };
+    const list = (a, max) => [...new Set((Array.isArray(a) ? a : String(a || '').split(/[\n;]+/)).map((x) => str(x, 60)).filter(Boolean))].slice(0, max);
+    if (body.enabled !== undefined) out.enabled = !!body.enabled;
+    if (body.niches !== undefined) out.niches = list(body.niches, 15);
+    if (body.cities !== undefined) out.cities = list(body.cities, 15);
+    if (body.per_night !== undefined) out.per_night = Math.max(1, Math.min(20, parseInt(body.per_night, 10) || 10));
+    if (body.max_reviews !== undefined) out.max_reviews = Math.max(0, Math.min(5000, parseInt(body.max_reviews, 10) || 50));
+    if (body.include_social !== undefined) out.include_social = !!body.include_social;
+    if (out.enabled && (!out.niches.length || !out.cities.length)) bad('Add at least one type of business and one city');
+    await setSetting(env, 'auto_finder', JSON.stringify(out));
+    return json({ ok: true, config: out });
+  }
+  if (path === '/finder/auto/run' && method === 'POST') {
+    need(user, 'admin');
+    return json(await autoStep(env, { manual: true }));
   }
   if (path === '/finder/add' && method === 'POST') {
     need(user, 'admin');
@@ -3378,6 +3467,15 @@ function withHeaders(res) {
 }
 
 export default {
+  // Cloudflare runs this on the schedule in wrangler.jsonc (every 20 min, midnight to 6 AM LA time)
+  async scheduled(event, env, ctx) {
+    try {
+      await ensureSchema(env);
+      const cfg = await autoConfig(env);
+      const h = ptParts().hour;
+      if (cfg.enabled && h < 6) await autoStep(env);
+    } catch (e) { console.error('auto lead bot', e); }
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     const dm = url.pathname.match(/^\/d\/([a-z0-9-]{3,60})\/?$/);
