@@ -146,15 +146,15 @@
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['demos', 'Demo queue'], ['deals', 'Deals & commissions']]],
       ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
-      ['Tools', [['finder', 'Lead Finder'], ['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
+      ['Tools', [['emailbot', 'Email bot'], ['finder', 'Lead Finder'], ['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos', 'finder'];
+  const UNDER_MORE = ['emailbot', 'batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos', 'finder'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,7 +199,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -207,6 +207,7 @@
         case 'home': return await viewHome();
         case 'team': return await viewTeam();
         case 'finder': return await viewFinder();
+        case 'emailbot': return await viewEmailBot();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -450,6 +451,18 @@
         L.booked_at && L.status === 'booked' ? ['Booked call', fmt(L.booked_at)] : null]
         .filter((x) => x && x[1]).map(([k, v]) => h('div', null, h('span', null, k), h('span', null, v))));
 
+    const BOT_STATUS = { queued: 'Queued, goes out in the next sending window', done: 'All emails sent, no reply yet', replied: 'Replied 🔥',
+      opted_out: 'Asked not to be emailed', bounced: "Bounced, the address doesn't work", stopped: 'Stopped' };
+    const botText = !L.email ? null : L.email_status === 'active'
+      ? 'Email ' + (L.email_step || 1) + ' sent' + (L.email_next_at ? ' · next one ' + fmt(L.email_next_at) : '')
+      : BOT_STATUS[L.email_status] || (L.emailed_at ? 'Emailed ' + fmt(L.emailed_at) : 'Not emailed yet');
+    const botAct = async (action, msg) => { try { await api('POST', '/leads/' + L.id + '/emailbot', { action }); toast(msg); reload(); } catch (x) { fail(x); } };
+    const botBtns = !L.email || !seller ? [] : !L.email_status && !L.emailed_at ? [h('button', { class: 'btn small', onclick: () => botAct('queue', 'Queued for the email bot') }, icon('mail'), 'Email with the bot')]
+      : L.email_status === 'queued' ? [h('button', { class: 'btn small', onclick: () => botAct('stop', 'Removed from the bot') }, 'Cancel')]
+      : L.email_status === 'active' ? [h('button', { class: 'btn small', onclick: () => botAct('queue', 'Next email goes out in the next window') }, 'Send next one sooner'), h('button', { class: 'btn small', onclick: () => botAct('stop', 'Emails stopped') }, 'Stop emails')]
+      : L.email_status === 'stopped' ? [h('button', { class: 'btn small', onclick: () => botAct('resume', 'Emails resumed') }, 'Resume emails')] : [];
+    const botRow = botText ? h('div', { class: 'bot-row' }, h('div', null, h('span', { class: 'eyebrow' }, 'Email bot'), h('div', null, botText)), botBtns.length ? h('div', { class: 'row wrap' }, botBtns) : null) : null;
+
     async function logCall(outcome) {
       let extra = {};
       if (outcome === 'callback') {
@@ -636,7 +649,7 @@
       actions,
       emailCue,
       scriptPanel,
-      h('div', { class: 'card section' }, info),
+      h('div', { class: 'card section' }, info, botRow),
       dealBox,
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Log this call'), outcomes, closeBtn),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Notes'), noteBox, saveNote),
@@ -2189,11 +2202,231 @@
   }
 
   /* ================= admin "More" ================= */
+  /* ================= email bot ================= */
+  const BOT_KIND = { sent: 'Sent', replied: 'Replied 🔥', opted_out: 'Opted out', bounced: 'Bounced', failed: 'Failed to send', stopped: 'Stopped' };
+  const STEP_NAME = (i) => (i === 0 ? 'First email' : 'Follow-up ' + i);
+  const DAY_NAME = { sun: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' };
+  const hourTxt = (n) => (n === 0 || n === 24 ? '12 AM' : n === 12 ? '12 PM' : n < 12 ? n + ' AM' : (n - 12) + ' PM');
+  function botScript(portal, key) {
+    return `// Reekon email bot. Runs on your Gmail every 30 minutes.
+// The CRM decides who gets emailed and what it says. This just sends it.
+const PORTAL = '${portal}';
+const KEY = '${key}';
+
+// Run this once. It turns the bot on.
+function setup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('run').timeBased().everyMinutes(30).create();
+  PropertiesService.getScriptProperties().setProperty('since', String(Date.now() - 2 * 864e5));
+  run();
+}
+
+// Run this to check the connection. It emails you a test.
+function sendTestToMyself() {
+  var t = api('get', '/today');
+  if (!t) throw new Error('Could not reach your CRM. Check PORTAL and KEY at the top.');
+  var me = Session.getActiveUser().getEmail();
+  GmailApp.sendEmail(me, 'Your Reekon email bot is connected', 'It works. Bot status in the CRM: ' + (t.enabled ? 'running' : 'paused') + (t.reason ? ' (' + t.reason + ')' : '') + '.');
+  Logger.log('Connected. Test email sent to ' + me);
+}
+
+function run() {
+  try { checkInbox(); } catch (e) { console.error('inbox', e); }
+  sendDue();
+}
+
+function sendDue() {
+  var t = api('get', '/today');
+  if (!t || !t.messages || !t.messages.length) return;
+  for (var i = 0; i < t.messages.length; i++) {
+    var m = t.messages[i], item = { lead_id: m.lead_id, step: m.step, subject: m.subject, ok: true };
+    try { GmailApp.sendEmail(m.to, m.subject, m.body, { name: t.from_name }); }
+    catch (e) { item.ok = false; item.error = String(e.message || e); }
+    api('post', '/done', { items: [item] });
+    if (!item.ok && /limit|quota/i.test(item.error)) break;
+    if (i < t.messages.length - 1) Utilities.sleep(15000 + Math.floor(Math.random() * 20000));
+  }
+}
+
+function checkInbox() {
+  var props = PropertiesService.getScriptProperties();
+  var since = Number(props.getProperty('since') || (Date.now() - 2 * 864e5));
+  var me = Session.getActiveUser().getEmail().toLowerCase();
+  var threads = GmailApp.search('in:inbox newer_than:3d (subject:re OR from:mailer-daemon OR from:postmaster)', 0, 100);
+  var out = [], newest = since;
+  threads.forEach(function (th) {
+    th.getMessages().forEach(function (msg) {
+      var at = msg.getDate().getTime();
+      if (at <= since) return;
+      newest = Math.max(newest, at);
+      var raw = msg.getFrom(), from = ((raw.match(/<([^>]+)>/) || [])[1] || raw).trim().toLowerCase();
+      if (from === me) return;
+      var body = msg.getPlainBody() || '';
+      if (/mailer-daemon|postmaster/.test(from)) {
+        var found = (body.match(/[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+/g) || []).filter(function (e) { e = e.toLowerCase(); return e !== me && !/mailer-daemon|postmaster|google\\.com|googlemail/.test(e); });
+        if (found.length) out.push({ bounce: true, bounce_for: found[0] });
+        return;
+      }
+      out.push({ from: from, subject: msg.getSubject(), snippet: body.split(/\\n\\s*On .+wrote:/)[0].slice(0, 600) });
+    });
+  });
+  if (out.length) api('post', '/inbox', { messages: out.slice(0, 100) });
+  props.setProperty('since', String(newest));
+}
+
+function api(method, path, body) {
+  var opts = { method: method, contentType: 'application/json', headers: { Authorization: 'Bearer ' + KEY }, muteHttpExceptions: true };
+  if (body) opts.payload = JSON.stringify(body);
+  var r = UrlFetchApp.fetch(PORTAL + '/api/outreach' + path, opts);
+  if (r.getResponseCode() >= 300) { console.error(path + ' ' + r.getResponseCode() + ' ' + r.getContentText()); return null; }
+  return JSON.parse(r.getContentText() || '{}');
+}
+`;
+  }
+
+  async function viewEmailBot() {
+    const d = await api('GET', '/emailbot');
+    const cfg = JSON.parse(JSON.stringify(d.config));
+    const again = () => viewEmailBot();
+    const copy = async (text, msg) => { try { await navigator.clipboard.writeText(text); toast(msg || 'Copied'); } catch { prompt('Copy this:', text); } };
+    const seenRecently = d.last_seen && Date.now() - new Date(d.last_seen) < 2 * 3600e3;
+    const state = !d.key ? ['off', 'Not connected', 'Connect your Gmail below to start'] : !seenRecently ? ['warn', 'Not checking in', d.last_seen ? 'Last heard from ' + ago(d.last_seen) + '. Run setup again in Google Apps Script.' : 'Run setup in Google Apps Script to finish connecting.']
+      : cfg.enabled ? ['on', 'Running', 'Sends ' + cfg.days.map((x) => DAY_NAME[x]).join(', ') + ', ' + hourTxt(cfg.start_hour) + '–' + hourTxt(cfg.end_hour) + ' (LA time)'] : ['paused', 'Paused', 'Nothing goes out until you start it'];
+    const S2 = d.stats;
+    let dirty = false;
+    const saveBtn = h('button', { class: 'btn primary', disabled: true, onclick: () => save() }, 'Save changes');
+    const saveBar = h('div', { class: 'save-bar', hidden: true }, h('span', null, 'Unsaved changes'), saveBtn);
+    const touch = () => { dirty = true; saveBtn.disabled = false; saveBar.hidden = false; schedulePreview(); };
+    async function save(extra) {
+      try {
+        const r = await api('PUT', '/emailbot', { ...cfg, ...(extra || {}) });
+        Object.assign(cfg, r.config); dirty = false; saveBtn.disabled = true; saveBar.hidden = true; toast('Saved');
+        return true;
+      } catch (e) { fail(e); return false; }
+    }
+    const toggle = h('button', { class: 'btn ' + (cfg.enabled ? '' : 'primary'), onclick: async () => {
+      if (!cfg.enabled && !cfg.address.trim()) { toast('Add your mailing address in Schedule first. The law requires it on cold emails.', true); return; }
+      if (await save({ enabled: !cfg.enabled })) again();
+    } }, cfg.enabled ? 'Pause bot' : 'Start bot');
+
+    // ---- emails (sequence) ----
+    let lastField = null;
+    const TAGS = [['{first_name}', 'Owner first name'], ['{business}', 'Business'], ['{city}', 'City'], ['{category}', 'Type of business'], ['{demo_link}', 'Their demo link'], ['{my_name}', 'Your name']];
+    const chips = h('div', { class: 'chips' }, h('small', null, 'Tap to insert:'), TAGS.map(([t, l]) => h('button', { class: 'chip', type: 'button', title: l, onmousedown: (e) => e.preventDefault(), onclick: () => {
+      const f = lastField; if (!f) return toast('Tap into an email first', true);
+      const a = f.selectionStart, b = f.selectionEnd; f.value = f.value.slice(0, a) + t + f.value.slice(b); f.selectionStart = f.selectionEnd = a + t.length; f.focus(); f.dispatchEvent(new Event('input'));
+    } }, t)));
+    const stepsBox = h('div', { class: 'steps' });
+    const previews = [];
+    function drawSteps() {
+      previews.length = 0;
+      stepsBox.replaceChildren(...cfg.steps.map((st, i) => {
+        const subj = h('input', { id: 'bot-subj-' + i, value: st.subject, maxlength: 150, onfocus: (e) => (lastField = e.target), oninput: (e) => { st.subject = e.target.value; touch(); } });
+        const body = h('textarea', { id: 'bot-body-' + i, rows: 8, onfocus: (e) => (lastField = e.target), oninput: (e) => { st.body = e.target.value; touch(); } }); body.value = st.body;
+        const wait = i ? h('input', { id: 'bot-wait-' + i, type: 'number', min: 1, max: 30, inputmode: 'numeric', value: st.wait_days, style: 'width:72px', oninput: (e) => { st.wait_days = +e.target.value || 1; touch(); } }) : null;
+        const prev = h('pre', { class: 'mail-preview' }, 'Loading preview…'); previews.push(prev);
+        return h('div', { class: 'card step-card' },
+          h('div', { class: 'step-top' }, h('b', null, STEP_NAME(i)),
+            i ? h('label', { class: 'wait' }, 'Send ', wait, ' days after the last one, if no reply') : h('span', { class: 'sub' }, 'Goes out first'),
+            i && i === cfg.steps.length - 1 ? h('button', { class: 'linkish', type: 'button', onclick: () => { cfg.steps.pop(); drawSteps(); touch(); } }, 'Remove') : null),
+          h('div', { class: 'field' }, h('label', { for: 'bot-subj-' + i }, 'Subject'), subj),
+          h('div', { class: 'field' }, h('label', { for: 'bot-body-' + i }, 'Message'), body),
+          h('details', { class: 'prev-wrap' }, h('summary', null, 'Preview'), prev));
+      }), cfg.steps.length < 5 ? h('button', { class: 'btn small', type: 'button', onclick: () => { cfg.steps.push({ wait_days: 4, subject: 'Re: ' + (cfg.steps[0].subject || ''), body: 'Hey {first_name}, ' }); drawSteps(); touch(); } }, '+ Add a follow-up') : null);
+      schedulePreview(true);
+    }
+    let pvTimer, noDemo = false;
+    const demoSeg = h('div', { class: 'seg compact' }, [['with', 'Lead has a demo'], ['without', 'No demo yet']].map(([k, l]) => h('button', { type: 'button', class: k === 'with' ? 'on' : null, onclick: (e) => {
+      noDemo = k === 'without'; demoSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.currentTarget)); schedulePreview(true); } }, l)));
+    function schedulePreview(now) {
+      clearTimeout(pvTimer);
+      pvTimer = setTimeout(async () => {
+        try {
+          const r = await api('POST', '/emailbot/preview', { steps: cfg.steps, from_name: cfg.from_name, company: cfg.company, address: cfg.address || '(your mailing address)', no_demo: noDemo });
+          r.emails.forEach((e, i) => { if (previews[i]) previews[i].textContent = 'To: ' + 'owner@kingscutz.com' + '\nSubject: ' + e.subject + '\n\n' + e.body; });
+        } catch (e) { previews.forEach((p) => (p.textContent = e.message)); }
+      }, now ? 0 : 600);
+    }
+
+    // ---- schedule ----
+    const dayBtns = h('div', { class: 'daypick' }, Object.entries(DAY_NAME).map(([k, l]) => h('button', { type: 'button', class: cfg.days.includes(k) ? 'on' : null, 'aria-pressed': String(cfg.days.includes(k)), onclick: (e) => {
+      const on = cfg.days.includes(k); cfg.days = on ? cfg.days.filter((x) => x !== k) : [...cfg.days, k];
+      e.currentTarget.classList.toggle('on', !on); e.currentTarget.setAttribute('aria-pressed', String(!on)); touch(); } }, l)));
+    const hourSel = (id, val, lo, hi, key) => h('select', { id, onchange: (e) => { cfg[key] = +e.target.value; touch(); } },
+      Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map((n) => h('option', { value: n, selected: n === val }, hourTxt(n))));
+    const inp = (id, key, attrs) => h('input', { id, value: cfg[key] || '', ...attrs, oninput: (e) => { cfg[key] = e.target.value; touch(); } });
+
+    const tiles = h('div', { class: 'kpi-grid' },
+      kpiTile('mail', 'Sent today', S2.today + ' / ' + cfg.daily_cap, S2.week + ' this week'),
+      kpiTile('leads', 'Ready to email', S2.ready.toLocaleString(), S2.no_email ? S2.no_email + ' leads have no email' : 'have an email, never contacted'),
+      kpiTile('callbacks', 'In follow-ups', S2.in_sequence.toLocaleString(), 'waiting on the next email'),
+      kpiTile('flag', 'Replies', S2.replied.toLocaleString(), S2.contacted ? Math.round((S2.replied / S2.contacted) * 1000) / 10 + '% of ' + S2.contacted + ' emailed' : 'none yet', { href: '#/leads', cls: S2.replied ? 'money' : '' }),
+      kpiTile('account', 'Opted out', S2.opted_out.toLocaleString(), 'never emailed again'),
+      kpiTile('script', 'Bounced', S2.bounced.toLocaleString(), 'bad addresses'));
+    tiles.lastChild.previousSibling.previousSibling.addEventListener('click', () => Object.assign(S.leadFilters, { status: 'all', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: 'replied', due: '', source: '' }));
+
+    const next = d.next.length ? d.next.map((n) => h('a', { class: 'list-row link', href: '#/lead/' + n.id },
+      h('div', { style: 'flex:1;min-width:0' }, h('b', null, n.business), h('div', { class: 'sub ellip' }, n.email)),
+      h('div', { class: 'row', style: 'gap:6px;flex:none' }, n.queued ? h('span', { class: 'tag hot' }, 'Queued') : null, n.has_demo ? h('span', { class: 'tag good' }, 'Demo') : null, h('span', { class: 'tag' }, STEP_NAME(n.step)))))
+      : [h('div', { class: 'empty' }, h('b', null, 'Nobody to email right now'), 'Add leads with email addresses from Lead Finder, an upload, or your scraper.')];
+
+    const log = d.log.length ? d.log.map((e) => h(e.lead_id ? 'a' : 'div', { class: 'list-row' + (e.lead_id ? ' link' : ''), href: e.lead_id ? '#/lead/' + e.lead_id : null },
+      h('div', { style: 'flex:1;min-width:0' }, h('b', null, e.business || 'Lead'), h('div', { class: 'sub ellip' }, e.kind === 'sent' ? STEP_NAME((e.step || 1) - 1) + ' · ' + (e.subject || '') : (e.detail || e.subject || ''))),
+      h('div', { style: 'text-align:right;flex:none' }, h('span', { class: 'tag' + (e.kind === 'replied' ? ' hot' : e.kind === 'sent' ? ' good' : '') }, BOT_KIND[e.kind] || e.kind), h('div', { class: 'sub' }, ago(e.created_at)))))
+      : [h('div', { class: 'empty' }, h('b', null, 'No activity yet'), 'Sends, replies and bounces show up here.')];
+
+    const connect = async () => {
+      if (d.key && !(await confirmSheet('Get new bot code?', 'This makes a new key and turns off the old one. Paste the new code into Google Apps Script right after, or the bot stops.', 'Get new code'))) return;
+      let r; try { r = await api('POST', '/emailbot/key'); } catch (e) { return fail(e); }
+      const code = botScript(r.portal, r.key);
+      await sheet((box, close) => box.append(h('h2', null, 'Your bot code'),
+        h('p', { class: 'sub' }, 'This is the only time the key is shown. Copy it now and paste it into Google Apps Script.'),
+        h('div', { class: 'code' }, h('pre', null, code), h('button', { class: 'btn small primary', onclick: () => copy(code, 'Bot code copied') }, icon('copy'), 'Copy code')),
+        h('button', { class: 'btn block', style: 'margin-top:12px', onclick: () => { close(); again(); } }, 'Done')));
+    };
+
+    drawSteps();
+    shell('emailbot', [
+      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Email bot'), h('p', { class: 'sub' }, 'Cold emails and follow-ups from your Gmail. Stops the moment someone replies.')),
+        h('div', { class: 'row' }, toggle)),
+      h('div', { class: 'bot-state ' + state[0] }, h('i'), h('div', null, h('b', null, state[1]), h('div', { class: 'sub' }, state[2]))),
+      tiles,
+      h('div', { class: 'bot-cols' },
+        h('div', { class: 'bot-main' },
+          panel('Emails', null, h('div', { class: 'prev-pick' }, h('small', null, 'Preview as:'), demoSeg), chips, stepsBox),
+          panel('Schedule & sender', null,
+            h('div', { class: 'field' }, h('label', null, 'Days it sends'), dayBtns),
+            h('div', { class: 'grid2' }, h('div', { class: 'field' }, h('label', { for: 'bot-start' }, 'From'), hourSel('bot-start', cfg.start_hour, 0, 23, 'start_hour')),
+              h('div', { class: 'field' }, h('label', { for: 'bot-end' }, 'Until (LA time)'), hourSel('bot-end', cfg.end_hour, 1, 24, 'end_hour'))),
+            h('div', { class: 'field' }, h('label', { for: 'bot-cap' }, 'Most emails per day'), h('input', { id: 'bot-cap', type: 'number', min: 1, max: 90, inputmode: 'numeric', value: cfg.daily_cap, oninput: (e) => { cfg.daily_cap = +e.target.value || 1; touch(); } }),
+              h('span', { class: 'hint' }, 'Start around 20 to 40. Gmail stops a regular account at 100 a day, and slow and steady keeps you out of spam.')),
+            h('div', { class: 'grid2' }, h('div', { class: 'field' }, h('label', { for: 'bot-from' }, 'Your name'), inp('bot-from', 'from_name', { maxlength: 60 })),
+              h('div', { class: 'field' }, h('label', { for: 'bot-co' }, 'Company'), inp('bot-co', 'company', { maxlength: 80 }))),
+            h('div', { class: 'field' }, h('label', { for: 'bot-addr' }, 'Mailing address'), inp('bot-addr', 'address', { maxlength: 200, placeholder: 'Street, city, state, ZIP or a P.O. box' }),
+              h('span', { class: 'hint' }, 'US law (CAN-SPAM) requires a real mailing address on cold emails. A P.O. box works.'))),
+          saveBar),
+        h('div', { class: 'bot-side' },
+          panel('Up next', h('span', { class: 'sub' }, 'Follow-ups go first'), h('div', { class: 'card' }, next)),
+          panel('Activity', null, h('div', { class: 'card' }, log)),
+          panel('Connect your Gmail', null, h('div', { class: 'card' },
+            h('ol', { class: 'steps-list' },
+              h('li', null, 'Tap ', h('b', null, d.key ? 'Get new bot code' : 'Get bot code'), ' and copy it.'),
+              h('li', null, 'Go to ', h('b', null, 'script.google.com'), ' signed in as the Gmail you send from. New project, delete what is there, paste, Save.'),
+              h('li', null, 'Pick ', h('b', null, 'sendTestToMyself'), ' at the top and Run. Allow access (Advanced → Go to project). Check your inbox.'),
+              h('li', null, 'Pick ', h('b', null, 'setup'), ' and Run. Done, it checks in every 30 minutes.'),
+              h('li', null, 'Used the first email robot? Delete that old project so leads are not emailed twice.')),
+            h('button', { class: 'btn ' + (d.key ? '' : 'primary') + ' block', onclick: connect }, icon('bolt'), d.key ? 'Get new bot code' : 'Get bot code'),
+            d.key ? h('div', { class: 'sub', style: 'margin-top:8px' }, 'Key ' + d.key.prefix + '… · ' + (d.key.last_used_at ? 'last used ' + ago(d.key.last_used_at) : 'never used yet')) : null)))),
+    ]);
+    window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); }, { once: true });
+  }
+
   function viewMore() {
     const row = (href, ic, title, sub) => h('a', { class: 'list-row link', href }, h('span', { class: 'ic' }, icon(ic)), h('div', { style: 'flex:1;min-width:0' }, h('b', null, title), h('div', { class: 'sub' }, sub)), icon('chev'));
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
+        row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail, on autopilot'),
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website and few reviews'),
         row('#/callbacks', 'callbacks', 'Callbacks', 'Who to call back today'),
         row('#/demos', 'demos', 'Demo queue', 'Leads waiting on a demo site'),

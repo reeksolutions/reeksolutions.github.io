@@ -629,6 +629,7 @@ function cleanBotConfig(b, cur) {
     steps.forEach((x, i) => { if (!x.subject || !x.body) bad('Email ' + (i + 1) + ' needs a subject and a message'); });
     out.steps = steps;
   }
+  if (out.enabled && !str(out.address)) bad('Add your mailing address first. The law requires it on cold emails.');
   return out;
 }
 function ptParts(d = new Date()) {
@@ -769,6 +770,9 @@ async function handleOutreach(request, env, url) {
     return json({ ok: true, ...(await botHandleReplies(env, body.messages, actor)) });
   }
   if (path === '/batch' && request.method === 'GET') {
+    // the new email bot replaces the first robot: once it's connected, the old one gets nothing
+    const bot = await env.DB.prepare("SELECT id FROM api_keys WHERE name = 'Email bot' AND revoked_at IS NULL LIMIT 1").first();
+    if (bot) return json({ leads: [], note: 'The Email bot in your CRM handles sending now. Delete this old script.' });
     const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit'), 10) || 40));
     const { results } = await env.DB.prepare(
       `SELECT id, business, owner, email, city, category FROM leads
@@ -1392,7 +1396,8 @@ async function api(request, env, url) {
       c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'opted_out'"),
       c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'bounced'"),
       c("SELECT COUNT(*) AS n FROM leads WHERE email_status = 'active'"),
-      c(`SELECT COUNT(*) AS n FROM leads l WHERE ${BOT_ELIGIBLE} AND l.emailed_at IS NULL AND (l.email_status IS NULL OR l.email_status IN ('','queued'))`),
+      c(`SELECT COUNT(*) AS n FROM leads l WHERE ${BOT_ELIGIBLE} AND l.emailed_at IS NULL AND (l.email_status IS NULL OR l.email_status IN ('','queued'))
+        AND (l.email_status = 'queued' OR l.website IS NULL OR l.website = '' OR ${SOCIAL_SQL.replace(/website/g, 'l.website')})`),
       c("SELECT COUNT(*) AS n FROM leads WHERE (email IS NULL OR email = '') AND status NOT IN ('dnc','lost','won')"),
     ]);
     const next = (await botQueue(env, cfg, 12, new Date(Date.now() + 864e5).toISOString())).map((l) => ({ id: l.id, business: l.business, email: l.email, step: l.step, queued: l.email_status === 'queued', has_demo: !!l.demo_url }));
