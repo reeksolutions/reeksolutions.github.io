@@ -137,24 +137,24 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['team', 'Team'], ['studio', 'Studio'], ['more', 'More']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['studio', 'Studio'], ['earnings', 'Earnings']];
+    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['team', 'Team'], ['more', 'More']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['script', 'Script']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [
-      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['demos', 'Demo queue'], ['deals', 'Deals & commissions']]],
-      ['Team', [['team', 'Team stats'], ['users', 'Team members']]],
-      ['Tools', [['emailbot', 'Email bot'], ['finder', 'Lead Finder'], ['upload', 'Upload leads'], ['integrations', 'Scraper & n8n'], ['batches', 'Batches'], ['script', 'Call script']]],
+      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
+      ['Team', [['team', 'Team stats'], ['recordings', 'Call recordings'], ['users', 'Team members']]],
+      ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script'], ['upload', 'Add leads'], ['integrations', 'Scraper & n8n']]],
     ];
-    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['studio', 'Demo Studio'], ['earnings', 'Earnings'], ['script', 'Call script']]]];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['script', 'Call script'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['emailbot', 'batches', 'upload', 'users', 'script', 'account', 'callbacks', 'deals', 'integrations', 'demos', 'finder'];
+  const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,7 +199,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'script', 'demo', 'account'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'script', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -208,6 +208,7 @@
         case 'team': return await viewTeam();
         case 'finder': return await viewFinder();
         case 'emailbot': return await viewEmailBot();
+        case 'recordings': return await viewRecordings();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -276,137 +277,160 @@
     return S.options;
   }
 
+  const STAGES = [['new', 'New'], ['called', 'Contacted'], ['callback', 'Callback'], ['booked', 'Booked'], ['won', 'Won'], ['lost', 'Lost']];
+  const STAGE_OF = (st) => (['new', 'demo_needed', 'demo_ready'].includes(st) ? 'new' : st);
+  const STAGE_NAME = Object.fromEntries(STAGES);
+  const HEAT_DOT = (k) => h('i', { class: 'hdot ' + (k || 'cold'), title: (HEAT_LABEL[k || 'cold'] || '').replace(/^\S+\s/, '') });
+
   async function viewLeads() {
     const isAdmin = S.me.role === 'admin';
     const opts = await getOptions(true);
     const F = S.leadFilters;
-    const listEl = h('div');
-    const countEl = h('p', { class: 'count-line' });
-    const moreBtn = h('button', { class: 'btn block more', hidden: true }, 'Load more');
-    let offset = 0;
-
-    const sel = (key, first, items) => {
-      const s = h('select', { class: F[key] && F[key] !== 'open' ? 'set' : null, onchange: () => { F[key] = s.value; s.className = s.value && s.value !== 'open' ? 'set' : ''; load(true); } },
-        first.map(([v, l]) => h('option', { value: v }, l)), items.map(([v, l]) => h('option', { value: v }, l)));
-      s.value = F[key]; return s;
-    };
-    const statusSel = sel('status', [['open', 'All open'], [isAdmin ? 'all' : '', isAdmin ? 'Everything (incl. DNC)' : 'All']], Object.entries(STATUS).filter(([k]) => isAdmin || k !== 'dnc'));
-    const filters = h('div', { class: 'filters' }, statusSel,
-      isAdmin ? sel('rep', [['', 'All reps'], ['none', 'Unassigned']], opts.reps.map((r) => [String(r.id), r.name + (r.active ? '' : ' (off)')])) : null,
-      isAdmin ? sel('batch', [['', 'All batches']], opts.batches.map((b) => [String(b.id), b.name])) : null,
-      sel('city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
-      sel('contact', [['', 'Any contact']], [['email', 'Has email'], ['unemailed', 'Email not sent yet'], ['phone', 'Has phone']]),
-      (opts.tags || []).length ? sel('tag', [['', 'Any tag']], opts.tags.map((t) => [t, '#' + t])) : null,
-      isAdmin ? sel('source', [['', 'Any source']], [['finder', 'From Lead Finder'], ['api', 'From scraper / n8n'], ['csv', 'From CSV upload']]) : null);
-
-    // saved views: a few built in + your own
+    const mode = lsGet('rs_leads_mode', 'board');
     const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
     const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
-    const applyView = (f) => { Object.assign(F, BLANK, f); viewLeads(); };
-    const same = (f) => FKEYS.every((k) => String(F[k] || '') === String((Object.assign({}, BLANK, f))[k] || ''));
-    const builtIn = [['All open', {}], ['⏰ Due now', { due: '1' }], ['🔥 Hot', { heat: 'hot' }], ['✉ Not emailed', { contact: 'unemailed' }]];
-    if (isAdmin) builtIn.push(['⚡ From scraper', { source: 'api', status: 'open' }]);
-    let myViews = [];
-    try { myViews = await api('GET', '/views'); } catch { /* ignore */ }
-    const viewsRow = h('div', { class: 'views-row' },
-      builtIn.map(([l, f]) => { const b = h('button', { class: 'vchip' + (same(f) ? ' on' : ''), onclick: () => applyView(f) }, l); b._f = f; return b; }),
-      myViews.map((v) => { const c = h('span', { class: 'vchip mine' + (same(v.filters) ? ' on' : '') }, h('button', { onclick: () => applyView(v.filters) }, v.name),
-        h('button', { class: 'x', 'aria-label': 'Delete view ' + v.name, onclick: async () => {
-          if (!(await confirmSheet('Delete "' + v.name + '"?', 'This only removes the saved view. No leads change.', 'Delete', true))) return;
-          try { await api('DELETE', '/views/' + v.id); viewLeads(); } catch (e) { fail(e); }
-        } }, '×')); c._f = v.filters; return c; }),
-      h('button', { class: 'vchip add', onclick: async () => {
-        const name = await sheet((box, close) => {
-          const inp = h('input', { placeholder: 'e.g. Inglewood barbers, hot', maxlength: 40 });
-          box.append(h('h2', null, 'Save this view'), h('p', { class: 'sub' }, 'Saves the filters and search you have on right now, so you can get back here in one tap.'),
-            h('div', { class: 'field' }, h('label', null, 'Name'), inp),
-            h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value.trim() || null) }, 'Save view')));
-          setTimeout(() => inp.focus(), 50);
-        });
-        if (!name) return;
-        try { await api('POST', '/views', { name, filters: Object.fromEntries(FKEYS.map((k) => [k, F[k]])) }); toast('View saved'); viewLeads(); } catch (e) { fail(e); }
-      } }, '+ Save view'));
-    const heatChips = h('div', { class: 'heat-chips' }, [['', 'All']].concat(HEAT.map(([k, l, e]) => [k, e + ' ' + l])).map(([k, l]) =>
-      h('button', { class: 'hchip ' + (k || 'all') + (F.heat === k ? ' on' : ''), onclick: (e) => {
-        F.heat = k; heatChips.querySelectorAll('.hchip').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); load(true);
-      } }, l)));
+    const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
+    const body = h('div', { class: 'leads-body' });
+    const countEl = h('span', { class: 'count-line' });
 
+    // ---- toolbar ----
     let tmr;
-    const search = h('div', { class: 'search' }, icon('search'),
-      h('input', { type: 'search', placeholder: 'Search business, owner, phone, email…', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(true); }, 300); } }));
+    const search = h('label', { class: 'tsearch' }, icon('search'),
+      h('input', { id: 'lead-search', type: 'search', placeholder: 'Search name, owner, phone, email', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
+    const QUICK = [['All', {}], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['Not emailed', { contact: 'unemailed' }]];
+    const sameQ = (f) => ['heat', 'due', 'contact'].every((k) => String(F[k] || '') === String(f[k] || ''));
+    const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '' }, f); viewLeads(); } }, l)));
+    const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
+    const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
+    const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['board', 'Board'], ['table', 'Table']].map(([k, l]) =>
+      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode', k); viewLeads(); } }, l)));
 
-    // admin bulk select
-    const bulk = h('div', { class: 'bulk', hidden: true });
-    const selectBtn = isAdmin ? h('button', { class: 'btn small', onclick: () => { S.selecting = !S.selecting; S.selected.clear(); selectBtn.textContent = S.selecting ? 'Done' : 'Select'; load(true); } }, S.selecting ? 'Done' : 'Select') : null;
-
-    function renderBulk() {
-      if (!isAdmin || !S.selecting || !S.selected.size) { bulk.hidden = true; return; }
-      bulk.hidden = false;
-      const repSel = h('select', null, h('option', { value: 'auto' }, 'Auto-assign (spread evenly)'), h('option', { value: 'none' }, 'Unassign'),
-        opts.reps.filter((r) => r.active).map((r) => h('option', { value: r.id }, r.name)));
-      const run = async (body, msg) => { try { await api('POST', '/leads/bulk', Object.assign({ ids: [...S.selected] }, body)); toast(msg); S.selected.clear(); load(true); } catch (e) { fail(e); } };
-      const heatSel = h('select', null, h('option', { value: '' }, 'Set heat…'), HEAT.map(([k, l, e]) => h('option', { value: k }, e + ' ' + l)));
-      heatSel.onchange = () => heatSel.value && run({ action: 'heat', heat: heatSel.value }, 'Heat updated');
-      const stSel = h('select', null, h('option', { value: '' }, 'Set status…'), [['new', 'New'], ['demo_needed', 'Demo needed'], ['lost', 'Closed lost']].map(([k, l]) => h('option', { value: k }, l)));
-      stSel.onchange = () => stSel.value && run({ action: 'status', status: stSel.value }, 'Status updated');
-      const tagIn = h('input', { placeholder: 'tag', list: 'tagList', maxlength: 30 });
-      bulk.replaceChildren(
-        h('div', { class: 'row' }, h('b', null, S.selected.size + ' selected'), h('span', { style: 'flex:1' }),
-          h('button', { class: 'btn small', onclick: () => { listEl.querySelectorAll('.lead input[type=checkbox]').forEach((cb) => { cb.checked = true; S.selected.add(+cb.dataset.id); }); renderBulk(); } }, 'Select all'),
-          h('button', { class: 'btn small', onclick: () => run({ action: 'demo_needed' }, 'Sent to demo queue') }, 'Send to demos')),
-        h('div', { class: 'row' }, repSel, h('button', { class: 'btn primary small', onclick: () => run({ action: 'assign', rep: repSel.value }, 'Assigned ' + S.selected.size + ' leads') }, 'Assign')),
-        h('div', { class: 'row' }, heatSel, stSel),
-        h('div', { class: 'row' }, tagIn, h('button', { class: 'btn small', onclick: () => tagIn.value.trim() && run({ action: 'tag', tag: tagIn.value }, 'Tag added') }, '+ Tag'),
-          h('button', { class: 'btn small', onclick: () => tagIn.value.trim() && run({ action: 'untag', tag: tagIn.value }, 'Tag removed') }, '− Tag')),
-        h('datalist', { id: 'tagList' }, (opts.tags || []).map((t) => h('option', { value: t }))));
+    async function filterSheet() {
+      const sel = (id, label, key, first, items) => {
+        const s = h('select', { id }, first.map(([v, l]) => h('option', { value: v }, l)), items.map(([v, l]) => h('option', { value: v }, l)));
+        s.value = F[key] || ''; s.onchange = () => (F[key] = s.value);
+        return h('div', { class: 'field' }, h('label', { for: id }, label), s);
+      };
+      const done = await sheet((box, close) => box.append(h('h2', null, 'Filters'),
+        mode === 'table' ? sel('f-status', 'Stage', 'status', [['open', 'All open'], ['', 'Everything']], STAGES.map(([k, l]) => [k === 'new' ? 'new,demo_needed,demo_ready' : k, l]).concat(isAdmin ? [['dnc', 'Do Not Call']] : [])) : null,
+        sel('f-heat', 'Heat', 'heat', [['', 'Any']], HEAT.map(([k, l]) => [k, l])),
+        isAdmin ? sel('f-rep', 'Rep', 'rep', [['', 'All reps'], ['none', 'Unassigned']], opts.reps.map((r) => [String(r.id), r.name + (r.active ? '' : ' (off)')])) : null,
+        sel('f-city', 'City', 'city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
+        sel('f-contact', 'Contact', 'contact', [['', 'Any']], [['phone', 'Has phone'], ['email', 'Has email'], ['unemailed', 'Email not sent yet']]),
+        (opts.tags || []).length ? sel('f-tag', 'Tag', 'tag', [['', 'Any tag']], opts.tags.map((t) => [t, '#' + t])) : null,
+        isAdmin ? sel('f-source', 'Source', 'source', [['', 'Anywhere']], [['finder', 'Lead Finder / auto bot'], ['api', 'Scraper / n8n'], ['csv', 'CSV upload']]) : null,
+        isAdmin && opts.batches.length ? sel('f-batch', 'Upload', 'batch', [['', 'All uploads']], opts.batches.map((b) => [String(b.id), b.name])) : null,
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { Object.assign(F, BLANK, { q: F.q }); close(true); } }, 'Clear all'), h('button', { class: 'btn primary', onclick: () => close(true) }, 'Show leads'))));
+      if (done) viewLeads();
     }
 
-    async function load(reset) {
-      if (reset) { offset = 0; listEl.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' }))); }
-      const qs = new URLSearchParams({ limit: 50, offset });
-      for (const k of FKEYS) if (F[k]) qs.set(k, F[k]);
-      if (F.status === '') qs.delete('status');
-      viewsRow.querySelectorAll('.vchip').forEach((c) => { if (c._f) c.classList.toggle('on', same(c._f)); });
-      try {
-        const r = await api('GET', '/leads?' + qs);
-        if (reset) listEl.replaceChildren();
-        countEl.textContent = r.total + (r.total === 1 ? ' lead' : ' leads');
-        if (!r.leads.length && reset) listEl.append(h('div', { class: 'empty' }, h('b', null, 'No leads here'), isAdmin ? 'Try other filters, or upload a batch.' : 'Nothing matches. New leads show up when your admin assigns them.'));
-        r.leads.forEach((l) => listEl.append(leadCard(l)));
-        offset += r.leads.length; moreBtn.hidden = !r.more;
-        renderBulk();
-      } catch (e) { fail(e); }
+    // ---- board ----
+    async function loadBoard() {
+      body.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' })));
+      let r; try { r = await api('GET', '/leads/board?' + qsFrom({ per: 50 })); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
+      const total = r.stages.reduce((a, s) => a + s.count, 0);
+      countEl.textContent = total.toLocaleString() + (total === 1 ? ' lead' : ' leads');
+      const board = h('div', { class: 'kanban' }, r.stages.map((st) => {
+        const col = h('div', { class: 'bcol', 'data-stage': st.key },
+          h('div', { class: 'bhead' }, h('b', null, st.label), h('span', null, st.count.toLocaleString())),
+          h('div', { class: 'bcards' }, st.leads.length ? st.leads.map(boardCard) : h('div', { class: 'bempty' }, 'Drop leads here')),
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
+        col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('over'); });
+        col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
+        col.addEventListener('drop', (e) => { e.preventDefault(); col.classList.remove('over'); const id = +e.dataTransfer.getData('text/plain'); if (id) moveLead(id, st.key); });
+        return col;
+      }));
+      body.replaceChildren(board);
     }
-
-    function leadCard(l) {
-      const tags = [h('span', { class: 'tag heat ' + (l.heat || 'cold') }, HEAT_LABEL[l.heat || 'cold']), pill(l.status)];
-      if (l.demo_views) tags.push(h('span', { class: 'tag hot' }, '👀 viewed ' + l.demo_views + 'x'));
-      if (l.email) tags.push(h('span', { class: 'tag' + (l.emailed_at ? ' good' : '') }, l.emailed_at ? '✉ emailed' : '✉ email'));
-      if (l.status === 'callback' && l.callback_at) tags.push(h('span', { class: 'tag hot' }, '↻ ' + fmt(l.callback_at)));
-      if (l.status === 'booked' && l.booked_at) tags.push(h('span', { class: 'tag good' }, '📅 ' + fmt(l.booked_at)));
-      tags.push(l.demo_url ? h('span', { class: 'tag good' }, 'Demo ✓') : h('span', { class: 'tag' }, 'No demo'));
-      if (l.attempts) tags.push(h('span', { class: 'tag' }, l.attempts + (l.attempts === 1 ? ' call' : ' calls')));
-      if (isAdmin) tags.push(h('span', { class: 'tag' }, l.rep_name || 'Unassigned'));
-      if (l.next_action_at) tags.unshift(h('span', { class: 'tag next' + (new Date(l.next_action_at) < new Date() ? ' due' : '') }, '⏰ ' + fmt(l.next_action_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' })));
-      (l.tags || []).forEach((t) => tags.push(h('span', { class: 'tag hash' }, '#' + t)));
-      const card = h('a', { class: 'lead', href: '#/lead/' + l.id },
-        S.selecting ? h('input', { type: 'checkbox', 'data-id': l.id, checked: S.selected.has(l.id), onclick: (e) => { e.stopPropagation(); e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } }) : null,
-        h('div', { class: 'body' }, h('div', { class: 'name' }, l.business),
-          h('div', { class: 'meta' }, [l.owner, l.city, l.category].filter(Boolean).join(' · ') || '—'),
-          !l.phone && l.email ? h('div', { class: 'meta' }, '✉ ' + l.email) : null,
-          h('div', { class: 'tags' }, tags)),
-        l.phone && !S.selecting ? h('a', { class: 'call-btn', href: telHref(l.phone), 'aria-label': 'Call ' + l.business, onclick: (e) => e.stopPropagation() }, icon('phone')) : null);
-      if (S.selecting) card.addEventListener('click', (e) => { if (e.target.type !== 'checkbox') { e.preventDefault(); const cb = card.querySelector('input'); cb.checked = !cb.checked; cb.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } });
+    function boardCard(l) {
+      const due = l.next_action_at && new Date(l.next_action_at) < new Date();
+      const when = l.status === 'callback' && l.callback_at ? '↻ ' + fmt(l.callback_at) : l.status === 'booked' && l.booked_at ? '📅 ' + fmt(l.booked_at) : l.next_action_at ? '⏰ ' + fmt(l.next_action_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+      const card = h('a', { class: 'bcard', href: '#/lead/' + l.id, draggable: 'true' },
+        h('div', { class: 'bc-top' }, HEAT_DOT(l.heat), h('b', null, l.business),
+          h('button', { class: 'bc-move', type: 'button', 'aria-label': 'Move ' + l.business, onclick: (e) => { e.preventDefault(); e.stopPropagation(); moveSheet(l); } }, icon('more'))),
+        h('div', { class: 'bc-meta' }, [l.owner, l.city].filter(Boolean).join(' · ') || l.category || '—'),
+        when || (isAdmin && l.rep_name) || l.attempts ? h('div', { class: 'bc-foot' },
+          when ? h('span', { class: due ? 'due' : null }, when) : null,
+          l.attempts ? h('span', null, l.attempts + (l.attempts === 1 ? ' call' : ' calls')) : null,
+          isAdmin ? h('span', { class: 'rep' }, l.rep_name ? first(l.rep_name) : 'Unassigned') : null) : null);
+      card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(l.id)); card.classList.add('dragging'); });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
       return card;
     }
+    async function moveSheet(l) {
+      const to = await sheet((box, close) => box.append(h('h2', null, 'Move ' + l.business), h('p', { class: 'sub' }, 'Now in ' + STAGE_NAME[STAGE_OF(l.status)]),
+        h('div', { class: 'move-list' }, STAGES.map(([k, lab]) => h('button', { class: 'btn' + (STAGE_OF(l.status) === k ? ' primary' : ''), disabled: STAGE_OF(l.status) === k, onclick: () => close(k) }, lab))),
+        h('button', { class: 'btn block', style: 'margin-top:10px', onclick: () => close(null) }, 'Cancel')));
+      if (to) moveLead(l.id, to);
+    }
+    async function moveLead(id, stage) {
+      try { await api('PATCH', '/leads/' + id, { status: stage }); toast('Moved to ' + STAGE_NAME[stage]); load(); } catch (e) { fail(e); }
+    }
 
-    moreBtn.onclick = () => load(false);
+    // ---- table ----
+    let offset = 0, rows = [];
+    const sort = S.leadSort || (S.leadSort = { key: '', dir: 'asc' });
+    async function loadTable(more) {
+      if (!more) { offset = 0; rows = []; body.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' }))); }
+      const qs = qsFrom({ limit: 100, offset });
+      if (F.status) qs.set('status', F.status); else if (isAdmin) qs.set('status', 'all');
+      if (sort.key) { qs.set('sort', sort.key); qs.set('dir', sort.dir); }
+      let r; try { r = await api('GET', '/leads?' + qs); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
+      rows = rows.concat(r.leads); offset += r.leads.length;
+      countEl.textContent = r.total.toLocaleString() + (r.total === 1 ? ' lead' : ' leads');
+      const th = (key, label, cls) => h('th', { class: cls || null }, key ? h('button', { class: 'sortbtn' + (sort.key === key ? ' on' : ''), onclick: () => { sort.dir = sort.key === key && sort.dir === 'asc' ? 'desc' : 'asc'; sort.key = key; loadTable(); } },
+        label, sort.key === key ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '') : label);
+      const stageSel = (l) => {
+        const s = h('select', { class: 'stage-sel s-' + STAGE_OF(l.status), 'aria-label': 'Stage for ' + l.business, onclick: (e) => e.stopPropagation() },
+          STAGES.map(([k, lab]) => h('option', { value: k }, lab)), l.status === 'dnc' ? h('option', { value: 'dnc' }, 'Do Not Call') : null);
+        s.value = STAGE_OF(l.status);
+        s.onchange = async () => { try { await api('PATCH', '/leads/' + l.id, { status: s.value }); l.status = s.value; s.className = 'stage-sel s-' + s.value; toast('Moved to ' + STAGE_NAME[s.value]); } catch (e) { fail(e); s.value = STAGE_OF(l.status); } };
+        return s;
+      };
+      const tbl = h('table', { class: 'ltable' },
+        h('thead', null, h('tr', null,
+          isAdmin ? h('th', { class: 'ck' }, h('input', { type: 'checkbox', 'aria-label': 'Select all', onchange: (e) => { tbl.querySelectorAll('tbody input[type=checkbox]').forEach((c) => { c.checked = e.target.checked; c.checked ? S.selected.add(+c.dataset.id) : S.selected.delete(+c.dataset.id); }); renderBulk(); } })) : null,
+          th('business', 'Business'), th('', 'Phone', 'hide-sm'), th('status', 'Stage'), th('city', 'City', 'hide-sm'),
+          isAdmin ? th('rep', 'Rep', 'hide-sm') : null, th('last_call', 'Last call', 'hide-md'), th('next', 'Next step', 'hide-md'))),
+        h('tbody', null, rows.map((l) => {
+          const tr = h('tr', { onclick: (e) => { if (!e.target.closest('select,input,a,button')) location.hash = '#/lead/' + l.id; } },
+            isAdmin ? h('td', { class: 'ck' }, h('input', { type: 'checkbox', 'data-id': l.id, 'aria-label': 'Select ' + l.business, checked: S.selected.has(l.id), onchange: (e) => { e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } })) : null,
+            h('td', { class: 'biz' }, h('div', { class: 'bn' }, HEAT_DOT(l.heat), h('a', { href: '#/lead/' + l.id }, l.business)), h('small', null, [l.owner, l.category].filter(Boolean).join(' · '))),
+            h('td', { class: 'hide-sm mono' }, l.phone ? h('a', { href: telHref(l.phone) }, l.phone) : l.email ? h('small', null, l.email) : '—'),
+            h('td', null, stageSel(l)),
+            h('td', { class: 'hide-sm' }, l.city || '—'),
+            isAdmin ? h('td', { class: 'hide-sm' }, l.rep_name || h('small', null, 'Unassigned')) : null,
+            h('td', { class: 'hide-md' }, l.last_call_at ? ago(l.last_call_at) : h('small', null, 'Never')),
+            h('td', { class: 'hide-md' }, l.next_action ? h('span', { class: l.next_action_at && new Date(l.next_action_at) < new Date() ? 'due' : null }, l.next_action) : h('small', null, '—')));
+          return tr;
+        })));
+      body.replaceChildren(...[h('div', { class: 'twrap' }, tbl), r.more ? h('button', { class: 'btn block', style: 'margin-top:10px', onclick: () => loadTable(true) }, 'Load more') : null, bulk].filter(Boolean));
+      renderBulk();
+    }
+    const bulk = h('div', { class: 'bulk', hidden: true });
+    function renderBulk() {
+      if (!isAdmin || !S.selected.size) { bulk.hidden = true; return; }
+      bulk.hidden = false;
+      const run = async (b, msg) => { try { await api('POST', '/leads/bulk', Object.assign({ ids: [...S.selected] }, b)); toast(msg); S.selected.clear(); loadTable(); } catch (e) { fail(e); } };
+      const repSel = h('select', { 'aria-label': 'Assign to' }, h('option', { value: 'auto' }, 'Spread across reps'), h('option', { value: 'none' }, 'Unassign'), opts.reps.filter((r) => r.active).map((r) => h('option', { value: r.id }, r.name)));
+      const heatSel = h('select', { 'aria-label': 'Set heat', onchange: (e) => e.target.value && run({ action: 'heat', heat: e.target.value }, 'Heat updated') }, h('option', { value: '' }, 'Set heat…'), HEAT.map(([k, l]) => h('option', { value: k }, l)));
+      const tagIn = h('input', { placeholder: 'Add a tag', maxlength: 30, 'aria-label': 'Tag' });
+      bulk.replaceChildren(h('b', null, S.selected.size + ' selected'), repSel, h('button', { class: 'btn small primary', onclick: () => run({ action: 'assign', rep: repSel.value }, 'Assigned') }, 'Assign'),
+        heatSel, tagIn, h('button', { class: 'btn small', onclick: () => tagIn.value.trim() && run({ action: 'tag', tag: tagIn.value }, 'Tagged') }, 'Tag'),
+        h('button', { class: 'btn small', onclick: () => { S.selected.clear(); loadTable(); } }, 'Clear'));
+    }
+
+    const load = () => (mode === 'board' ? loadBoard() : loadTable());
     shell('leads', [
-      h('div', { class: 'head' }, h('div', null, h('h1', null, isAdmin ? 'Leads' : 'My leads'), h('p', { class: 'sub' }, isAdmin ? 'Every lead across all batches.' : 'Tap a lead to call and log the outcome.')),
-        isAdmin ? h('div', { class: 'row wrap' }, selectBtn, h('button', { class: 'btn small', onclick: () => exportCsv(F, FKEYS) }, icon('batches'), 'Export'), h('a', { class: 'btn small primary', href: '#/upload' }, 'Upload')) : null),
-      viewsRow, search, heatChips, filters, countEl, listEl, moreBtn, bulk,
+      h('div', { class: 'lhead' },
+        h('div', { class: 'lt' }, h('h1', null, isAdmin ? 'Leads' : 'My leads'), countEl),
+        h('div', { class: 'row', style: 'gap:8px' }, seg,
+          isAdmin ? h('button', { class: 'tbtn hide-sm', onclick: () => exportCsv(F, FKEYS) }, 'Export') : null,
+          isAdmin ? h('a', { class: 'tbtn primary', href: '#/upload' }, '+ Add') : null)),
+      h('div', { class: 'ltools' }, search, filterBtn),
+      quick, body,
     ]);
-    load(true);
+    load();
   }
 
   async function exportCsv(F, keys) {
@@ -428,14 +452,15 @@
   /* ================= lead detail ================= */
   async function viewLead(id) {
     const isAdmin = S.me.role === 'admin';
-    const [{ lead: L, calls, notes, deals = [], demo = null }, script] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript()]);
+    const [{ lead: L, calls, notes, deals = [], demo = null, dials = [] }, script, dialer] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript(), S.me.role === 'dev' ? null : getDialer()]);
     const reload = () => viewLead(id);
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
     const seller = S.me.role === 'admin' || S.me.role === 'rep';
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
-      L.phone ? h('a', { class: 'btn ok wide', href: telHref(L.phone) }, icon('phone'), 'Call ' + L.phone) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('a', { class: 'btn ok wide', href: telHref(L.phone) }, icon('phone'), 'Call ' + L.phone)) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.phone && dialer && dialer.ready && seller ? h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone instead') : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
       h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
@@ -650,6 +675,7 @@
       emailCue,
       scriptPanel,
       h('div', { class: 'card section' }, info, botRow),
+      dials.length ? h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Call recordings'), h('div', { class: 'card' }, dials.map(dialRow))) : null,
       dealBox,
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Log this call'), outcomes, closeBtn),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Notes'), noteBox, saveNote),
@@ -1865,11 +1891,18 @@
       h('div', null, h('b', null, money(d.owed_cents) + ' commission owed'), h('div', { class: 'sub' }, d.owed_deals + (d.owed_deals === 1 ? ' unpaid deal' : ' unpaid deals'))),
       h('span', { class: 'btn small' }, 'Pay out')) : null;
 
+    const stat = (label, value, href, cls) => h('a', { class: 'stat-cell' + (cls ? ' ' + cls : ''), href }, h('small', null, label), h('b', null, value));
+    const statLine = h('div', { class: 'statline' },
+      stat('Calls', T.calls.toLocaleString(), '#/team'),
+      stat('Booked', T.booked.toLocaleString(), '#/leads'),
+      stat('Callbacks due', (P.callbacks_due || 0).toLocaleString(), '#/callbacks', P.callbacks_due ? 'warn' : ''),
+      stat('Closed', T.closes.toLocaleString(), '#/deals'),
+      stat('Revenue', money(T.revenue_cents), '#/deals', 'money'));
     shell('home', [
-      head, kpis, owed,
+      head, statLine, owed,
       h('div', { class: 'dash-grid' },
-        h('div', { class: 'col' }, pulse, funnel, weekChart(d.days, true)),
-        h('div', { class: 'col' }, feed, leaderboard(d.leaderboard, true, pn))),
+        h('div', { class: 'col' }, pulse, leaderboard(d.leaderboard, true, pn)),
+        h('div', { class: 'col' }, feed)),
     ]);
   }
 
@@ -2259,6 +2292,88 @@
   }
 
   /* ================= admin "More" ================= */
+  /* ================= dialer ================= */
+  async function getDialer() {
+    if (S.dialer && Date.now() - S.dialer.at < 300000) return S.dialer;
+    try { S.dialer = { ...(await api('GET', '/dialer')), at: Date.now() }; } catch { S.dialer = { ready: false, at: Date.now() }; }
+    return S.dialer;
+  }
+  const mmss = (n) => Math.floor((n || 0) / 60) + ':' + String((n || 0) % 60).padStart(2, '0');
+  const CALL_STATUS = { completed: 'Answered', answered: 'Answered', busy: 'Busy', 'no-answer': 'No answer', failed: 'Failed', canceled: 'Hung up before answer', ringing: 'Calling…' };
+  function dialRow(d) {
+    return h('div', { class: 'dial-row' },
+      h('div', { class: 'dial-top' }, h('b', null, CALL_STATUS[d.status] || d.status), h('span', null, [d.rep_name ? first(d.rep_name) : null, fmt(d.created_at), d.duration ? mmss(d.duration) : null].filter(Boolean).join(' · '))),
+      d.has_recording || d.recording_seconds ? h('audio', { controls: true, preload: 'none', src: '/api/recordings/' + d.id + '/audio' }) : null);
+  }
+  let twilioLoading = null;
+  function loadTwilio() {
+    if (window.Twilio && window.Twilio.Device) return Promise.resolve();
+    return twilioLoading || (twilioLoading = new Promise((res, rej) => { const sc = h('script', { src: '/vendor/twilio-voice-2.18.5.min.js' }); sc.onload = res; sc.onerror = () => { twilioLoading = null; rej(new Error('Could not load the dialer. Check your connection.')); }; document.head.append(sc); }));
+  }
+  let activeCall = null;
+  async function startCall(L, after) {
+    if (activeCall) return toast('You are already on a call', true);
+    const bar = h('div', { class: 'callbar', role: 'region', 'aria-label': 'Call in progress' });
+    const status = h('span', { class: 'cb-status' }, 'Connecting…');
+    const timer = h('span', { class: 'cb-time' }, '');
+    let call = null, device = null, t0 = 0, tick = null, muted = false;
+    const muteBtn = h('button', { class: 'cbtn', disabled: true, onclick: () => { muted = !muted; call && call.mute(muted); muteBtn.textContent = muted ? 'Unmute' : 'Mute'; muteBtn.classList.toggle('on', muted); } }, 'Mute');
+    const pad = h('div', { class: 'cb-pad', hidden: true }, '123456789*0#'.split('').map((k) => h('button', { class: 'cbtn', onclick: () => call && call.sendDigits(k) }, k)));
+    const padBtn = h('button', { class: 'cbtn', disabled: true, onclick: () => { pad.hidden = !pad.hidden; } }, 'Keypad');
+    const end = () => { try { call ? call.disconnect() : device && device.destroy(); } catch { /* */ } finish('Call ended'); };
+    let finished = false;
+    function finish(msg) {
+      if (finished) return; finished = true;
+      clearInterval(tick); bar.remove(); activeCall = null;
+      try { device && device.destroy(); } catch { /* */ }
+      toast(msg); if (after) setTimeout(after, 1500);
+    }
+    bar.append(h('div', { class: 'cb-main' }, h('span', { class: 'rec-dot', title: 'Recording' }), h('div', { class: 'cb-who' }, h('b', null, L.business), h('div', null, status, timer))),
+      h('div', { class: 'cb-btns' }, muteBtn, padBtn, h('button', { class: 'cbtn end', onclick: end }, 'Hang up')), pad,
+      h('div', { class: 'cb-note' }, 'This call is recorded. They hear a short recording notice when they pick up.'));
+    document.body.append(bar); activeCall = bar;
+    try {
+      await loadTwilio();
+      const { token } = await api('POST', '/dialer/token');
+      device = new window.Twilio.Device(token, { codecPreferences: ['opus', 'pcmu'], logLevel: 'error' });
+      call = await device.connect({ params: { To: L.phone, lead_id: String(L.id) } });
+      status.textContent = 'Ringing…';
+      call.on('accept', () => { status.textContent = 'Connected '; muteBtn.disabled = false; padBtn.disabled = false; t0 = Date.now(); tick = setInterval(() => (timer.textContent = mmss(Math.round((Date.now() - t0) / 1000))), 1000); });
+      call.on('disconnect', () => finish('Call ended. Log how it went below.'));
+      call.on('cancel', () => finish('Call canceled'));
+      call.on('reject', () => finish('Call rejected'));
+      call.on('error', (e) => finish('Call error: ' + (e && e.message ? e.message : 'something went wrong')));
+    } catch (e) {
+      finish(/permission|NotAllowed/i.test(String(e && e.message)) ? 'Allow microphone access to call from the CRM' : (e.message || 'Could not start the call'));
+    }
+  }
+
+  async function viewRecordings() {
+    const isAdmin = S.me.role === 'admin';
+    const [r, opts] = await Promise.all([api('GET', '/recordings' + (S.recRep ? '?rep=' + S.recRep : '')), isAdmin ? getOptions() : null]);
+    const repSel = isAdmin ? h('select', { class: 'inline-sel', 'aria-label': 'Filter by rep', onchange: (e) => { S.recRep = e.target.value; viewRecordings(); } },
+      h('option', { value: '' }, 'Everyone'), opts.reps.map((x) => h('option', { value: x.id, selected: String(x.id) === String(S.recRep || '') }, x.name))) : null;
+    const setup = !r.ready ? panel('Turn on calling from the CRM', null, h('ol', { class: 'steps-list' },
+      h('li', null, 'Sign up at ', h('b', null, 'twilio.com'), ', add a card, and buy a US phone number with Voice (about $1.15 a month). Calls cost about 1–2¢ a minute.'),
+      h('li', null, 'In Twilio, go to ', h('b', null, 'Voice → TwiML Apps → Create'), '. Name it "Reekon CRM". Set the Voice Request URL to ', h('code', null, location.origin + '/voice/twiml'), ' (HTTP POST). Save and copy its SID (starts with AP).'),
+      h('li', null, 'Go to ', h('b', null, 'Account → API keys → Create API key'), ' (Standard). Copy the SID (starts with SK) and the Secret. The secret is only shown once.'),
+      h('li', null, 'In Cloudflare, open your portal worker → ', h('b', null, 'Settings → Variables and Secrets'), ' and add these as Secrets: ',
+        h('code', null, 'TWILIO_ACCOUNT_SID'), ', ', h('code', null, 'TWILIO_AUTH_TOKEN'), ' (both on your Twilio home page), ', h('code', null, 'TWILIO_API_KEY'), ', ', h('code', null, 'TWILIO_API_SECRET'), ', ',
+        h('code', null, 'TWILIO_TWIML_APP_SID'), ', and ', h('code', null, 'TWILIO_NUMBER'), ' like +13105550100. Deploy.'),
+      h('li', null, 'Refresh. The Call button on every lead now calls from the CRM and records.')),
+      h('p', { class: 'sub' }, 'California needs everyone on a call to agree to recording. The dialer plays "this call may be recorded" to the person who picks up, before you are connected.')) : null;
+    const list = r.recordings.length ? h('div', { class: 'card' }, r.recordings.map((d) => h('div', { class: 'dial-row' },
+      h('div', { class: 'dial-top' }, h('a', { href: '#/lead/' + d.lead_id }, h('b', null, d.business || d.to_number)),
+        h('span', null, [isAdmin && d.rep_name ? first(d.rep_name) : null, fmt(d.created_at), mmss(d.recording_seconds || d.duration)].filter(Boolean).join(' · '))),
+      d.lead_status ? h('div', { style: 'margin:2px 0 6px' }, pill(d.lead_status)) : null,
+      h('audio', { controls: true, preload: 'none', src: '/api/recordings/' + d.id + '/audio' }))))
+      : h('div', { class: 'card empty' }, h('b', null, 'No recordings yet'), r.ready ? 'Call a lead from the CRM and the recording shows up here a minute after you hang up.' : 'Set up calling below to start recording.');
+    shell('recordings', [
+      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Call recordings'), h('p', { class: 'sub' }, 'Listen back to calls to sharpen the script. Booked calls are the ones to study.')), repSel),
+      setup ? setup : null, list,
+    ]);
+  }
+
   /* ================= email bot ================= */
   const BOT_KIND = { sent: 'Sent', replied: 'Replied 🔥', opted_out: 'Opted out', bounced: 'Bounced', failed: 'Failed to send', stopped: 'Stopped' };
   const STEP_NAME = (i) => (i === 0 ? 'First email' : 'Follow-up ' + i);
@@ -2483,16 +2598,14 @@ function api(method, path, body) {
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
-        row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail, on autopilot'),
-        row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website and few reviews'),
-        row('#/callbacks', 'callbacks', 'Callbacks', 'Who to call back today'),
-        row('#/demos', 'demos', 'Demo queue', 'Leads waiting on a demo site'),
-        row('#/deals', 'deals', 'Deals & commissions', 'Closes, payouts and what you owe'),
-        row('#/batches', 'batches', 'Batches', 'Lead uploads and how each batch is doing'),
-        row('#/upload', 'batches', 'Upload CSV', 'Add a new batch of leads'),
-        row('#/integrations', 'bolt', 'Scraper & n8n', 'Send leads in automatically with an API key'),
-        row('#/users', 'users', 'Team members', 'Add reps and devs, set commission %'),
-        row('#/script', 'script', 'Call script', 'Edit what reps say on the phone'),
+        row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
+        row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail'),
+        row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
+        row('#/recordings', 'phone', 'Call recordings', 'Listen back to calls and train'),
+        row('#/script', 'script', 'Call script', 'What to say on the phone'),
+        row('#/users', 'users', 'Team members', 'Add reps, set goals and commission'),
+        row('#/upload', 'batches', 'Add leads', 'Upload or paste a CSV'),
+        row('#/integrations', 'bolt', 'Scraper & n8n', 'Send leads in automatically'),
         row('#/account', 'account', 'Account', 'Password and log out')),
     ]);
   }

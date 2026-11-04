@@ -19,6 +19,7 @@ const MAX_FAILED = 5;          // failed logins before a 15-minute lock
 const LOCK_MINUTES = 15;
 
 const STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'won', 'lost', 'dnc'];
+const BOARD_STAGES = [['new', 'New', ['new', 'demo_needed', 'demo_ready']], ['called', 'Contacted', ['called']], ['callback', 'Callback', ['callback']], ['booked', 'Booked', ['booked']], ['won', 'Won', ['won']], ['lost', 'Lost', ['lost']]];
 const OPEN_STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked'];
 const OUTCOMES = ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'callback', 'demo_sent', 'booked', 'dnc', 'emailed'];
 const DIAL_OUTCOMES = OUTCOMES.filter((o) => o !== 'emailed');
@@ -146,6 +147,12 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS email_log_time ON email_log(created_at)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS email_log_lead ON email_log(lead_id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_email_seq ON leads(email_status, email_next_at)'),
+  ]);
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS dial_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, user_id INTEGER, to_number TEXT,
+      call_sid TEXT, status TEXT NOT NULL DEFAULT 'started', duration INTEGER, recording_sid TEXT, recording_url TEXT, recording_seconds INTEGER, created_at TEXT NOT NULL, ended_at TEXT)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_lead ON dial_calls(lead_id, id)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
   ]);
   if (newEmailCols) {
     // leads the first robot already emailed join the sequence at step 1, so they get follow-ups
@@ -690,6 +697,74 @@ async function autoStep(env, { manual } = {}) {
   return { run };
 }
 
+/* ================= Dialer (Twilio) =================
+   The browser gets a short-lived token, Twilio asks /voice/twiml how to place
+   the call, plays a recording notice to the person who answers, records both
+   sides, and tells us when the call and recording are done. */
+const dialerReady = (env) => !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_API_KEY && env.TWILIO_API_SECRET && env.TWILIO_TWIML_APP_SID && env.TWILIO_NUMBER);
+const b64url = (bytes) => btoa(String.fromCharCode(...(bytes instanceof Uint8Array ? bytes : enc.encode(bytes)))).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+async function twilioToken(env, identity) {
+  const t = Math.floor(Date.now() / 1000);
+  const header = { alg: 'HS256', typ: 'JWT', cty: 'twilio-fpa;v=1' };
+  const payload = { jti: env.TWILIO_API_KEY + '-' + t, iss: env.TWILIO_API_KEY, sub: env.TWILIO_ACCOUNT_SID, nbf: t - 5, exp: t + 3600,
+    grants: { identity, voice: { outgoing: { application_sid: env.TWILIO_TWIML_APP_SID } } } };
+  const data = b64url(JSON.stringify(header)) + '.' + b64url(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey('raw', enc.encode(env.TWILIO_API_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return data + '.' + b64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data))));
+}
+// Twilio signs every webhook with your Auth Token; anything unsigned is rejected
+async function twilioSigned(request, env, params) {
+  const sig = request.headers.get('X-Twilio-Signature') || '';
+  if (!sig || !env.TWILIO_AUTH_TOKEN) return false;
+  const data = request.url + Object.keys(params).sort().map((k) => k + params[k]).join('');
+  const key = await crypto.subtle.importKey('raw', enc.encode(env.TWILIO_AUTH_TOKEN), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const want = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data)))));
+  return safeEqual(want, sig);
+}
+const xml = (s) => new Response('<?xml version="1.0" encoding="UTF-8"?><Response>' + s + '</Response>', { headers: { 'Content-Type': 'text/xml; charset=utf-8' } });
+const xmlEsc = (s) => String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+const US_E164 = (p) => { const d = normPhone(p); return d.length === 10 && /^[2-9]/.test(d) ? '+1' + d : null; };
+const RECORD_NOTICE = 'Hi, just so you know, this call may be recorded for quality and training.';
+async function handleVoice(request, env, url) {
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+  if (!dialerReady(env)) return xml('<Say>The dialer is not set up yet.</Say><Hangup/>');
+  const form = await request.formData(), params = {};
+  for (const [k, v] of form.entries()) params[k] = String(v);
+  if (!(await twilioSigned(request, env, params))) return new Response('Forbidden', { status: 403 });
+  const path = url.pathname, origin = url.origin;
+  if (path === '/voice/twiml') {
+    const uid = +((/^client:user-(\d+)$/.exec(params.From || '') || [])[1]);
+    const to = US_E164(params.To), leadId = +params.lead_id || null;
+    if (!uid || !to) return xml('<Say>That number cannot be called from here.</Say><Hangup/>');
+    const user = await env.DB.prepare("SELECT id, name, email, role FROM users WHERE id = ? AND active = 1 AND role IN ('admin','rep')").bind(uid).first();
+    if (!user) return xml('<Hangup/>');
+    if (leadId) {
+      const lead = await env.DB.prepare('SELECT id, assigned_to, phone_norm FROM leads WHERE id = ?').bind(leadId).first();
+      if (!lead || (user.role === 'rep' && lead.assigned_to !== user.id)) return xml('<Say>You do not have access to that lead.</Say><Hangup/>');
+      if (await env.DB.prepare('SELECT 1 FROM dnc WHERE phone_norm = ?').bind(normPhone(to)).first()) return xml('<Say>This number is on your Do Not Call list.</Say><Hangup/>');
+    }
+    const r = await env.DB.prepare('INSERT INTO dial_calls (lead_id, user_id, to_number, call_sid, status, created_at) VALUES (?,?,?,?,?,?)').bind(leadId, uid, to, params.CallSid || null, 'ringing', now()).run();
+    const id = r.meta.last_row_id;
+    return xml(`<Dial callerId="${xmlEsc(env.TWILIO_NUMBER)}" timeout="30" answerOnBridge="true" record="record-from-answer-dual" recordingStatusCallback="${xmlEsc(origin + '/voice/recording?c=' + id)}" recordingStatusCallbackEvent="completed" action="${xmlEsc(origin + '/voice/done?c=' + id)}"><Number url="${xmlEsc(origin + '/voice/notice')}">${xmlEsc(to)}</Number></Dial>`);
+  }
+  if (path === '/voice/notice') return xml('<Say>' + xmlEsc(RECORD_NOTICE) + '</Say>');
+  const cid = +url.searchParams.get('c');
+  if (path === '/voice/done') {
+    const st = str(params.DialCallStatus, 20) || 'completed';
+    await env.DB.prepare('UPDATE dial_calls SET status = ?, duration = ?, ended_at = ? WHERE id = ?').bind(st, parseInt(params.DialCallDuration, 10) || 0, now(), cid).run();
+    const c = await env.DB.prepare('SELECT lead_id FROM dial_calls WHERE id = ?').bind(cid).first();
+    if (c && c.lead_id) await env.DB.prepare('UPDATE leads SET last_call_at = ?, updated_at = ? WHERE id = ?').bind(now(), now(), c.lead_id).run();
+    return xml('');
+  }
+  if (path === '/voice/recording') {
+    if (params.RecordingStatus && params.RecordingStatus !== 'completed') return xml('');
+    await env.DB.prepare('UPDATE dial_calls SET recording_sid = ?, recording_url = ?, recording_seconds = ? WHERE id = ?')
+      .bind(str(params.RecordingSid, 64), str(params.RecordingUrl, 300), parseInt(params.RecordingDuration, 10) || 0, cid).run();
+    return xml('');
+  }
+  return new Response('Not found', { status: 404 });
+}
+
 /* ================= Email bot =================
    The CRM decides who gets emailed, what it says and when. A tiny Google
    Apps Script on the owner's Gmail asks /api/outreach/today every 30 min,
@@ -963,6 +1038,11 @@ function leadFilter(p, user) {
   const status = p.get('status');
   if (status === 'open') { where.push(`l.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`); args.push(...OPEN_STATUSES); }
   else if (status && STATUSES.includes(status)) { where.push('l.status = ?'); args.push(status); }
+  else if (status && status.includes(',')) {
+    const list = status.split(',').filter((x) => STATUSES.includes(x) && (user.role === 'admin' || x !== 'dnc'));
+    if (!list.length) bad('Bad status');
+    where.push(`l.status IN (${list.map(() => '?').join(',')})`); args.push(...list);
+  }
   else if (!(user.role === 'admin' && status === 'all')) { where.push("l.status != 'dnc'"); }
   if (user.role === 'admin' && p.get('rep')) {
     if (p.get('rep') === 'none') where.push('l.assigned_to IS NULL');
@@ -1197,7 +1277,9 @@ async function api(request, env, url) {
     const p = url.searchParams;
     const { w, args } = leadFilter(p, user);
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
-    const order = `ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
+    const SORTS = { business: 'l.business COLLATE NOCASE', city: 'l.city COLLATE NOCASE', status: 'l.status', last_call: 'l.last_call_at', next: 'l.next_action_at', added: 'l.id', rep: 'u.name' };
+    const sortKey = SORTS[p.get('sort')], dir = p.get('dir') === 'desc' ? 'DESC' : 'ASC';
+    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
               l.attempts, l.last_call_at, l.demo_url, l.demo_sent, l.assigned_to, u.name AS rep_name,
@@ -1206,6 +1288,28 @@ async function api(request, env, url) {
     ).bind(...args, limit + 1, offset).all();
     const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first();
     return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
+  }
+
+  if (path === '/leads/board' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const p = new URLSearchParams(url.searchParams); p.set('status', 'all_board');
+    const { w, args } = leadFilter(p, user);
+    const base = w ? w + ' AND' : 'WHERE';
+    const per = Math.min(+url.searchParams.get('per') || 40, 100);
+    const out = [];
+    for (const [key, label, list] of BOARD_STAGES) {
+      const inList = `l.status IN (${list.map(() => '?').join(',')})`;
+      const [rows, cnt] = await Promise.all([
+        env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at, l.attempts, l.last_call_at, l.demo_url,
+            l.assigned_to, u.name AS rep_name, l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.next_action_at, l.next_action, l.updated_at
+          FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${base} ${inList}
+          ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
+          .bind(...args, ...list, per).all(),
+        env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${base} ${inList}`).bind(...args, ...list).first(),
+      ]);
+      out.push({ key, label, count: cnt.n, leads: rows.results });
+    }
+    return json({ stages: out });
   }
 
   if (path === '/leads/export' && method === 'GET') {
@@ -1319,12 +1423,19 @@ async function api(request, env, url) {
     ).bind(...(user.role === 'rep' ? [lead.id, user.id] : [lead.id])).all()).results
       .map((d) => ({ ...d, commission_cents: commissionCents(d) }));
     const demo = await env.DB.prepare('SELECT d.created_at, d.updated_at, d.views, d.theme, u.name AS by_name FROM demos d LEFT JOIN users u ON u.id = d.created_by WHERE d.lead_id = ? ORDER BY d.id DESC LIMIT 1').bind(lead.id).first();
-    return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls, notes, deals, demo: demo || null });
+    const dials = (await env.DB.prepare(`SELECT d.id, d.status, d.duration, d.recording_seconds, (d.recording_sid IS NOT NULL) AS has_recording, d.created_at, u.name AS rep_name
+      FROM dial_calls d LEFT JOIN users u ON u.id = d.user_id WHERE d.lead_id = ? ${user.role === 'rep' ? 'AND d.user_id = ?' : ''} ORDER BY d.id DESC LIMIT 30`)
+      .bind(...(user.role === 'rep' ? [lead.id, user.id] : [lead.id])).all()).results;
+    return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls, notes, deals, demo: demo || null, dials });
   }
 
   if ((m = path.match(/^\/leads\/(\d+)$/)) && method === 'PATCH') {
-    need(user, 'admin');
+    need(user, 'admin', 'rep');
     const lead = await loadLead(env, user, +m[1]);
+    if (user.role === 'rep') {
+      const keys = Object.keys(body);
+      if (keys.some((k) => k !== 'status') || !['new', 'called', 'callback', 'booked', 'won', 'lost'].includes(body.status)) throw new HttpError(403, 'Reps can only move their leads between stages');
+    }
     const sets = [], args = [];
     const fields = { business: 200, owner: 120, phone: 40, city: 80, category: 80 };
     for (const [k, max] of Object.entries(fields)) if (body[k] !== undefined) { sets.push(`${k} = ?`); args.push(str(body[k], max)); }
@@ -1490,6 +1601,42 @@ async function api(request, env, url) {
     clean.forEach((s) => { if (!s.title) bad('Every section needs a title'); });
     await setSetting(env, 'call_script', JSON.stringify(clean));
     return json({ ok: true });
+  }
+
+  /* ---- dialer ---- */
+  if (path === '/dialer' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    return json({ ready: dialerReady(env), number: env.TWILIO_NUMBER || null });
+  }
+  if (path === '/dialer/token' && method === 'POST') {
+    need(user, 'admin', 'rep');
+    if (!dialerReady(env)) bad('The dialer is not set up yet');
+    return json({ token: await twilioToken(env, 'user-' + user.id), identity: 'user-' + user.id });
+  }
+  if (path === '/recordings' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const p = url.searchParams, where = ['d.recording_sid IS NOT NULL'], args = [];
+    if (user.role === 'rep') { where.push('d.user_id = ?'); args.push(user.id); }
+    else if (p.get('rep')) { where.push('d.user_id = ?'); args.push(+p.get('rep')); }
+    if (p.get('lead')) { where.push('d.lead_id = ?'); args.push(+p.get('lead')); }
+    const { results } = await env.DB.prepare(`SELECT d.id, d.lead_id, d.user_id, d.to_number, d.status, d.duration, d.recording_seconds, d.created_at,
+        l.business, l.status AS lead_status, u.name AS rep_name
+      FROM dial_calls d LEFT JOIN leads l ON l.id = d.lead_id LEFT JOIN users u ON u.id = d.user_id WHERE ${where.join(' AND ')} ORDER BY d.id DESC LIMIT 100`).bind(...args).all();
+    return json({ recordings: results, ready: dialerReady(env) });
+  }
+  if ((m = path.match(/^\/recordings\/(\d+)\/audio$/)) && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const d = await env.DB.prepare('SELECT * FROM dial_calls WHERE id = ?').bind(+m[1]).first();
+    if (!d || !d.recording_url || (user.role === 'rep' && d.user_id !== user.id)) throw new HttpError(404, 'Recording not found');
+    const src = d.recording_url.replace(/\.(json|mp3|wav)$/, '') + '.mp3';
+    if (!/^https:\/\/api\.twilio\.com\//.test(src)) throw new HttpError(404, 'Recording not found');
+    const headers = { Authorization: 'Basic ' + btoa(env.TWILIO_ACCOUNT_SID + ':' + env.TWILIO_AUTH_TOKEN) };
+    const range = request.headers.get('Range'); if (range) headers.Range = range;
+    const r = await fetch(src, { headers });
+    if (!r.ok && r.status !== 206) throw new HttpError(502, 'Twilio could not send the recording');
+    const out = new Response(r.body, { status: r.status, headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=3600' } });
+    for (const k of ['Content-Length', 'Content-Range', 'Accept-Ranges']) { const v = r.headers.get(k); if (v) out.headers.set(k, v); }
+    return out;
   }
 
   /* ---- email bot (admin) ---- */
@@ -3512,6 +3659,10 @@ export default {
         r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
         return r;
       } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
+    }
+    if (url.pathname.startsWith('/voice/')) {
+      try { await ensureSchema(env); return await handleVoice(request, env, url); }
+      catch (e) { console.error(e); return xml('<Say>Sorry, something went wrong.</Say><Hangup/>'); }
     }
     if (url.pathname.startsWith('/api/outreach/')) {
       try {
