@@ -153,6 +153,8 @@ async function ensureSchema(env) {
       call_sid TEXT, status TEXT NOT NULL DEFAULT 'started', duration INTEGER, recording_sid TEXT, recording_url TEXT, recording_seconds INTEGER, created_at TEXT NOT NULL, ended_at TEXT)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_lead ON dial_calls(lead_id, id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
+      dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
   if (newEmailCols) {
     // leads the first robot already emailed join the sequence at step 1, so they get follow-ups
@@ -235,6 +237,42 @@ Want me to grab you a time?` },
 
 [Then tap Voicemail, and text the demo.]` },
 ];
+
+/* -------- personal tracker -------- */
+const TRK_BLOCKS = ['pray', 'gym', 'reset', 'mind', 'prep', 'c1', 'fu1', 'lunch', 'c2', 'brk', 'c3', 'close'];
+const TRK_WINS = ['pray', 'gym', 'mind'];
+function trkShift(date, n) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+function trkDow(date) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+function trkRow(r, day) {
+  let blocks = [];
+  try { blocks = JSON.parse(r && r.blocks || '[]').filter((b) => TRK_BLOCKS.includes(b)); } catch { /* keep empty */ }
+  return { day, blocks, dials: r ? r.dials : 0, talks: r ? r.talks : 0, demos: r ? r.demos : 0, note: r && r.note || '' };
+}
+const trkKept = (r, goal) => !!r && r.dials >= goal && TRK_WINS.every((w) => r.blocks.includes(w));
+// Sundays are the day off, so they never break a streak
+function trkStreak(byDay, goal, today) {
+  let streak = 0, d = today;
+  for (let i = 0; i < 120; i++, d = trkShift(d, -1)) {
+    if (trkDow(d) === 0) continue;
+    if (trkKept(byDay.get(d), goal)) streak++;
+    else if (d !== today) break;
+  }
+  return streak;
+}
+async function trkGoal(env) {
+  const v = parseInt(await getSetting(env, 'tracker_goal'), 10);
+  return v >= 1 && v <= 2000 ? v : 300;
+}
+async function trkLoad(env, userId, today) {
+  const rows = (await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day >= ? ORDER BY day').bind(userId, trkShift(today, -120)).all()).results;
+  return new Map(rows.map((r) => [r.day, trkRow(r, r.day)]));
+}
 
 async function getSetting(env, key) {
   const r = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
@@ -2083,6 +2121,39 @@ async function api(request, env, url) {
     if (out.enabled && (!out.niches.length || !out.cities.length)) bad('Add at least one type of business and one city');
     await setSetting(env, 'auto_finder', JSON.stringify(out));
     return json({ ok: true, config: out });
+  }
+  /* ---- personal tracker (admin) ---- */
+  if (path === '/tracker' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date, goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
+    const since = ptMidnightIso();
+    const crm = await env.DB.prepare("SELECT COUNT(*) AS logged, SUM(CASE WHEN to_status = 'booked' THEN 1 ELSE 0 END) AS booked FROM calls WHERE user_id = ? AND created_at >= ?").bind(user.id, since).first();
+    const history = [];
+    for (let i = 13; i >= 0; i--) { const d = trkShift(today, -i); history.push({ ...(byDay.get(d) || trkRow(null, d)), kept: trkKept(byDay.get(d), goal), off: trkDow(d) === 0 }); }
+    return json({ today, now_pt: ptParts(), goal, day: byDay.get(today) || trkRow(null, today), history, streak: trkStreak(byDay, goal, today),
+      crm: { logged: crm.logged || 0, booked: crm.booked || 0 } });
+  }
+  if (path === '/tracker' && method === 'PUT') {
+    need(user, 'admin');
+    const today = ptParts().date, day = str(body.day, 10) || today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < trkShift(today, -7)) bad('You can only edit today or the last 7 days');
+    const cur = trkRow(await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day = ?').bind(user.id, day).first(), day);
+    const num = (v, old) => (v === undefined ? old : Math.max(0, Math.min(5000, parseInt(v, 10) || 0)));
+    const out = { ...cur, dials: num(body.dials, cur.dials), talks: num(body.talks, cur.talks), demos: num(body.demos, cur.demos) };
+    if (body.blocks !== undefined) out.blocks = [...new Set((Array.isArray(body.blocks) ? body.blocks : []).filter((b) => TRK_BLOCKS.includes(b)))];
+    if (body.note !== undefined) out.note = str(body.note, 500);
+    await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, note, updated_at) VALUES (?,?,?,?,?,?,?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET blocks = excluded.blocks, dials = excluded.dials, talks = excluded.talks, demos = excluded.demos, note = excluded.note, updated_at = excluded.updated_at`)
+      .bind(user.id, day, JSON.stringify(out.blocks), out.dials, out.talks, out.demos, out.note, now()).run();
+    const goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
+    return json({ ok: true, day: out, streak: trkStreak(byDay, goal, today), kept: trkKept(out, goal) });
+  }
+  if (path === '/tracker/goal' && method === 'PUT') {
+    need(user, 'admin');
+    const g = parseInt(body.goal, 10);
+    if (!(g >= 1 && g <= 2000)) bad('Pick a daily dial goal between 1 and 2000');
+    await setSetting(env, 'tracker_goal', String(g));
+    return json({ ok: true, goal: g });
   }
   if (path === '/finder/auto/run' && method === 'POST') {
     need(user, 'admin');

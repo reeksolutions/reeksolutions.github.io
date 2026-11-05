@@ -144,7 +144,7 @@
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [
-      [null, [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
+      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
       ['Team', [['team', 'Team stats'], ['recordings', 'Call recordings'], ['users', 'Team members']]],
       ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script'], ['upload', 'Add leads'], ['integrations', 'Scraper & n8n']]],
     ];
@@ -152,9 +152,9 @@
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
+  const UNDER_MORE = ['tracker', 'recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
@@ -199,7 +199,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -209,6 +209,7 @@
         case 'finder': return await viewFinder();
         case 'emailbot': return await viewEmailBot();
         case 'recordings': return await viewRecordings();
+        case 'tracker': return await viewTracker();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -1818,10 +1819,11 @@
     const [dfrom, duntil] = dayBounds();
     const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 6);
     const qs = new URLSearchParams({ from, until, since: since.toISOString(), tz: tzMin(), dfrom, duntil });
-    const [d, me, team] = await Promise.all([
+    const [d, me, team, trk] = await Promise.all([
       api('GET', '/dashboard?' + qs),
       api('GET', '/me'),
       isAdmin ? api('GET', '/team?' + new URLSearchParams({ from: dfrom, until: duntil, dfrom, duntil })) : null,
+      isAdmin ? api('GET', '/tracker').catch(() => null) : null,
     ]);
     S.me.daily_goal = me.daily_goal;
     const T = d.totals, P = d.pipeline, F = d.funnel || {};
@@ -1898,8 +1900,12 @@
       stat('Callbacks due', (P.callbacks_due || 0).toLocaleString(), '#/callbacks', P.callbacks_due ? 'warn' : ''),
       stat('Closed', T.closes.toLocaleString(), '#/deals'),
       stat('Revenue', money(T.revenue_cents), '#/deals', 'money'));
+    const trkWins = trk ? TRK_PLAN.filter((b) => b.win && trk.day.blocks.includes(b.id)).length : 0;
+    const trkBanner = trk ? h('a', { class: 'banner', href: '#/tracker' }, h('span', { class: 'kic' }, icon('flag')),
+      h('div', null, h('b', null, trk.day.dials + ' / ' + trk.goal + ' dials today'), h('div', { class: 'sub' }, trkWins + ' of 3 wins · ' + trk.streak + '-day streak')),
+      h('span', { class: 'btn small' }, 'Open')) : null;
     shell('home', [
-      head, statLine, owed,
+      head, trkBanner, statLine, owed,
       h('div', { class: 'dash-grid' },
         h('div', { class: 'col' }, pulse, leaderboard(d.leaderboard, true, pn)),
         h('div', { class: 'col' }, feed)),
@@ -2347,6 +2353,126 @@
     }
   }
 
+  /* ---- personal tracker (admin) ---- */
+  const TRK_PLAN = [
+    { id: 'pray', from: '06:00', to: '06:30', title: 'Prayer', tag: 'Spiritual win', win: true },
+    { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
+    { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
+    { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
+    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's list, say the opener 10 times" },
+    { id: 'c1', from: '09:00', to: '11:30', title: 'Call block 1', quota: 120 },
+    { id: 'fu1', from: '11:30', to: '11:45', title: 'Follow-up texts, nothing else' },
+    { id: 'lunch', from: '11:45', to: '12:30', title: 'Lunch' },
+    { id: 'c2', from: '12:30', to: '14:30', title: 'Call block 2', quota: 80 },
+    { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
+    { id: 'c3', from: '14:45', to: '17:15', title: 'Call block 3', quota: 100 },
+    { id: 'close', from: '17:15', to: '18:00', title: "Log, book demos, set tomorrow's niche" },
+  ];
+  const trkMin = (t) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
+  const trk12 = (t) => { const [a, b] = t.split(':').map(Number); return ((a + 11) % 12 + 1) + ':' + String(b).padStart(2, '0') + (a >= 12 ? ' PM' : ' AM'); };
+  function trkNowMin() {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    return (+p.hour % 24) * 60 + +p.minute;
+  }
+
+  async function viewTracker() {
+    const r = await api('GET', '/tracker');
+    let goal = r.goal, day = r.day, streak = r.streak, saveT = null;
+    const hist = r.history;
+    const root = h('div', { class: 'trk' });
+    const note = h('textarea', { class: 'trk-note', rows: 2, maxlength: 500, placeholder: 'One line on today: what worked, what to fix tomorrow', oninput: (e) => { day.note = e.target.value; queueSave(); } });
+    note.value = day.note || '';
+    const quotaOf = (b) => Math.round(b.quota * goal / 300);
+
+    function expectedNow() {
+      const now = trkNowMin();
+      let e = 0;
+      for (const b of TRK_PLAN) {
+        if (!b.quota) continue;
+        const a = trkMin(b.from), z = trkMin(b.to);
+        if (now >= z) e += quotaOf(b); else if (now > a) e += quotaOf(b) * (now - a) / (z - a);
+      }
+      return Math.round(e);
+    }
+    function queueSave() {
+      clearTimeout(saveT);
+      saveT = setTimeout(async () => {
+        try {
+          const x = await api('PUT', '/tracker', { day: day.day, blocks: day.blocks, dials: day.dials, talks: day.talks, demos: day.demos, note: day.note });
+          streak = x.streak;
+          const i = hist.findIndex((z) => z.day === day.day);
+          if (i >= 0) hist[i] = { ...hist[i], ...day, kept: x.kept };
+          paint();
+        } catch (e) { fail(e); }
+      }, 350);
+    }
+    const bump = (field, n) => { day[field] = Math.max(0, Math.min(5000, day[field] + n)); const i = hist.findIndex((z) => z.day === day.day); if (i >= 0) hist[i][field] = day[field]; paint(); queueSave(); };
+    const toggle = (id) => { day.blocks = day.blocks.includes(id) ? day.blocks.filter((x) => x !== id) : day.blocks.concat(id); const i = hist.findIndex((z) => z.day === day.day); if (i >= 0) hist[i].blocks = day.blocks; paint(); queueSave(); };
+
+    function paint() {
+      const wins = TRK_PLAN.filter((b) => b.win), winsDone = wins.filter((b) => day.blocks.includes(b.id)).length;
+      const pct = Math.min(100, Math.round((day.dials / goal) * 100));
+      const hit = day.dials >= goal, allWins = winsDone === wins.length;
+      const exp = expectedNow(), diff = day.dials - exp, now = trkNowMin();
+      const pace = hit ? 'Goal hit. ' + (day.dials - goal ? '+' + (day.dials - goal) + ' extra.' : '') :
+        now < 540 ? 'Calling starts at 9:00 AM.' : diff >= 0 ? 'On pace. ' + (diff ? diff + ' ahead.' : '') : (-diff) + ' behind pace. Catch up in the next block.';
+      const counter = (label, field, big) => h('div', { class: 'trk-ctr' + (big ? ' big' : '') },
+        h('small', null, label), h('b', null, day[field].toLocaleString()),
+        h('div', { class: 'trk-btns' },
+          h('button', { class: 'trk-b', 'aria-label': 'Minus one ' + label, onclick: () => bump(field, -1) }, '−1'),
+          big ? h('button', { class: 'trk-b', onclick: () => bump(field, 10) }, '+10') : null,
+          h('button', { class: 'trk-b main', 'aria-label': 'Plus one ' + label, onclick: () => bump(field, 1) }, '+1')));
+      const hero = h('section', { class: 'panel trk-hero' + (hit ? ' hit' : '') },
+        h('div', { class: 'trk-top' }, h('div', null, h('small', null, 'Dials today'), h('div', { class: 'trk-num' }, h('b', null, day.dials.toLocaleString()), h('span', null, ' / ' + goal))),
+          h('span', { class: 'trk-streak' + (streak ? ' on' : '') }, icon('flag'), streak + (streak === 1 ? '-day streak' : '-day streak'))),
+        h('div', { class: 'goal-track trk-track' }, h('i', { style: 'width:' + pct + '%' })),
+        h('p', { class: 'trk-pace' + (!hit && now >= 540 && diff < 0 ? ' bad' : '') }, pace),
+        h('div', { class: 'trk-btns big' },
+          h('button', { class: 'trk-b', onclick: () => bump('dials', -1) }, '−1'),
+          h('button', { class: 'trk-b', onclick: () => bump('dials', 10) }, '+10'),
+          h('button', { class: 'trk-b main', onclick: () => bump('dials', 1) }, '+1 dial')));
+      const small = h('div', { class: 'trk-two' }, counter('Pick-ups', 'talks'), counter('Demos booked', 'demos'));
+      const crm = h('p', { class: 'trk-crm' }, 'CRM today: ' + r.crm.logged + ' calls logged, ' + r.crm.booked + ' booked. Your tally can be higher, since you dial from your phone.');
+      const winRow = h('div', { class: 'trk-wins' }, wins.map((b) => {
+        const on = day.blocks.includes(b.id);
+        return h('button', { class: 'trk-win' + (on ? ' on' : ''), onclick: () => toggle(b.id), 'aria-pressed': on }, h('small', null, b.tag.replace(' win', '')), h('b', null, on ? 'Done' : b.title));
+      }));
+      const list = h('div', { class: 'trk-list' }, TRK_PLAN.map((b) => {
+        const on = day.blocks.includes(b.id), a = trkMin(b.from), z = trkMin(b.to), cur = now >= a && now < z;
+        return h('button', { class: 'trk-row' + (on ? ' done' : '') + (cur ? ' now' : '') + (!on && now >= z ? ' late' : ''), onclick: () => toggle(b.id), 'aria-pressed': on },
+          h('span', { class: 'trk-box' }, on ? '✓' : ''),
+          h('div', { class: 'trk-what' }, h('b', null, b.title), h('small', null, trk12(b.from) + ' to ' + trk12(b.to) + (b.tag ? ' · ' + b.tag : '') + (b.quota ? ' · ' + quotaOf(b) + ' dials' : ''))),
+          cur ? h('span', { class: 'trk-now' }, 'Now') : null);
+      }));
+      const bars = h('div', { class: 'trk-hist' }, hist.map((d) => {
+        const p = Math.min(100, Math.round((d.dials / goal) * 100)), dn = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(d.day + 'T12:00:00').getDay()];
+        const w = TRK_PLAN.filter((b) => b.win && d.blocks.includes(b.id)).length;
+        return h('div', { class: 'trk-col' + (d.kept ? ' kept' : '') + (d.off ? ' off' : '') + (d.day === day.day ? ' today' : ''), title: d.day + ': ' + d.dials + ' dials, ' + w + '/3 wins' },
+          h('div', { class: 'trk-bar' }, h('i', { style: 'height:' + Math.max(d.dials ? 6 : 0, p) + '%' })),
+          h('span', { class: 'trk-dots' }, [0, 1, 2].map((i) => h('i', { class: i < w ? 'on' : '' }))), h('small', null, dn));
+      }));
+      const goalBox = h('details', { class: 'trk-goal' }, h('summary', null, 'Daily dial goal: ' + goal),
+        h('div', { class: 'trk-goal-row' },
+          h('input', { type: 'number', min: 1, max: 2000, value: goal, id: 'trk-goal-in', 'aria-label': 'Daily dial goal' }),
+          h('button', { class: 'btn small', onclick: async () => {
+            try { const g = await api('PUT', '/tracker/goal', { goal: document.getElementById('trk-goal-in').value }); goal = g.goal; toast('Goal saved'); paint(); } catch (e) { fail(e); }
+          } }, 'Save')));
+      root.replaceChildren(
+        hero, small, crm,
+        h('h3', { class: 'trk-h' }, 'Daily wins', h('span', { class: 'dim small' }, winsDone + ' of 3' + (allWins ? '' : ''))), winRow,
+        h('h3', { class: 'trk-h' }, 'The day, 6 AM to 6 PM'), list,
+        h('h3', { class: 'trk-h' }, 'Last 14 days'), bars,
+        h('p', { class: 'trk-rule' }, 'A day counts when you finish all 3 wins and hit the dial goal. Sundays are your day off and never break the streak.'),
+        h('h3', { class: 'trk-h' }, 'Note'), note, goalBox);
+    }
+    paint();
+    shell('tracker', [
+      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Daily tracker'),
+        h('p', { class: 'sub' }, new Date(r.today + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) + '. Inputs drive outputs.'))),
+      root,
+    ]);
+  }
+
   async function viewRecordings() {
     const isAdmin = S.me.role === 'admin';
     const [r, opts] = await Promise.all([api('GET', '/recordings' + (S.recRep ? '?rep=' + S.recRep : '')), isAdmin ? getOptions() : null]);
@@ -2597,6 +2723,7 @@ function api(method, path, body) {
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
+        row('#/tracker', 'flag', 'Daily tracker', 'Dials, daily wins and your streak'),
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
         row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail'),
         row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
