@@ -969,3 +969,6 @@ input,select,textarea{border-radius:8px}
 .trk-goal-row{display:flex;gap:8px;align-items:center}
 .trk-goal-row input{width:120px}
 @media (min-width:900px){.trk-b{min-height:48px}}
+
+.dash-grid.solo{grid-template-columns:1fr!important;max-width:760px}
+.banner+.statline{margin-top:12px}

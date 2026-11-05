@@ -137,7 +137,7 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['team', 'Team'], ['more', 'More']];
+    if (role === 'admin') return [['home', 'Home'], ['tracker', 'Tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['more', 'More']];
     if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
@@ -145,7 +145,7 @@
   function navFor(role) {
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
-      ['Team', [['team', 'Team stats'], ['recordings', 'Call recordings'], ['users', 'Team members']]],
+      ['Manage', [['recordings', 'Call recordings'], ['users', 'Team members']]],
       ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script'], ['upload', 'Add leads'], ['integrations', 'Scraper & n8n']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
@@ -154,15 +154,15 @@
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
   const TAB_ICON = { tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['tracker', 'recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
+  const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   function shell(active, content) {
     const tabs = tabsFor(S.me.role);
     let tabActive = active;
     if (S.me.role === 'admin' && UNDER_MORE.includes(active)) tabActive = 'more';
-    if (active === 'rep') tabActive = 'team';
-    const sideActive = active === 'rep' ? 'team' : active;
+    if (active === 'rep') tabActive = 'more';
+    const sideActive = active === 'rep' ? 'users' : active;
     const nav = h('nav', { class: 'tabs', 'aria-label': 'Main' },
       tabs.map(([k, label]) => h('a', { href: '#/' + k, class: tabActive === k ? 'on' : null }, icon(TAB_ICON[k] || k), h('span', null, label),
         k === 'callbacks' || (k === 'more' && S.me.role === 'admin') ? h('span', { class: 'count cb-count', hidden: true }) : null)));
@@ -205,7 +205,7 @@
     try {
       switch (route) {
         case 'home': return await viewHome();
-        case 'team': return await viewTeam();
+        case 'team': location.hash = '#/home'; return;
         case 'finder': return await viewFinder();
         case 'emailbot': return await viewEmailBot();
         case 'recordings': return await viewRecordings();
@@ -1822,7 +1822,7 @@
     const [d, me, team, trk] = await Promise.all([
       api('GET', '/dashboard?' + qs),
       api('GET', '/me'),
-      isAdmin ? api('GET', '/team?' + new URLSearchParams({ from: dfrom, until: duntil, dfrom, duntil })) : null,
+      null,
       isAdmin ? api('GET', '/tracker').catch(() => null) : null,
     ]);
     S.me.daily_goal = me.daily_goal;
@@ -1833,36 +1833,18 @@
     const head = h('div', { class: 'page-head' },
       h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine),
         h('h1', null, 'Welcome back, ' + first(S.me.name)),
-        h('p', { class: 'sub' }, isAdmin ? "Here's what your team is doing " + pn + '.' : 'Your numbers ' + pn + '. Keep stacking.')),
+        h('p', { class: 'sub' }, isAdmin ? "Here's your pipeline " + pn + '.' : 'Your numbers ' + pn + '. Keep stacking.')),
       periodSeg(viewHome));
 
     if (!isAdmin) return repHome(d, me, head);
 
     const kpis = h('div', { class: 'kpi-grid' },
-      kpiTile('phone', 'Calls made', T.calls.toLocaleString(), T.calls ? Math.round((T.booked / T.calls) * 100) + '% booked' : 'No calls yet', { href: '#/team' }),
+      kpiTile('phone', 'Calls made', T.calls.toLocaleString(), T.calls ? Math.round((T.booked / T.calls) * 100) + '% booked' : 'No calls yet', { href: '#/leads' }),
       kpiTile('mail', 'Demos sent', T.demos_sent.toLocaleString(), T.emails ? T.emails + ' by email' : 'by text or email'),
       kpiTile('callbacks', 'Callbacks due', (P.callbacks_due || 0).toLocaleString(), P.callback ? P.callback + ' scheduled in total' : 'none scheduled', { href: '#/callbacks', cls: P.callbacks_due ? 'warn' : '' }),
       kpiTile('cal', 'Calls booked', T.booked.toLocaleString(), 'with the closer'),
       kpiTile('trophy', 'Deals closed', T.closes.toLocaleString(), T.booked ? Math.round((T.closes / Math.max(1, T.booked)) * 100) + '% of booked' : '', { href: '#/deals' }),
       kpiTile('deals', 'Revenue', money(T.revenue_cents), 'setup fees ' + pn, { cls: 'money', href: '#/deals' }));
-
-    // team pulse: everyone's calls today vs goal
-    const reps = (team.team || []).filter((u) => u.active && u.role === 'rep');
-    const devs = (team.team || []).filter((u) => u.active && u.role === 'dev');
-    const flagged = reps.filter((u) => u.today_calls === 0 || (u.daily_goal && u.today_calls < u.daily_goal));
-    const pulse = panel('Team today', h('a', { class: 'link-sm', href: '#/team' }, 'Team stats →'),
-      reps.length || devs.length ? h('div', { class: 'pulse' },
-        reps.map((u) => h('a', { class: 'pulse-row', href: '#/rep/' + u.id },
-          h('span', { class: 'avatar sm' }, initials(u.name)),
-          h('div', { class: 'pulse-body' }, h('div', { class: 'pulse-name' }, h('b', null, u.name),
-            u.today_calls === 0 ? h('span', { class: 'flag bad' }, 'No calls yet') : u.daily_goal && u.today_calls < u.daily_goal ? h('span', { class: 'flag warn' }, 'Under goal') : u.daily_goal ? h('span', { class: 'flag ok' }, 'Goal hit') : null),
-            goalBar(u.today_calls, u.daily_goal, u.today_last_call ? 'Last call ' + ago(u.today_last_call) : 'Calls today')))),
-        devs.map((u) => h('a', { class: 'pulse-row', href: '#/rep/' + u.id },
-          h('span', { class: 'avatar sm dev' }, initials(u.name)),
-          h('div', { class: 'pulse-body' }, h('div', { class: 'pulse-name' }, h('b', null, u.name), h('span', { class: 'flag' }, 'Demo builder')),
-            goalBar(u.demos_today, u.daily_goal, 'Demos built today'))))) :
-        h('div', { class: 'empty-sm' }, 'No reps yet. ', h('a', { href: '#/users' }, 'Add your first rep →')),
-      flagged.length ? h('p', { class: 'pulse-note' }, icon('flag'), flagged.length + (flagged.length === 1 ? ' rep needs' : ' reps need') + ' a nudge today.') : null);
 
     // funnel
     const stages = [['Leads', F.leads, 'all'], ['Demo built', F.demo, 'demo_ready'], ['Contacted', F.contacted, 'called'], ['Booked', F.booked, 'booked'], ['Won', F.won, 'won']];
@@ -1895,7 +1877,7 @@
 
     const stat = (label, value, href, cls) => h('a', { class: 'stat-cell' + (cls ? ' ' + cls : ''), href }, h('small', null, label), h('b', null, value));
     const statLine = h('div', { class: 'statline' },
-      stat('Calls', T.calls.toLocaleString(), '#/team'),
+      stat('Calls', T.calls.toLocaleString(), '#/leads'),
       stat('Booked', T.booked.toLocaleString(), '#/leads'),
       stat('Callbacks due', (P.callbacks_due || 0).toLocaleString(), '#/callbacks', P.callbacks_due ? 'warn' : ''),
       stat('Closed', T.closes.toLocaleString(), '#/deals'),
@@ -1906,8 +1888,7 @@
       h('span', { class: 'btn small' }, 'Open')) : null;
     shell('home', [
       head, trkBanner, statLine, owed,
-      h('div', { class: 'dash-grid' },
-        h('div', { class: 'col' }, pulse, leaderboard(d.leaderboard, true, pn)),
+      h('div', { class: 'dash-grid solo' },
         h('div', { class: 'col' }, feed)),
     ]);
   }
@@ -2104,7 +2085,7 @@
     const recentP = !isDev ? panel('Recent activity', null, r.recent.length ? r.recent.map((c) => feedRow({ kind: 'call', t: c.created_at, detail: c.outcome, who: first(U.name), biz: c.business, lead_id: c.lead_id })) : h('div', { class: 'empty-sm' }, 'No activity yet.')) : null;
 
     shell('rep', [
-      h('a', { class: 'back', href: '#/team' }, icon('back'), 'Team stats'),
+      h('a', { class: 'back', href: '#/users' }, icon('back'), 'Team members'),
       head, goalP, kpis,
       h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, chart, hourPanel, outcomesP, demosP), h('div', { class: 'col' }, dayTable, dealsP, recentP)),
     ]);
@@ -2723,7 +2704,6 @@ function api(method, path, body) {
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
-        row('#/tracker', 'flag', 'Daily tracker', 'Dials, daily wins and your streak'),
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
         row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail'),
         row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
