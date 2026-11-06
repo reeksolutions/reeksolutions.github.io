@@ -2343,11 +2343,11 @@
     { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
     { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
     { id: 'prep', from: '08:15', to: '09:00', title: "Load today's 3 lists, read each offer, say the opener 10 times" },
-    { id: 'c1', from: '09:00', to: '10:30', title: 'Block 1: quick-cash niche', quota: 67 },
+    { id: 'c1', from: '09:00', to: '10:30', title: 'Block 1: Med spas (quick cash)', quota: 67 },
     { id: 'rep', from: '10:30', to: '10:45', title: 'Answer every reply, call every positive reply' },
-    { id: 'c2', from: '10:45', to: '12:15', title: 'Block 2: high-ticket niche', quota: 67 },
+    { id: 'c2', from: '10:45', to: '12:15', title: 'Block 2: High-ticket niche', quota: 67 },
     { id: 'lunch', from: '12:15', to: '13:00', title: 'Lunch' },
-    { id: 'c3', from: '13:00', to: '14:30', title: 'Block 3: referral niche', quota: 66 },
+    { id: 'c3', from: '13:00', to: '14:30', title: 'Block 3: Referral niche', quota: 66 },
     { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
     { id: 'aud', from: '14:45', to: '16:15', title: 'Audits and closing calls (write scopes between calls)' },
     { id: 'cont', from: '16:15', to: '17:00', title: 'Post content (Instagram, X, LinkedIn) and send DMs' },
@@ -2362,6 +2362,9 @@
 
   async function viewTracker() {
     const r = await api('GET', '/tracker');
+    // Block 2 rotates one niche per day, so a block never mixes niches
+    const hi = ['Gyms', 'Insurance agencies', 'Warehouses'][[0, 0, 1, 2, 0, 1, 2][new Date(r.today + 'T12:00:00').getDay()] ];
+    TRK_PLAN.find((b) => b.id === 'c2').title = 'Block 2: ' + hi + ' (high ticket)';
     let goal = r.goal, day = r.day, streak = r.streak, saveT = null;
     const hist = r.history;
     const root = h('div', { class: 'trk' });
