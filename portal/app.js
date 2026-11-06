@@ -396,7 +396,7 @@
           th('business', 'Business'), th('', 'Phone', 'hide-sm'), th('status', 'Stage'), th('city', 'City', 'hide-sm'),
           isAdmin ? th('rep', 'Rep', 'hide-sm') : null, th('last_call', 'Last call', 'hide-md'), th('next', 'Next step', 'hide-md'))),
         h('tbody', null, rows.map((l) => {
-          const tr = h('tr', { onclick: (e) => { if (!e.target.closest('select,input,a,button')) location.hash = '#/lead/' + l.id; } },
+          const tr = h('tr', { onclick: (e) => { if (!e.target.closest('select,input,a,button')) openLeadDrawer(l.id); } },
             isAdmin ? h('td', { class: 'ck' }, h('input', { type: 'checkbox', 'data-id': l.id, 'aria-label': 'Select ' + l.business, checked: S.selected.has(l.id), onchange: (e) => { e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } })) : null,
             h('td', { class: 'biz' }, h('div', { class: 'bn' }, HEAT_DOT(l.heat), h('a', { href: '#/lead/' + l.id }, l.business)), h('small', null, [l.owner, l.category].filter(Boolean).join(' · '))),
             h('td', { class: 'hide-sm mono' }, l.phone ? h('a', { href: telHref(l.phone) }, l.phone) : l.email ? h('small', null, l.email) : '—'),
@@ -453,10 +453,53 @@
   }
 
   /* ================= lead detail ================= */
-  async function viewLead(id) {
+  /* ---- lead side panel: any lead link opens the lead in a drawer instead of a new page ---- */
+  let drawer = null;
+  function closeDrawer() {
+    if (!drawer) return;
+    const d = drawer; drawer = null;
+    d.root.remove(); document.body.classList.remove('has-drawer');
+    document.removeEventListener('keydown', d.onKey);
+    if (d.dirty && !/^#\/lead\//.test(location.hash)) render();
+  }
+  async function openLeadDrawer(id) {
+    if (!drawer) {
+      const body = h('div', { class: 'drawer-body' }, h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' })));
+      const full = h('a', { class: 'btn small', href: '#/lead/' + id, 'data-full': '1' }, 'Open full page ↗');
+      const root = h('div', { class: 'drawer-root' },
+        h('div', { class: 'drawer-scrim', onclick: closeDrawer }),
+        h('aside', { class: 'drawer', role: 'dialog', 'aria-label': 'Lead' },
+          h('div', { class: 'drawer-bar' }, h('button', { class: 'btn small', onclick: closeDrawer }, '✕ Close'), full),
+          body));
+      const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.scrim')) closeDrawer(); };
+      document.addEventListener('keydown', onKey);
+      root.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href^="#/"]');
+        if (!a || a.dataset.full || /^#\/lead\//.test(a.getAttribute('href'))) return;
+        closeDrawer();
+      });
+      document.body.append(root); document.body.classList.add('has-drawer');
+      drawer = { root, body, full, onKey, dirty: false };
+    }
+    drawer.full.setAttribute('href', '#/lead/' + id);
+    try { await viewLead(id, { drawer }); }
+    catch (e) { drawer.body.replaceChildren(h('div', { class: 'empty' }, h('b', null, 'Could not load this lead'), e.message)); }
+  }
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    const a = e.target.closest && e.target.closest('a[href^="#/lead/"]');
+    if (!a || a.dataset.full || !S.me || S.me.role === 'dev') return;
+    const m = a.getAttribute('href').match(/^#\/lead\/(\d+)$/);
+    if (!m) return;
+    e.preventDefault(); openLeadDrawer(+m[1]);
+  });
+
+  async function viewLead(id, opts) {
+    const D = opts && opts.drawer;
+    const openLead = (x) => { if (D) openLeadDrawer(x); else location.hash = '#/lead/' + x; };
     const isAdmin = S.me.role === 'admin';
     const [{ lead: L, calls, notes, deals = [], demo = null, dials = [] }, script, dialer] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript(), S.me.role === 'dev' ? null : getDialer()]);
-    const reload = () => viewLead(id);
+    const reload = () => { if (D) D.dirty = true; return viewLead(id, opts); };
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
     const seller = S.me.role === 'admin' || S.me.role === 'rep';
@@ -498,11 +541,11 @@
       startBar();
     }
     const goNext = async () => {
-      try { const r = await api('GET', '/leads/next?after=' + id); if (r.id) location.hash = '#/lead/' + r.id; else toast('No more dialable leads right now', true); } catch (x) { fail(x); }
+      try { const r = await api('GET', '/leads/next?after=' + id); if (r.id) openLead(r.id); else toast('No more dialable leads right now', true); } catch (x) { fail(x); }
     };
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
-      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('button', { class: 'btn ok wide', onclick: gvCall }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (D || location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('button', { class: 'btn ok wide', onclick: gvCall }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
       L.phone && seller ? (dialer && dialer.ready ? h('button', { class: 'btn small', onclick: gvCall }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
       h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
@@ -568,10 +611,10 @@
         const r = await api('POST', '/leads/' + id + '/calls', Object.assign({ outcome }, seller ? { call_notes: live.value } : {}, extra));
         stopBar();
         toast(OUTCOME_LABEL[outcome] + ' logged → ' + STATUS[r.status]);
-        if (outcome === 'dnc' && S.me.role === 'rep') { location.hash = '#/leads'; return; }
+        if (outcome === 'dnc' && S.me.role === 'rep') { if (D) closeDrawer(); else location.hash = '#/leads'; return; }
         if (seller && ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'dnc'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
           const nx = await api('GET', '/leads/next?after=' + id).catch(() => null);
-          if (nx && nx.id) { location.hash = '#/lead/' + nx.id; return; }
+          if (nx && nx.id) { if (D) D.dirty = true; openLead(nx.id); return; }
         }
         reload();
       } catch (e) { fail(e); }
@@ -757,8 +800,8 @@
       adminPanel = h('details', { class: 'admin' }, h('summary', null, 'Admin: edit, assign, close', h('span', { class: 'dim' }, '▾')), h('div', { class: 'card' }, form));
     }
 
-    shell(S.me.role === 'admin' || S.me.role === 'rep' ? 'leads' : 'demos', [
-      h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
+    const page = [
+      D ? null : h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
       h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
         L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
         h('h1', null, L.business), h('div', { class: 'detail-meta' }, repQuick, tagRow)),
@@ -778,7 +821,9 @@
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'History'), h('div', { class: 'card' }, timeline)),
       adminPanel,
       gvBar,
-    ]);
+    ];
+    if (D) { D.body.replaceChildren(...page.filter(Boolean)); D.body.scrollTop = 0; }
+    else shell(S.me.role === 'admin' || S.me.role === 'rep' ? 'leads' : 'demos', page);
   }
 
   /* ================= email first ================= */
