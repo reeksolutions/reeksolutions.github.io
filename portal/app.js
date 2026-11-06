@@ -303,7 +303,7 @@
     // ---- toolbar ----
     let tmr;
     const search = h('label', { class: 'tsearch' }, icon('search'),
-      h('input', { id: 'lead-search', type: 'search', placeholder: 'Search name, owner, phone, email', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
+      h('input', { id: 'lead-search', type: 'search', placeholder: 'Search leads', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
     const QUICK = [['All', {}], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['Not emailed', { contact: 'unemailed' }]];
     const sameQ = (f) => ['heat', 'due', 'contact'].every((k) => String(F[k] || '') === String(f[k] || ''));
     const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '' }, f); viewLeads(); } }, l)));
@@ -337,6 +337,19 @@
       let r; try { r = await api('GET', '/leads/board?' + qsFrom({ per: 50 })); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
       const total = r.stages.reduce((a, s) => a + s.count, 0);
       countEl.textContent = total.toLocaleString() + (total === 1 ? ' lead' : ' leads');
+      if (window.matchMedia('(max-width:700px)').matches) {
+        let cur = lsGet('rs_leads_stage', ''); if (!r.stages.some((x) => x.key === cur)) cur = (r.stages.find((x) => x.count) || r.stages[0]).key;
+        const list = h('div', { class: 'mlist' });
+        const chips = h('div', { class: 'stagetabs' });
+        const draw = () => {
+          const st = r.stages.find((x) => x.key === cur);
+          chips.replaceChildren(...r.stages.map((x) => h('button', { class: 'stab' + (x.key === cur ? ' on' : ''), onclick: () => { cur = x.key; lsSet('rs_leads_stage', cur); draw(); } }, x.label, h('i', null, x.count.toLocaleString()))));
+          list.replaceChildren(...(st.leads.length ? st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); return c; }) : [h('div', { class: 'bempty' }, 'No leads in ' + st.label)]),
+            ...(st.count > st.leads.length ? [h('button', { class: 'btn block', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →')] : []));
+          const on = chips.querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ inline: 'center', block: 'nearest' });
+        };
+        draw(); body.replaceChildren(chips, list); return;
+      }
       const board = h('div', { class: 'kanban' }, r.stages.map((st) => {
         const col = h('div', { class: 'bcol', 'data-stage': st.key },
           h('div', { class: 'bhead' }, h('b', null, st.label), h('span', null, st.count.toLocaleString())),
@@ -3428,7 +3441,7 @@ function api(method, path, body) {
     const row = (href, ic, title, sub) => h('a', { class: 'list-row link', href }, h('span', { class: 'ic' }, icon(ic)), h('div', { style: 'flex:1;min-width:0' }, h('b', null, title), h('div', { class: 'sub' }, sub)), icon('chev'));
     shell('more', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
-      h('div', { class: 'card' },
+      h('div', { class: 'card more-grid' },
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
         row('#/rebrief', 'chart', 'Daily brief', 'How today went and what is next'),
         row('#/content', 'spark', 'Content', 'Today\'s post for Instagram, X and LinkedIn'),
