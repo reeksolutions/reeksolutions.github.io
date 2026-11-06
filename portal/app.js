@@ -2237,7 +2237,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       h('div', { class: 'dv-vid' }, h('video', { src: '/demos/' + v.id + '.mp4', poster: '/demos/' + v.id + '.jpg', controls: true, playsinline: true, preload: 'none', loop: true, muted: true })),
       h('div', { class: 'dv-body' },
         h('div', { class: 'dv-meta' }, h('span', { class: 'tag hot' }, v.styleName), h('b', null, v.t.name)),
-        h('p', { class: 'dim small' }, '32 seconds, silent. Add the voice track in CapCut using the script below, then post.'),
+        h('p', { class: 'dim small' }, '32 seconds with sound effects. Add your voice in CapCut using the script below (turn the effects down if you want), then post.'),
         h('a', { class: 'btn primary', href: '/demos/' + v.id + '.mp4', download: 'reekon-' + v.id + '.mp4' }, 'Download video'),
         tabs, area,
         h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => cp(area.value, 'Caption copied') }, 'Copy caption'), doneBtn),
