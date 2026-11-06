@@ -154,6 +154,7 @@ async function ensureSchema(env) {
       call_sid TEXT, status TEXT NOT NULL DEFAULT 'started', duration INTEGER, recording_sid TEXT, recording_url TEXT, recording_seconds INTEGER, created_at TEXT NOT NULL, ended_at TEXT)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_lead ON dial_calls(lead_id, id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS cards_log (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, qty INTEGER NOT NULL, price_cents INTEGER NOT NULL DEFAULT 0, business TEXT, note TEXT, created_at TEXT)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_log (day TEXT NOT NULL, platform TEXT NOT NULL, type TEXT, created_at TEXT, PRIMARY KEY (day, platform))'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
@@ -1796,7 +1797,10 @@ async function api(request, env, url) {
   /* ---- settings (admin) ---- */
   if (path === '/settings' && method === 'GET') {
     need(user, 'admin');
-    return json({ default_commission_pct: await defaultPct(env), packages: PACKAGES, focus_niche: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT });
+    return json({ default_commission_pct: await defaultPct(env), packages: PACKAGES, focus_niche: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT,
+      goal: await trkGoal(env), push_start: (await getSetting(env, 'push_start')) || '2026-11-02', cards_total: parseInt(await getSetting(env, 'cards_total'), 10) || 50,
+      gv_number: (await getSetting(env, 'gv_number')) || '', checklist: (await getSetting(env, 'setup_checklist')) || '{}',
+      providers: { google_places: !!env.GOOGLE_PLACES_KEY, tomtom: !!env.TOMTOM_KEY, twilio: !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN), finder_provider: finderProvider(env) || 'none' } });
   }
   if (path === '/settings' && method === 'PUT') {
     need(user, 'admin');
@@ -1806,6 +1810,10 @@ async function api(request, env, url) {
       await setSetting(env, 'default_commission_pct', String(v));
     }
     if (body.focus_niche !== undefined) await setSetting(env, 'focus_niche', str(body.focus_niche, 40).toLowerCase());
+    if (body.push_start !== undefined) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.push_start))) bad('Use a date like 2026-11-02'); await setSetting(env, 'push_start', String(body.push_start)); }
+    if (body.cards_total !== undefined) await setSetting(env, 'cards_total', String(Math.max(0, Math.min(100000, parseInt(body.cards_total, 10) || 0))));
+    if (body.gv_number !== undefined) await setSetting(env, 'gv_number', str(body.gv_number, 30));
+    if (body.checklist !== undefined) await setSetting(env, 'setup_checklist', str(typeof body.checklist === 'string' ? body.checklist : JSON.stringify(body.checklist), 3000));
     return json({ ok: true });
   }
 
@@ -2295,6 +2303,84 @@ async function api(request, env, url) {
     await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, posts, updated_at) VALUES (?,?,'[]',?,?)
       ON CONFLICT(user_id, day) DO UPDATE SET posts = MAX(0, posts + ?), updated_at = excluded.updated_at`).bind(user.id, today, Math.max(0, d), now(), d).run();
     return json({ ok: true, posted: !had });
+  }
+
+
+  /* ---- review cards inventory + sales (admin) ---- */
+  if (path === '/cards' && method === 'GET') {
+    need(user, 'admin');
+    const total = parseInt(await getSetting(env, 'cards_total'), 10) || 50;
+    const rows = (await env.DB.prepare('SELECT * FROM cards_log ORDER BY id DESC LIMIT 200').all()).results;
+    const sum = (k, f) => rows.filter((r) => r.kind === k).reduce((a, r) => a + f(r), 0);
+    const sold = sum('sold', (r) => r.qty), given = sum('given', (r) => r.qty), lost = sum('lost', (r) => r.qty);
+    const revenue = sum('sold', (r) => r.qty * r.price_cents);
+    const today = ptParts().date;
+    return json({ total, sold, given, lost, stock: total - sold - given - lost, revenue_cents: revenue, today_sold: rows.filter((r) => r.kind === 'sold' && ptParts(new Date(r.created_at)).date === today).reduce((a, r) => a + r.qty, 0), log: rows });
+  }
+  if (path === '/cards' && method === 'POST') {
+    need(user, 'admin');
+    const kind = ['sold', 'given', 'lost'].includes(body.kind) ? body.kind : bad('Pick sold, given away or lost');
+    const qty = Math.max(1, Math.min(1000, parseInt(body.qty, 10) || 0)); if (!qty) bad('Enter how many cards');
+    const price = kind === 'sold' ? centsVal(body.price === undefined || body.price === '' ? 50 : body.price) : 0;
+    await env.DB.prepare('INSERT INTO cards_log (kind, qty, price_cents, business, note, created_at) VALUES (?,?,?,?,?,?)').bind(kind, qty, price, str(body.business, 120), str(body.note, 300), now()).run();
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/cards\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin');
+    await env.DB.prepare('DELETE FROM cards_log WHERE id = ?').bind(+m[1]).run();
+    return json({ ok: true });
+  }
+
+  /* ---- end-of-day rebrief (admin) ---- */
+  if (path === '/rebrief' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date;
+    let day = str(url.searchParams.get('day'), 10) || today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) day = today;
+    const dayStart = (d) => { for (let h = 6; h <= 9; h++) { const t = new Date(Date.parse(d + 'T00:00:00Z') + h * 3600e3); if (ptParts(t).date === d && ptParts(new Date(t.getTime() - 3600e3)).date !== d) return t.toISOString(); } return new Date(Date.parse(d + 'T08:00:00Z')).toISOString(); };
+    const from = dayStart(day), to = dayStart(trkShift(day, 1)), nextDay = trkShift(day, 1);
+    const goal = await trkGoal(env), byDay = await trkLoad(env, user.id, day);
+    const t = byDay.get(day) || trkRow(null, day);
+    const [outc, notesN, dealsR, cardsR, nextCb, upcoming, leftNew, postsR] = await Promise.all([
+      env.DB.prepare('SELECT outcome, COUNT(*) AS n FROM calls WHERE user_id = ? AND created_at >= ? AND created_at < ? GROUP BY outcome').bind(user.id, from, to).all(),
+      env.DB.prepare('SELECT COUNT(*) AS n FROM notes WHERE user_id = ? AND created_at >= ? AND created_at < ?').bind(user.id, from, to).first(),
+      env.DB.prepare('SELECT d.amount_cents, d.mrr_cents, l.business FROM deals d LEFT JOIN leads l ON l.id = d.lead_id WHERE d.created_at >= ? AND d.created_at < ?').bind(from, to).all(),
+      env.DB.prepare("SELECT COALESCE(SUM(qty),0) AS n, COALESCE(SUM(qty*price_cents),0) AS c FROM cards_log WHERE kind = 'sold' AND created_at >= ? AND created_at < ?").bind(from, to).first(),
+      env.DB.prepare("SELECT id, business, callback_at FROM leads WHERE status = 'callback' AND callback_at IS NOT NULL AND callback_at < ? ORDER BY callback_at LIMIT 15").bind(dayStart(trkShift(nextDay, 1))).all(),
+      env.DB.prepare("SELECT id, business, booked_at, status FROM leads WHERE booked_at IS NOT NULL AND booked_at >= ? AND status IN ('booked','call2') ORDER BY booked_at LIMIT 15").bind(now()).all(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM leads WHERE status IN ('new','demo_needed','demo_ready')").first(),
+      env.DB.prepare('SELECT platform FROM content_log WHERE day = ?').bind(day).all(),
+    ]);
+    const oc = Object.fromEntries(outc.results.map((r) => [r.outcome, r.n]));
+    const wins = ['pray', 'gym', 'mind'].filter((w) => t.blocks.includes(w));
+    const blocksDone = t.blocks.length, blocksTotal = TRK_BLOCKS.length;
+    const posted = postsR.results.map((r) => r.platform);
+    // score out of 100: dials 45, audits 20, wins 15, content 10, schedule 10
+    const sDials = Math.round(45 * Math.min(1, t.dials / goal)), sAud = t.demos >= 1 ? 20 : t.talks >= 10 ? 8 : 0;
+    const sWins = wins.length * 5, sContent = Math.round(10 * Math.min(1, Math.max(posted.length, Math.min(t.posts, 3)) / 3)), sSched = Math.round(10 * Math.min(1, blocksDone / blocksTotal));
+    const score = sDials + sAud + sWins + sContent + sSched;
+    const sunday = trkDow(day) === 0;
+    const verdict = sunday ? ['rest', 'Rest day', 'Sundays are off. Recharge.'] : score >= 80 ? ['great', 'Great day', 'You did the work. Do it again tomorrow.'] : score >= 60 ? ['good', 'Solid day', 'Close. One more push on dials or content next time.'] : score >= 40 ? ['meh', 'Okay day', 'Not your best. Find the one block you skipped and protect it tomorrow.'] : ['bad', 'Rough day', 'Low output. No drama, just reset and win the first block tomorrow.'];
+    const done = [], todo = [];
+    done.push(`${t.dials} dials (goal ${goal})`, `${t.talks} pick-ups`, `${t.demos} audit${t.demos === 1 ? '' : 's'} booked`);
+    if (notesN.n) done.push(`${notesN.n} call notes saved`);
+    if (dealsR.results.length) done.push(`Closed ${dealsR.results.length} deal${dealsR.results.length === 1 ? '' : 's'}: ${dealsR.results.map((d) => d.business).join(', ')}`);
+    if (cardsR.n) done.push(`Sold ${cardsR.n} review card${cardsR.n === 1 ? '' : 's'} ($${(cardsR.c / 100).toFixed(0)})`);
+    if (posted.length) done.push(`Posted on ${posted.length} platform${posted.length === 1 ? '' : 's'}`);
+    if (!sunday) {
+      if (t.dials < goal) todo.push(`${goal - t.dials} dials short of the goal`);
+      if (wins.length < 3) todo.push('Missing wins: ' + ['pray', 'gym', 'mind'].filter((w) => !wins.includes(w)).map((w) => ({ pray: 'spiritual', gym: 'physical', mind: 'mental' }[w])).join(', '));
+      if (posted.length < 3 && day === today) todo.push('Post on ' + ['ig', 'x', 'li'].filter((x) => !posted.includes(x)).map((x) => ({ ig: 'Instagram', x: 'X', li: 'LinkedIn' }[x])).join(', '));
+      if (!t.refs) todo.push('One referral ask not logged');
+    }
+    return json({
+      day, today, goal, is_today: day === today, sunday, score, verdict,
+      breakdown: [['Dials', sDials, 45], ['Audits', sAud, 20], ['Daily wins', sWins, 15], ['Content', sContent, 10], ['Schedule', sSched, 10]],
+      stats: { dials: t.dials, talks: t.talks, demos: t.demos, texts: t.texts, dms: t.dms, posts: t.posts, refs: t.refs, notes: notesN.n, wins, blocks_done: blocksDone, blocks_total: blocksTotal, outcomes: oc },
+      done, todo, note: t.note || '',
+      tomorrow: { callbacks: nextCb.results, booked: upcoming.results, fresh_leads: leftNew.n },
+      history: Array.from({ length: 7 }, (_, i) => { const d = trkShift(day, i - 6); return { day: d, dials: (byDay.get(d) || {}).dials || 0 }; }),
+    });
   }
 
   /* ---- personal tracker (admin) ---- */

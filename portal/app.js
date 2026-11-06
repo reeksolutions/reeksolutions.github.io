@@ -146,14 +146,15 @@
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [
-      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
-      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['script', 'Call script']]],
+      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['rebrief', 'Daily brief'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
+      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['cards', 'Review cards'], ['script', 'Call script']]],
+      ['System', [['settings', 'Settings']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
   const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
@@ -200,7 +201,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -212,6 +213,9 @@
         case 'recordings': return await viewRecordings();
         case 'tracker': return await viewTracker();
         case 'content': return await viewContent();
+        case 'rebrief': return await viewRebrief(arg);
+        case 'cards': return await viewCards();
+        case 'settings': return await viewSettings();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -676,6 +680,7 @@
     const profileRow = seller ? h('div', { class: 'profile-row' },
       h('a', { class: 'btn primary profile-btn', href: profileUrl, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Open Google profile'),
       gStars ? h('span', { class: 'profile-meta' }, gStars) : null,
+      (() => { const w = L.booked_at && ['booked', 'call2'].includes(L.status) ? [L.booked_at, (L.status === 'call2' ? 'Call 2: ' : 'Free AI audit: '), 30] : L.callback_at && L.status === 'callback' ? [L.callback_at, 'Callback: ', 15] : null; return w ? h('a', { class: 'btn small', target: '_blank', rel: 'noopener', href: gcalLink({ title: w[1] + L.business, start: w[0], minutes: w[2], details: 'Phone: ' + (L.phone || '') + '\nFrom Reekon CRM' }) }, '+ Calendar') : null; })(),
       h('button', { class: 'btn small', onclick: goNext }, 'Next lead →')) : null;
     const earlier = notes.slice(0, 3);
     const liveBox = seller && L.status !== 'dnc' ? h('div', { class: 'live-box section' },
@@ -2093,6 +2098,137 @@
     ]);
   }
 
+  /* ================= theme, calendar links ================= */
+  function applyTheme(mode) {
+    let eff = mode;
+    if (mode === 'system') eff = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', eff === 'light' ? 'light' : 'dark');
+    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', eff === 'light' ? '#f4f6fb' : '#06070a');
+  }
+  const gcalLink = ({ title, start, minutes, details }) => {
+    const s = new Date(start), e = new Date(s.getTime() + (minutes || 30) * 60000);
+    const f = (d) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(title) + '&dates=' + f(s) + '/' + f(e) + '&details=' + encodeURIComponent(details || '');
+  };
+
+  /* ================= daily brief ================= */
+  async function viewRebrief(dayArg) {
+    const r = await api('GET', '/rebrief' + (dayArg ? '?day=' + dayArg : ''));
+    const shift = (d, n) => { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd + n)).toISOString().slice(0, 10); };
+    const go = (d) => { location.hash = '#/rebrief/' + d; };
+    const label = r.is_today ? 'Today' : new Date(r.day + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+    const nav = h('div', { class: 'rb-nav' },
+      h('button', { class: 'btn small', onclick: () => go(shift(r.day, -1)) }, '← Back'),
+      h('b', null, label),
+      h('button', { class: 'btn small', disabled: r.is_today, onclick: () => go(shift(r.day, 1)) }, 'Next →'));
+    const [vk, vTitle, vLine] = r.verdict;
+    const hero = h('section', { class: 'rb-hero ' + vk },
+      h('div', { class: 'rb-score' }, h('b', null, r.score), h('small', null, '/ 100')),
+      h('div', null, h('h2', null, vTitle), h('p', null, vLine)));
+    const bars = h('div', { class: 'rb-bars' }, r.breakdown.map(([n, v, max]) => h('div', { class: 'rb-bar' }, h('span', null, n), h('div', { class: 'ov-ftrack' }, h('i', { style: 'width:' + (max ? (v / max) * 100 : 0) + '%' })), h('b', null, v + '/' + max))));
+    const OC = { no_answer: 'No answer', voicemail: 'Voicemail', gatekeeper: 'Gatekeeper', not_interested: 'Not interested', callback: 'Callback', booked: 'Audit booked', dnc: 'Do not call', emailed: 'Emailed', demo_sent: 'Demo sent' };
+    const oc = Object.entries(r.stats.outcomes).map(([k, n]) => h('span', { class: 'tag' }, (OC[k] || k) + ' · ' + n));
+    const list = (items, empty, cls) => items.length ? h('ul', { class: 'rb-list ' + cls }, items.map((x) => h('li', null, x))) : h('p', { class: 'dim' }, empty);
+    const cbRow = (l) => h('div', { class: 'rb-row' }, h('a', { href: '#/lead/' + l.id }, h('b', null, l.business), h('small', null, fmt(l.callback_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))),
+      h('a', { class: 'btn small', target: '_blank', rel: 'noopener', href: gcalLink({ title: 'Callback: ' + l.business, start: l.callback_at, minutes: 15, details: 'Callback from Reekon CRM' }) }, '+ Calendar'));
+    const bkRow = (l) => h('div', { class: 'rb-row' }, h('a', { href: '#/lead/' + l.id }, h('b', null, l.business), h('small', null, (l.status === 'call2' ? 'Call 2 · ' : 'Audit · ') + fmt(l.booked_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))),
+      h('a', { class: 'btn small', target: '_blank', rel: 'noopener', href: gcalLink({ title: (l.status === 'call2' ? 'Call 2: ' : 'Free AI audit: ') + l.business, start: l.booked_at, minutes: 30, details: 'Booked in Reekon CRM' }) }, '+ Calendar'));
+    const note = h('textarea', { class: 'live-notes', rows: 3, placeholder: 'One thing I learned. One thing I\'ll do differently tomorrow.' });
+    note.value = r.note;
+    let t = null;
+    const saveNote = async () => { try { await api('PUT', '/tracker', { day: r.day, note: note.value }); st.textContent = 'Saved ✓'; } catch (e) { st.textContent = 'Not saved'; } };
+    const st = h('small', { class: 'dim' }, 'Autosaves');
+    note.addEventListener('input', () => { st.textContent = 'Typing…'; clearTimeout(t); t = setTimeout(saveNote, 700); });
+    const dials7 = r.history.map((x) => x.dials), mx = Math.max(r.goal, ...dials7, 1);
+    const spark = h('div', { class: 'rb-spark' }, r.history.map((x) => h('div', { class: 'rb-sp' + (x.day === r.day ? ' now' : '') }, h('i', { style: 'height:' + Math.max(2, (x.dials / mx) * 100) + '%' }), h('small', null, new Date(x.day + 'T12:00:00').toLocaleDateString([], { weekday: 'narrow' })))));
+    shell('rebrief', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Daily brief'), h('h1', null, r.is_today ? 'How today went' : 'How the day went'), h('p', { class: 'sub' }, 'Honest scorecard. It reads your tracker and your call log, so you don\'t have to remember.'))),
+      nav, hero, bars,
+      h('div', { class: 'rb-two' },
+        h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, 'What got done')), list(r.done, 'Nothing logged.', 'ok'), oc.length ? h('div', { class: 'row wrap' }, oc) : null),
+        h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, r.is_today ? 'Still to do today' : 'What was missed')), list(r.todo, r.sunday ? 'Rest day.' : 'Nothing left. Clean day.', 'todo'))),
+      h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, 'Last 7 days of dials'), h('span', { class: 'dim small' }, 'goal ' + r.goal)), spark),
+      h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, 'Next up')),
+        h('p', { class: 'dim small' }, r.tomorrow.fresh_leads.toLocaleString() + ' fresh leads waiting.'),
+        r.tomorrow.booked.length ? h('div', { class: 'rb-rows' }, h('span', { class: 'eyebrow' }, 'Upcoming audits and call 2s'), r.tomorrow.booked.map(bkRow)) : h('p', { class: 'dim' }, 'No audits on the calendar yet. That\'s tomorrow\'s job.'),
+        r.tomorrow.callbacks.length ? h('div', { class: 'rb-rows' }, h('span', { class: 'eyebrow' }, 'Callbacks due'), r.tomorrow.callbacks.map(cbRow)) : null),
+      h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, 'Reflection'), st), note),
+    ]);
+  }
+
+  /* ================= review cards ================= */
+  async function viewCards() {
+    const c = await api('GET', '/cards');
+    const tile = (label, v, sub, cls) => h('div', { class: 'ov-kpi' + (cls ? ' ' + cls : '') }, h('small', null, label), h('b', null, v), h('span', null, sub));
+    const log = async (kind) => {
+      await sheet((box, close) => {
+        const qty = h('input', { type: 'number', inputmode: 'numeric', min: 1, value: 1 });
+        const price = h('input', { type: 'text', inputmode: 'decimal', value: '50' });
+        const biz = h('input', { type: 'text', placeholder: 'Business name' });
+        const note = h('input', { type: 'text', placeholder: 'Optional note' });
+        const err = h('p', { class: 'err-line' });
+        const title = { sold: 'Sold review cards', given: 'Gave cards away', lost: 'Lost or damaged' }[kind];
+        box.append(h('h2', null, title),
+          h('div', { class: 'grid2' }, h('div', { class: 'field' }, h('label', null, 'How many'), qty), kind === 'sold' ? h('div', { class: 'field' }, h('label', null, 'Price each ($)'), price) : null),
+          kind !== 'lost' ? h('div', { class: 'field' }, h('label', null, 'Business'), biz) : null,
+          h('div', { class: 'field' }, h('label', null, 'Note'), note), err,
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'),
+            h('button', { class: 'btn ok', onclick: async () => { try { await api('POST', '/cards', { kind, qty: qty.value, price: price.value, business: biz.value, note: note.value }); toast('Logged'); close(true); } catch (e) { err.textContent = e.message; } } }, 'Save')));
+      });
+      viewCards();
+    };
+    const row = (e) => h('div', { class: 'rb-row' }, h('div', null, h('b', null, e.qty + ' × ' + ({ sold: 'sold', given: 'given away', lost: 'lost' }[e.kind]) + (e.business ? ' · ' + e.business : '')),
+      h('small', null, fmt(e.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + (e.kind === 'sold' ? ' · ' + money(e.qty * e.price_cents) : '') + (e.note ? ' · ' + e.note : ''))),
+      h('button', { class: 'btn small danger', onclick: async () => { if (!(await confirmSheet('Delete this entry?', 'Stock and revenue will update.', 'Delete', true))) return; await api('DELETE', '/cards/' + e.id); viewCards(); } }, 'Delete'));
+    shell('cards', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Review cards'), h('p', { class: 'sub' }, 'Your NFC "Review us on Google" cards: stock, sales and revenue.'))),
+      h('div', { class: 'ov-kpis' }, tile('In stock', c.stock.toLocaleString(), 'of ' + c.total + ' ordered', c.stock <= 5 ? 'bad' : ''), tile('Sold', c.sold.toLocaleString(), c.today_sold + ' today', c.sold ? 'good' : ''), tile('Revenue', money(c.revenue_cents), c.sold ? money(Math.round(c.revenue_cents / c.sold)) + ' avg per card' : 'no sales yet', c.revenue_cents ? 'good' : ''), tile('Given away', c.given.toLocaleString(), 'as samples or bundled'), tile('Lost', c.lost.toLocaleString(), 'damaged or missing')),
+      h('div', { class: 'row wrap', style: 'margin:12px 0' }, h('button', { class: 'btn ok', onclick: () => log('sold') }, 'Log a sale'), h('button', { class: 'btn', onclick: () => log('given') }, 'Gave some away'), h('button', { class: 'btn', onclick: () => log('lost') }, 'Lost or damaged')),
+      h('p', { class: 'ov-note' }, 'Tap counts are not tracked, because a card links straight to Google. To track taps per business, each card would need to point at a tracked link, which is a bigger build.'),
+      h('h3', { class: 'trk-h' }, 'History'), c.log.length ? h('div', { class: 'card' }, c.log.map(row)) : h('p', { class: 'dim' }, 'No entries yet. Log your first sale when the cards arrive.'),
+    ]);
+  }
+
+  /* ================= settings ================= */
+  async function viewSettings() {
+    const s = await api('GET', '/settings');
+    const sec = (title, sub, ...kids) => h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, title), sub ? h('span', { class: 'dim small' }, sub) : null), ...kids);
+    const mode = lsGet('rs_theme', 'dark');
+    const themeRow = h('div', { class: 'stagechips' }, [['dark', 'Dark'], ['light', 'Light'], ['system', 'Match device']].map(([k, label]) => h('button', { class: 'schip' + (mode === k ? ' on' : ''), onclick: () => { lsSet('rs_theme', k); applyTheme(k); viewSettings(); } }, label)));
+    const field = (label, input, hint) => h('div', { class: 'field' }, h('label', null, label), input, hint ? h('small', { class: 'dim' }, hint) : null);
+    const goal = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 2000, value: s.goal });
+    const start = h('input', { type: 'date', value: s.push_start });
+    const niche = h('input', { type: 'text', value: s.focus_niche });
+    const cards = h('input', { type: 'number', inputmode: 'numeric', min: 0, value: s.cards_total });
+    const gv = h('input', { type: 'text', placeholder: '(310) 555-0100', value: s.gv_number });
+    const savedMsg = h('small', { class: 'dim' });
+    const saveAll = async () => {
+      try {
+        await api('PUT', '/tracker/goal', { goal: +goal.value });
+        await api('PUT', '/settings', { push_start: start.value, focus_niche: niche.value, cards_total: cards.value, gv_number: gv.value });
+        savedMsg.textContent = 'Saved ✓'; toast('Settings saved');
+      } catch (e) { savedMsg.textContent = ''; fail(e); }
+    };
+    const p = s.providers;
+    const status = (name, ok, where) => h('div', { class: 'rb-row' }, h('div', null, h('b', null, name), h('small', null, ok ? 'Connected' : where)), h('span', { class: 'tag ' + (ok ? 'good' : 'hot') }, ok ? 'On' : 'Missing'));
+    let list = {}; try { list = JSON.parse(s.checklist || '{}'); } catch { /* ignore */ }
+    const CHECK = [['gv', 'Google Voice number set up and popups allowed for this site'], ['places', 'Lead Finder returns med spa results (Google key working)'], ['bot', 'Lead bot on: med spa, my cities, include businesses with websites'], ['ig', 'Instagram set to a business profile, bio + link ready'], ['x', 'X account ready (bio says what you do)'], ['li', 'LinkedIn profile updated with the med spa offer'], ['cal', 'Google Calendar open for audit bookings'], ['cards', 'Review cards arrived and counted'], ['script', 'Call script finalized for med spas']];
+    const checkRow = ([k, label]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!list[k], onchange: async (e) => { list[k] = e.target.checked; try { await api('PUT', '/settings', { checklist: JSON.stringify(list) }); } catch (x) { fail(x); } } }), h('span', null, label));
+    const link = (href, name, sub) => h('a', { class: 'list-row link', href }, h('div', { style: 'flex:1;min-width:0' }, h('b', null, name), h('div', { class: 'sub' }, sub)));
+    shell('settings', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'System'), h('h1', null, 'Settings'), h('p', { class: 'sub' }, 'Everything backend, in one place.'))),
+      h('div', { class: 'ov-grid' },
+        sec('Appearance', null, themeRow),
+        sec('Targets and focus', null, field('Daily dial goal', goal, 'Your floor is 150. Target 200.'), field('Day 1 of the 30-day push', start), field('Focus niche', niche, 'Leads matching this sort to the top.'), field('Review cards ordered', cards), field('Google Voice number', gv, 'For your reference. Calls open Google Voice in a side window.'),
+          h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: saveAll }, 'Save'), savedMsg)),
+        sec('Connections', 'status only', status('Google Places (Lead Finder)', p.google_places, 'Add GOOGLE_PLACES_KEY in Cloudflare'), status('TomTom (backup finder)', p.tomtom, 'Optional'), status('Twilio (in-portal dialer)', p.twilio, 'Optional. Google Voice works without it.'),
+          h('p', { class: 'ov-note' }, 'API keys are kept as secrets in Cloudflare (Workers → your worker → Settings → Variables and Secrets), so they never sit in this page. Finder is using: ' + p.finder_provider + '.')),
+        sec('Google Calendar', null, h('p', { class: 'dim' }, 'Audits, call 2s and callbacks show a "+ Calendar" button that adds them to Google Calendar in one tap (Daily brief and each lead). A full two-way sync needs a Google sign-in setup, which we can add later.')),
+        sec('Launch checklist', 'saves as you tick', h('div', { class: 'check-list' }, CHECK.map(checkRow))),
+        sec('Advanced', 'hidden from the menu', h('div', { class: 'card' }, link('#/integrations', 'API keys and webhooks', 'Scraper and n8n access'), link('#/emailbot', 'Email bot', 'Cold email from Gmail (off for now)'), link('#/users', 'Team members', 'Reps, goals and commission'), link('#/recordings', 'Call recordings', 'Twilio dialer only'), link('#/upload', 'Add leads', 'Upload a CSV'), link('#/account', 'Account', 'Password and log out')))),
+    ]);
+  }
+
   async function viewAdminHome() {
     const ov = await api('GET', '/overview');
     const trk = ov;
@@ -2112,7 +2248,7 @@
       h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine),
         h('h1', null, 'Day ' + Math.min(ov.day_n, 30) + ' of 30'),
         h('p', { class: 'sub' }, 'Everything in one place. Focus: ' + niche + 's.')),
-      h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing'));
+      h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/rebrief' }, 'Daily brief'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
     const prog = h('div', { class: 'ov-days' }, Array.from({ length: 30 }, (_, i) => h('i', { class: i + 1 < ov.day_n ? 'past' : i + 1 === ov.day_n ? 'now' : '' })));
 
     const reality = h('section', { class: 'ov-reality' },
@@ -2168,6 +2304,11 @@
       quick: [h('button', { class: 'trk-b', onclick: quickLog('refs', 1, T.today_refs) }, '+1 referral ask')],
       note: [T.posts7 ? 'good' : 'warn', T.posts7 ? `${T.posts7} posts this week. Content is the slow channel; keep it daily and it compounds.` : 'No posts logged this week. Content compounds, but only if it ships.'] });
 
+    let cardsData = null; try { cardsData = await api('GET', '/cards'); } catch { /* optional */ }
+    const cardsCard = cardsData ? ovCard({
+      ic: 'deals', title: 'Review cards', manage: ['Manage', '#/cards'],
+      big: [[cardsData.stock.toLocaleString(), 'in stock'], [cardsData.sold.toLocaleString(), 'sold'], [money(cardsData.revenue_cents), 'revenue']],
+      note: [cardsData.stock <= 5 ? 'warn' : '', cardsData.sold ? cardsData.today_sold + ' sold today. ' + cardsData.given + ' given away.' : 'No sales yet. Log each sale so revenue stays honest.'] }) : null;
     const supplyCard = ovCard({
       ic: 'search', title: 'Lead supply', manage: ['Lead Finder', '#/finder'],
       big: [[SU.focus_open.toLocaleString(), niche + ' leads left'], [SU.days_left + 'd', 'at ' + ov.goal + ' dials/day'], [SU.added.slice(-7).reduce((a, b) => a + b, 0).toLocaleString(), 'added · 7d']],
@@ -2187,7 +2328,7 @@
     clearInterval(S.feedTimer);
     S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
 
-    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard), feed]);
+    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard, cardsCard), feed]);
   }
 
   async function viewHome() {
@@ -3089,7 +3230,10 @@ function api(method, path, body) {
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
+        row('#/rebrief', 'chart', 'Daily brief', 'How today went and what is next'),
         row('#/content', 'spark', 'Content', 'Today\'s post for Instagram, X and LinkedIn'),
+        row('#/cards', 'deals', 'Review cards', 'Stock, sales and revenue'),
+        row('#/settings', 'account', 'Settings', 'Targets, connections, theme, checklist'),
         row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
         row('#/script', 'script', 'Call script', 'What to say on the phone'),
         row('#/account', 'account', 'Account', 'Password and log out')),
