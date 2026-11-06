@@ -147,8 +147,8 @@
   function navFor(role) {
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
-      ['Manage', [['recordings', 'Call recordings'], ['users', 'Team members']]],
-      ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script'], ['upload', 'Add leads'], ['integrations', 'Scraper & n8n']]],
+      ['Manage', [['users', 'Team members']]],
+      ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
@@ -3001,11 +3001,8 @@ function api(method, path, body) {
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
         row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail'),
         row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
-        row('#/recordings', 'phone', 'Call recordings', 'Listen back to calls and train'),
         row('#/script', 'script', 'Call script', 'What to say on the phone'),
         row('#/users', 'users', 'Team members', 'Add reps, set goals and commission'),
-        row('#/upload', 'batches', 'Add leads', 'Upload or paste a CSV'),
-        row('#/integrations', 'bolt', 'Scraper & n8n', 'Send leads in automatically'),
         row('#/account', 'account', 'Account', 'Password and log out')),
     ]);
   }
