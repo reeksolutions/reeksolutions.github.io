@@ -159,6 +159,8 @@ async function ensureSchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
+  try { await env.DB.prepare('ALTER TABLE finder_log ADD COLUMN provider TEXT').run(); }
+  catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
   for (const [name, type] of Object.entries(TRACKER_COLUMNS)) {
     if (!tcols.has(name)) {
@@ -476,8 +478,17 @@ function pickRep(loads) {
 const FINDER_LIMITS = { day: 30, month: 900 };
 // TomTom free tier: 2,500 requests a month. Each search uses 2 (find the city, then the businesses).
 const TOMTOM_LIMITS = { day: 40, month: 1100 };
+const bothKeys = (env) => !!(env.GOOGLE_PLACES_KEY && env.TOMTOM_KEY);
 const finderProvider = (env) => (env.GOOGLE_PLACES_KEY ? 'google' : env.TOMTOM_KEY ? 'tomtom' : '');
-const finderBase = (env) => (finderProvider(env) === 'tomtom' ? TOMTOM_LIMITS : FINDER_LIMITS);
+// With both keys set, Google is used until it gets close to its free limit (switch at 850 of 1,000), then TomTom takes over.
+const GOOGLE_SWITCH_AT = 850;
+const finderBase = (env) => bothKeys(env) ? { day: FINDER_LIMITS.day + TOMTOM_LIMITS.day, month: GOOGLE_SWITCH_AT + TOMTOM_LIMITS.month }
+  : (finderProvider(env) === 'tomtom' ? TOMTOM_LIMITS : FINDER_LIMITS);
+// which provider the next search should use
+function pickProvider(env, usage) {
+  if (!bothKeys(env)) return finderProvider(env);
+  return (usage.google || 0) >= GOOGLE_SWITCH_AT ? 'tomtom' : 'google';
+}
 // the monthly cap is the real guard (you can raise it in the bot settings); the daily cap just stops runaway loops
 async function finderCaps(env) {
   const base = finderBase(env); let m = 0;
@@ -532,8 +543,8 @@ async function finderUsage(env) {
   const la = new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
   const dayStart = new Date(d.getTime() - ((la.getHours() * 60 + la.getMinutes()) * 60 + la.getSeconds()) * 1000).toISOString();
   const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
-  const r = await env.DB.prepare('SELECT SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, COUNT(*) AS month FROM finder_log WHERE created_at >= ?').bind(dayStart, monthStart).first();
-  return { today: r.today || 0, month: r.month || 0 };
+  const r = await env.DB.prepare("SELECT SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, COUNT(*) AS month, SUM(CASE WHEN COALESCE(provider,'google')='google' THEN 1 ELSE 0 END) AS google, SUM(CASE WHEN provider='tomtom' THEN 1 ELSE 0 END) AS tomtom FROM finder_log WHERE created_at >= ?").bind(dayStart, monthStart).first();
+  return { today: r.today || 0, month: r.month || 0, google: r.google || 0, tomtom: r.tomtom || 0 };
 }
 // Try the obvious web addresses for a business Google says has no website.
 async function guessSite(name) {
@@ -698,10 +709,12 @@ async function keyAuth(request, env) {
 }
 // one Lead Finder search: used by the Lead Finder page and the auto lead bot
 async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 20) {
-  const provider = finderProvider(env);
+  const provider = pickProvider(env, await finderUsage(env));
+  // a page token from the other provider can't be used here: start that search's first page instead
+  if (provider === 'google' && pageToken && /^\d+$/.test(String(pageToken))) pageToken = undefined;
   let g = {};
   if (provider === 'tomtom') {
-    await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now()).run();
+    await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at, provider) VALUES (?,?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now(), 'tomtom').run();
     const t = await tomtomSearch(env, what, where, parseInt(pageToken, 10) || 0);
     g = { places: t.places, nextPageToken: t.next };
   } else {
@@ -711,7 +724,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
       'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken' },
     body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
   });
-  await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at) VALUES (?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now()).run();
+  await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at, provider) VALUES (?,?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now(), 'google').run();
   try { g = await r.json(); } catch { g = {}; }
   if (!r.ok) {
     const msg = (g.error && g.error.message) || ('Google said ' + r.status);
@@ -2247,12 +2260,12 @@ async function api(request, env, url) {
   /* ---- Lead Finder (Google Places) ---- */
   if (path === '/finder' && method === 'GET') {
     need(user, 'admin');
-    return json({ ready: !!finderProvider(env), provider: finderProvider(env), usage: await finderUsage(env), limits: await finderCaps(env) });
+    { const u = await finderUsage(env); return json({ ready: !!finderProvider(env), provider: pickProvider(env, u), both: bothKeys(env), usage: u, limits: await finderCaps(env) }); }
   }
   if (path === '/finder/search' && method === 'POST') {
     need(user, 'admin');
     if (!finderProvider(env)) bad('Add your free TomTom key in Cloudflare first (see the setup steps on this page).');
-    const LIM = await finderCaps(env), provider = finderProvider(env);
+    const LIM = await finderCaps(env), provider = pickProvider(env, await finderUsage(env));
     const what = str(body.what, 80), where = str(body.where, 80);
     if (!what || !where) bad('Type what kind of business and where');
     const u = await finderUsage(env);
@@ -2265,7 +2278,7 @@ async function api(request, env, url) {
     need(user, 'admin');
     const cfg = await autoConfig(env), st = await autoState(env);
     const added7 = await env.DB.prepare("SELECT COUNT(*) AS n FROM leads l JOIN batches b ON b.id = l.batch_id WHERE b.name LIKE 'Auto lead bot%' AND l.created_at >= ?").bind(new Date(Date.now() - 7 * 864e5).toISOString()).first();
-    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env),
+    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env), both: bothKeys(env),
       stock: await readyStock(env), expanded: st.expanded || [], caps: await finderCaps(env), usage: await finderUsage(env) });
   }
   if (path === '/finder/auto' && method === 'PUT') {

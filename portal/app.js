@@ -1554,7 +1554,7 @@
     const stockBar = h('div', { class: 'stockbar' },
       h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh med spa leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
       h('div', { class: 'stk-track' }, h('i', { style: 'width:' + pct + '%' + (pct >= 100 ? ';background:var(--ok)' : '') })),
-      h('div', { class: 'sub' }, d.usage.month.toLocaleString() + ' of ' + d.caps.month.toLocaleString() + ' searches used this month' + ((d.expanded || []).length ? ' · expanded into ' + d.expanded.length + ' more cities (latest: ' + d.expanded[d.expanded.length - 1] + ')' : '')));
+      h('div', { class: 'sub' }, d.usage.month.toLocaleString() + ' of ' + d.caps.month.toLocaleString() + ' searches used this month' + (d.both ? ' (Google ' + d.usage.google + ', TomTom ' + d.usage.tomtom + ' · auto-switches to TomTom near Google\'s free limit)' : '') + ((d.expanded || []).length ? ' · expanded into ' + d.expanded.length + ' more cities (latest: ' + d.expanded[d.expanded.length - 1] + ')' : '')));
     const cleanBtn = h('button', { class: 'btn block', style: 'margin-top:10px', onclick: async () => {
       try {
         const p = await api('POST', '/leads/cleanup', {});
