@@ -1372,6 +1372,7 @@
     } }, 'Run one search now');
     const perNight = h('input', { id: 'auto-per', type: 'number', min: 1, max: 20, inputmode: 'numeric', value: cfg.per_night, oninput: (e) => { cfg.per_night = +e.target.value || 1; dirty(); } });
     const maxRev = h('input', { id: 'auto-rev', type: 'number', min: 0, max: 5000, inputmode: 'numeric', value: cfg.max_reviews, oninput: (e) => { cfg.max_reviews = +e.target.value || 0; dirty(); } });
+    const anySite = h('input', { id: 'auto-anysite', type: 'checkbox', checked: !!cfg.any_site, onchange: (e) => { cfg.any_site = e.target.checked; dirty(); } });
     const social = h('input', { id: 'auto-social', type: 'checkbox', checked: cfg.include_social, onchange: (e) => { cfg.include_social = e.target.checked; dirty(); } });
     const runs = (d.runs || []).slice(0, 8);
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
@@ -1385,7 +1386,8 @@
         h('div', { class: 'grid2' },
           h('div', { class: 'field' }, h('label', { for: 'auto-per' }, 'Searches per night'), perNight, h('span', { class: 'hint' }, 'Up to 20. Some daily searches are always saved for you.')),
           d.provider === 'google' ? h('div', { class: 'field' }, h('label', { for: 'auto-rev' }, 'Most Google reviews'), maxRev, h('span', { class: 'hint' }, 'Skip businesses with more reviews than this.')) : h('div')),
-        h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
+        h('label', { class: 'check' }, anySite, ' Include businesses that already have a website (use for med spas, gyms, insurance)'),
+        cfg.any_site ? h('p', { class: 'sub', style: 'margin:4px 0 8px' }, 'On: the bot adds any business with a phone number, ignores the review limit, and files them under New instead of Demo needed.') : h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
         h('div', { class: 'row', style: 'justify-content:flex-end;margin-top:8px' }, save)),
       h('div', { class: 'auto-runs' },
         h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;margin-bottom:6px' }, h('span', { class: 'eyebrow' }, 'Recent searches'), runNow),
@@ -2342,12 +2344,12 @@
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
     { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
     { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
-    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's 3 lists, read each offer, say the opener 10 times" },
-    { id: 'c1', from: '09:00', to: '10:30', title: 'Block 1: Med spas (quick cash)', quota: 67 },
+    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's med spa list, read the offer, say the opener 10 times" },
+    { id: 'c1', from: '09:00', to: '10:30', title: 'Call block 1: Med spas', quota: 67 },
     { id: 'rep', from: '10:30', to: '10:45', title: 'Answer every reply, call every positive reply' },
-    { id: 'c2', from: '10:45', to: '12:15', title: 'Block 2: High-ticket niche', quota: 67 },
+    { id: 'c2', from: '10:45', to: '12:15', title: 'Call block 2: Med spas', quota: 67 },
     { id: 'lunch', from: '12:15', to: '13:00', title: 'Lunch' },
-    { id: 'c3', from: '13:00', to: '14:30', title: 'Block 3: Referral niche', quota: 66 },
+    { id: 'c3', from: '13:00', to: '14:30', title: 'Call block 3: Med spas', quota: 66 },
     { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
     { id: 'aud', from: '14:45', to: '16:15', title: 'Audits and closing calls (write scopes between calls)' },
     { id: 'cont', from: '16:15', to: '17:00', title: 'Post content (Instagram, X, LinkedIn) and send DMs' },
@@ -2362,9 +2364,6 @@
 
   async function viewTracker() {
     const r = await api('GET', '/tracker');
-    // Block 2 rotates one niche per day, so a block never mixes niches
-    const hi = ['Gyms', 'Insurance agencies', 'Warehouses'][[0, 0, 1, 2, 0, 1, 2][new Date(r.today + 'T12:00:00').getDay()] ];
-    TRK_PLAN.find((b) => b.id === 'c2').title = 'Block 2: ' + hi + ' (high ticket)';
     let goal = r.goal, day = r.day, streak = r.streak, saveT = null;
     const hist = r.history;
     const root = h('div', { class: 'trk' });

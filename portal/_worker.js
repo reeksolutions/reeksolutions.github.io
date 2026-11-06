@@ -678,7 +678,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 }
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
-const AUTO_DEFAULTS = { enabled: false, niches: ['barber shop', 'nail salon', 'auto detailing'], cities: ['Palmdale, CA', 'Lancaster, CA'], per_night: 10, max_reviews: 50, include_social: true };
+const AUTO_DEFAULTS = { enabled: false, niches: ['barber shop', 'nail salon', 'auto detailing'], cities: ['Palmdale, CA', 'Lancaster, CA'], per_night: 10, max_reviews: 50, include_social: true, any_site: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -710,8 +710,9 @@ async function autoStep(env, { manual } = {}) {
   try {
     const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, 6);
     run.checked = f.results.length;
-    const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
-      && (x.reviews == null || x.reviews <= cfg.max_reviews));
+    // any_site (med spas, gyms, insurance): keep businesses that already have a website, whatever their review count
+    const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (cfg.any_site || x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
+      && (cfg.any_site || x.reviews == null || x.reviews <= cfg.max_reviews));
     if (keep.length) {
       const name = 'Auto lead bot · ' + new Date().toLocaleDateString('en-US', { timeZone: BOT_TZ, month: 'short', day: 'numeric' });
       let b = await env.DB.prepare('SELECT id FROM batches WHERE name = ? ORDER BY id DESC LIMIT 1').bind(name).first();
@@ -719,7 +720,7 @@ async function autoStep(env, { manual } = {}) {
       const city = pick.where.split(',')[0].trim();
       const rows = keep.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city, category: p.category, rating: p.rating == null ? '' : String(p.rating),
         link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
-      const res = await importRows(env, { batchId: b.id, rows, startStatus: 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
+      const res = await importRows(env, { batchId: b.id, rows, startStatus: cfg.any_site ? 'new' : 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
       run.added = res.inserted || 0;
     }
     st.pages[pick.key] = f.next || 'done';
@@ -2118,6 +2119,7 @@ async function api(request, env, url) {
     if (body.per_night !== undefined) out.per_night = Math.max(1, Math.min(20, parseInt(body.per_night, 10) || 10));
     if (body.max_reviews !== undefined) out.max_reviews = Math.max(0, Math.min(5000, parseInt(body.max_reviews, 10) || 50));
     if (body.include_social !== undefined) out.include_social = !!body.include_social;
+    if (body.any_site !== undefined) out.any_site = !!body.any_site;
     if (out.enabled && (!out.niches.length || !out.cities.length)) bad('Add at least one type of business and one city');
     await setSetting(env, 'auto_finder', JSON.stringify(out));
     return json({ ok: true, config: out });
