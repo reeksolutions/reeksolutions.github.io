@@ -92,7 +92,7 @@ const SCHEMA = [
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
 const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -1438,6 +1438,11 @@ async function api(request, env, url) {
       sets.push('next_action_at = ?'); args.push(v);
     }
     if (body.next_action !== undefined) { sets.push('next_action = ?'); args.push(str(body.next_action, 140) || null); }
+    if (body.instagram !== undefined) {
+      let v = str(body.instagram, 200).trim();
+      if (v) { v = v.replace(/^@/, ''); const m = v.match(/instagram\.com\/([A-Za-z0-9._]+)/i); v = m ? m[1] : v; if (!/^[A-Za-z0-9._]{1,30}$/.test(v)) bad('That does not look like an Instagram handle'); v = 'https://instagram.com/' + v; }
+      sets.push('instagram = ?'); args.push(v || null);
+    }
     if (body.call_notes !== undefined) { sets.push('call_notes = ?'); args.push(str(body.call_notes, 4000) || null); }
     if (!sets.length) return json({ ok: true });
     sets.push('updated_at = ?'); args.push(now());

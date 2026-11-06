@@ -680,6 +680,21 @@
     const profileRow = seller ? h('div', { class: 'profile-row' },
       h('a', { class: 'btn primary profile-btn', href: profileUrl, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Open Google profile'),
       gStars ? h('span', { class: 'profile-meta' }, gStars) : null,
+      L.instagram
+        ? h('a', { class: 'btn small', href: L.instagram, target: '_blank', rel: 'noopener noreferrer' }, 'Instagram ↗')
+        : h('a', { class: 'btn small', target: '_blank', rel: 'noopener noreferrer', href: 'https://www.google.com/search?q=' + encodeURIComponent('site:instagram.com ' + L.business + ' ' + (L.city || '')) }, 'Find on Instagram'),
+      h('button', { class: 'btn small', onclick: async () => {
+        const v = await sheet((box, close) => {
+          const inp = h('input', { type: 'text', placeholder: '@handle or instagram.com link', value: L.instagram ? L.instagram.replace('https://instagram.com/', '@') : '' });
+          box.append(h('h2', null, 'Instagram for ' + L.business), h('div', { class: 'field' }, h('label', null, 'Handle or link'), inp),
+            h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(inp.value.trim()) }, 'Save')));
+        });
+        if (v === null) return;
+        try { await api('POST', '/leads/' + id + '/meta', { instagram: v }); toast('Saved'); reload(); } catch (e) { fail(e); }
+      } }, L.instagram ? 'Edit IG' : 'Save IG'),
+      h('button', { class: 'btn small', onclick: async () => {
+        try { const t = await api('GET', '/tracker'); await api('PUT', '/tracker', { dms: t.day.dms + 1 }); toast('DM logged (' + (t.day.dms + 1) + ' today)'); } catch (e) { fail(e); }
+      } }, 'Sent a DM'),
       (() => { const w = L.booked_at && ['booked', 'call2'].includes(L.status) ? [L.booked_at, (L.status === 'call2' ? 'Call 2: ' : 'Free AI audit: '), 30] : L.callback_at && L.status === 'callback' ? [L.callback_at, 'Callback: ', 15] : null; return w ? h('a', { class: 'btn small', target: '_blank', rel: 'noopener', href: gcalLink({ title: w[1] + L.business, start: w[0], minutes: w[2], details: 'Phone: ' + (L.phone || '') + '\nFrom Reekon CRM' }) }, '+ Calendar') : null; })(),
       h('button', { class: 'btn small', onclick: goNext }, 'Next lead →')) : null;
     const earlier = notes.slice(0, 3);
