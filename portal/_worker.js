@@ -740,7 +740,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 }
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
-const AUTO_DEFAULTS = { enabled: false, niches: ['barber shop', 'nail salon', 'auto detailing'], cities: ['Palmdale, CA', 'Lancaster, CA'], per_night: 10, max_reviews: 50, include_social: true, any_site: false };
+const AUTO_DEFAULTS = { enabled: false, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 20, max_reviews: 5000, include_social: true, any_site: true };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };

@@ -1206,3 +1206,23 @@ body.has-drawer{overflow:hidden}
   .more-grid .list-row.link b{font-size:16px}
   .more-grid .list-row.link .sub{font-size:12.5px;margin-top:3px;line-height:1.35}
 }
+
+/* ===== overflow guards: long names/URLs must never widen the page ===== */
+html,body{max-width:100%;overflow-x:hidden}
+#view{max-width:100%;overflow-x:clip}
+#view *{overflow-wrap:anywhere}
+.find,.fbody,.ftop,.fmeta,.fbadges,.bcard,.bc-top,.bc-meta,.card,.panel,.auto-bot{min-width:0;max-width:100%}
+.ftop{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.ftop b{min-width:0}
+.fbadges{display:flex;flex-wrap:wrap;gap:6px}
+.fb{max-width:100%;white-space:normal;word-break:break-word}
+@media (max-width:700px){
+  .find{padding:14px;gap:12px;border-radius:16px}
+  .find input[type=checkbox]{width:26px;height:26px;flex:none}
+  .ftop b{font-size:17px}
+  .fmeta{font-size:14px;line-height:1.4}
+  .fb{font-size:13px;padding:5px 10px}
+  .find-sum{font-size:14px}
+  .add-bar{left:10px;right:10px;width:auto}
+  .add-bar select{min-width:0}
+}

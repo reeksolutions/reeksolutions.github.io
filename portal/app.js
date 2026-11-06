@@ -1547,9 +1547,14 @@
     const anySite = h('input', { id: 'auto-anysite', type: 'checkbox', checked: !!cfg.any_site, onchange: (e) => { cfg.any_site = e.target.checked; dirty(); } });
     const social = h('input', { id: 'auto-social', type: 'checkbox', checked: cfg.include_social, onchange: (e) => { cfg.include_social = e.target.checked; dirty(); } });
     const runs = (d.runs || []).slice(0, 8);
+    const isMed = cfg.niches.some((n) => /med|botox|aesthetic|laser/i.test(n)) && cfg.any_site && cfg.per_night >= 20;
+    const medBtn = isMed ? null : h('button', { class: 'btn primary block', style: 'margin-bottom:12px', disabled: !d.ready, onclick: async () => {
+      try { await api('PUT', '/finder/auto', { enabled: true, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 20, max_reviews: 5000, any_site: true, include_social: true });
+        toast('Med spa mode on: 20 searches a night across LA. Leads appear in the morning'); again(); } catch (e) { fail(e); } } }, 'Med spa mode: LA, 20 searches a night, turn on');
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
       h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
         h('div', { class: 'row', style: 'gap:8px' }, toggle)),
+      medBtn,
       h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'Every night it searches each type of business in each city, skips anyone with a real website or already in your CRM, and adds the rest to your leads, ready to call in the morning.'),
       h('details', { class: 'auto-set' }, h('summary', null, 'Settings · ' + cfg.niches.length + ' types × ' + cfg.cities.length + ' cities = ' + combos + ' searches to rotate through'),
         h('div', { class: 'grid2' },
