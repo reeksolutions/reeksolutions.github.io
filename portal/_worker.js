@@ -18,9 +18,9 @@ const PBKDF2_ITER = 60000;
 const MAX_FAILED = 5;          // failed logins before a 15-minute lock
 const LOCK_MINUTES = 15;
 
-const STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'won', 'lost', 'dnc'];
-const BOARD_STAGES = [['new', 'New', ['new', 'demo_needed', 'demo_ready']], ['called', 'Contacted', ['called']], ['callback', 'Callback', ['callback']], ['booked', 'Booked', ['booked']], ['won', 'Won', ['won']], ['lost', 'Lost', ['lost']]];
-const OPEN_STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked'];
+const STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'call2', 'won', 'lost', 'dnc'];
+const BOARD_STAGES = [['new', 'New', ['new', 'demo_needed', 'demo_ready']], ['called', 'Contacted', ['called']], ['callback', 'Callback', ['callback']], ['booked', 'Audit booked', ['booked']], ['call2', 'Call 2', ['call2']], ['won', 'Won', ['won']], ['lost', 'Lost', ['lost']]];
+const OPEN_STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'call2'];
 const OUTCOMES = ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'callback', 'demo_sent', 'booked', 'dnc', 'emailed'];
 const DIAL_OUTCOMES = OUTCOMES.filter((o) => o !== 'emailed');
 const HEATS = ['hot', 'warm', 'cold', 'dead'];
@@ -239,7 +239,7 @@ Want me to grab you a time?` },
 ];
 
 /* -------- personal tracker -------- */
-const TRK_BLOCKS = ['pray', 'gym', 'reset', 'mind', 'prep', 'c1', 'fu1', 'lunch', 'c2', 'brk', 'c3', 'close'];
+const TRK_BLOCKS = ['pray', 'gym', 'reset', 'mind', 'prep', 'c1', 'rep', 'c2', 'lunch', 'c3', 'brk', 'aud', 'cont', 'close'];
 const TRK_WINS = ['pray', 'gym', 'mind'];
 function trkShift(date, n) {
   const [y, m, d] = date.split('-').map(Number);
@@ -267,7 +267,7 @@ function trkStreak(byDay, goal, today) {
 }
 async function trkGoal(env) {
   const v = parseInt(await getSetting(env, 'tracker_goal'), 10);
-  return v >= 1 && v <= 2000 ? v : 300;
+  return v >= 1 && v <= 2000 ? v : 200;
 }
 async function trkLoad(env, userId, today) {
   const rows = (await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day >= ? ORDER BY day').bind(userId, trkShift(today, -120)).all()).results;
@@ -1204,7 +1204,7 @@ async function api(request, env, url) {
     need(user, 'admin');
     const { results } = await env.DB.prepare(
       `SELECT u.id, u.name, u.email, u.role, u.active, u.created_at, u.commission_pct, u.daily_goal,
-        (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.status IN ('new','demo_needed','demo_ready','called','callback','booked')) AS open_leads
+        (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.status IN ('new','demo_needed','demo_ready','called','callback','booked','call2')) AS open_leads
        FROM users u ORDER BY u.active DESC, u.role, u.name`
     ).all();
     return json(results);
@@ -1472,7 +1472,7 @@ async function api(request, env, url) {
     const lead = await loadLead(env, user, +m[1]);
     if (user.role === 'rep') {
       const keys = Object.keys(body);
-      if (keys.some((k) => k !== 'status') || !['new', 'called', 'callback', 'booked', 'won', 'lost'].includes(body.status)) throw new HttpError(403, 'Reps can only move their leads between stages');
+      if (keys.some((k) => k !== 'status') || !['new', 'called', 'callback', 'booked', 'call2', 'won', 'lost'].includes(body.status)) throw new HttpError(403, 'Reps can only move their leads between stages');
     }
     const sets = [], args = [];
     const fields = { business: 200, owner: 120, phone: 40, city: 80, category: 80 };

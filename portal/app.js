@@ -9,11 +9,11 @@
 
   const STATUS = {
     new: 'New', demo_needed: 'Demo needed', demo_ready: 'Demo ready', called: 'Called', callback: 'Callback',
-    booked: 'Booked', won: 'Closed won', lost: 'Closed lost', dnc: 'Do Not Call',
+    booked: 'Audit booked', call2: 'Call 2', won: 'Closed won', lost: 'Closed lost', dnc: 'Do Not Call',
   };
   const OUTCOMES = [
     ['no_answer', 'No answer'], ['voicemail', 'Voicemail'], ['gatekeeper', 'Gatekeeper'], ['not_interested', 'Not interested'],
-    ['callback', 'Callback'], ['demo_sent', 'Demo sent'], ['booked', 'Booked'], ['dnc', 'Do Not Call'],
+    ['callback', 'Callback'], ['demo_sent', 'Demo sent'], ['booked', 'Audit booked'], ['dnc', 'Do Not Call'],
   ];
   const HEAT = [['hot', 'Hot', '🔥'], ['warm', 'Warm', '☀️'], ['cold', 'Cold', '🧊'], ['dead', 'Dead', '💀']];
   const HEAT_LABEL = Object.fromEntries(HEAT.map(([k, l, e]) => [k, e + ' ' + l]));
@@ -95,6 +95,8 @@
     if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return fmt(iso, { month: 'short', day: 'numeric' });
   };
   const telHref = (p) => 'tel:' + String(p || '').replace(/[^\d+]/g, '');
+  // Opens Google Voice with the number filled in. A community-known link, not a documented Google feature, so it can change.
+  const gvHref = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return 'https://voice.google.com/u/0/calls?a=nc,%2B' + d; };
   const initials = (n) => String(n || '?').trim().split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase();
   const dayBounds = () => { const a = new Date(); a.setHours(0, 0, 0, 0); const b = new Date(a); b.setDate(b.getDate() + 1); return [a.toISOString(), b.toISOString()]; };
   const toLocalInput = (d) => { const z = new Date(d.getTime() - d.getTimezoneOffset() * 6e4); return z.toISOString().slice(0, 16); };
@@ -278,7 +280,7 @@
     return S.options;
   }
 
-  const STAGES = [['new', 'New'], ['called', 'Contacted'], ['callback', 'Callback'], ['booked', 'Booked'], ['won', 'Won'], ['lost', 'Lost']];
+  const STAGES = [['new', 'New'], ['called', 'Contacted'], ['callback', 'Callback'], ['booked', 'Audit booked'], ['call2', 'Call 2'], ['won', 'Won'], ['lost', 'Lost']];
   const STAGE_OF = (st) => (['new', 'demo_needed', 'demo_ready'].includes(st) ? 'new' : st);
   const STAGE_NAME = Object.fromEntries(STAGES);
   const HEAT_DOT = (k) => h('i', { class: 'hdot ' + (k || 'cold'), title: (HEAT_LABEL[k || 'cold'] || '').replace(/^\S+\s/, '') });
@@ -460,8 +462,8 @@
     const seller = S.me.role === 'admin' || S.me.role === 'rep';
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
-      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('a', { class: 'btn ok wide', href: telHref(L.phone) }, icon('phone'), 'Call ' + L.phone)) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
-      L.phone && dialer && dialer.ready && seller ? h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone instead') : null,
+      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('a', { class: 'btn ok wide', href: gvHref(L.phone), target: '_blank', rel: 'noopener' }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.phone && seller ? (dialer && dialer.ready ? h('a', { class: 'btn small', href: gvHref(L.phone), target: '_blank', rel: 'noopener' }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
       h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
@@ -2340,14 +2342,16 @@
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
     { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
     { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
-    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's list, say the opener 10 times" },
-    { id: 'c1', from: '09:00', to: '11:30', title: 'Call block 1', quota: 120 },
-    { id: 'fu1', from: '11:30', to: '11:45', title: 'Follow-up texts, nothing else' },
-    { id: 'lunch', from: '11:45', to: '12:30', title: 'Lunch' },
-    { id: 'c2', from: '12:30', to: '14:30', title: 'Call block 2', quota: 80 },
+    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's 3 lists, read each offer, say the opener 10 times" },
+    { id: 'c1', from: '09:00', to: '10:30', title: 'Block 1: quick-cash niche', quota: 67 },
+    { id: 'rep', from: '10:30', to: '10:45', title: 'Answer every reply, call every positive reply' },
+    { id: 'c2', from: '10:45', to: '12:15', title: 'Block 2: high-ticket niche', quota: 67 },
+    { id: 'lunch', from: '12:15', to: '13:00', title: 'Lunch' },
+    { id: 'c3', from: '13:00', to: '14:30', title: 'Block 3: referral niche', quota: 66 },
     { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
-    { id: 'c3', from: '14:45', to: '17:15', title: 'Call block 3', quota: 100 },
-    { id: 'close', from: '17:15', to: '18:00', title: "Log, book demos, set tomorrow's niche" },
+    { id: 'aud', from: '14:45', to: '16:15', title: 'Audits and closing calls (write scopes between calls)' },
+    { id: 'cont', from: '16:15', to: '17:00', title: 'Post content (Instagram, X, LinkedIn) and send DMs' },
+    { id: 'close', from: '17:00', to: '18:00', title: "Scorecard, CRM, one referral ask, tomorrow's lists" },
   ];
   const trkMin = (t) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
   const trk12 = (t) => { const [a, b] = t.split(':').map(Number); return ((a + 11) % 12 + 1) + ':' + String(b).padStart(2, '0') + (a >= 12 ? ' PM' : ' AM'); };
@@ -2363,7 +2367,7 @@
     const root = h('div', { class: 'trk' });
     const note = h('textarea', { class: 'trk-note', rows: 2, maxlength: 500, placeholder: 'One line on today: what worked, what to fix tomorrow', oninput: (e) => { day.note = e.target.value; queueSave(); } });
     note.value = day.note || '';
-    const quotaOf = (b) => Math.round(b.quota * goal / 300);
+    const quotaOf = (b) => Math.round(b.quota * goal / 200);
 
     function expectedNow() {
       const now = trkNowMin();
@@ -2412,8 +2416,8 @@
           h('button', { class: 'trk-b', onclick: () => bump('dials', -1) }, '−1'),
           h('button', { class: 'trk-b', onclick: () => bump('dials', 10) }, '+10'),
           h('button', { class: 'trk-b main', onclick: () => bump('dials', 1) }, '+1 dial')));
-      const small = h('div', { class: 'trk-two' }, counter('Pick-ups', 'talks'), counter('Demos booked', 'demos'));
-      const crm = h('p', { class: 'trk-crm' }, 'CRM today: ' + r.crm.logged + ' calls logged, ' + r.crm.booked + ' booked. Your tally can be higher, since you dial from your phone.');
+      const small = h('div', { class: 'trk-two' }, counter('Pick-ups', 'talks'), counter('Audits booked', 'demos'));
+      const crm = h('p', { class: 'trk-crm' }, 'CRM today: ' + r.crm.logged + ' calls logged, ' + r.crm.booked + ' booked. Your tally can be higher, since you dial in Google Voice.');
       const winRow = h('div', { class: 'trk-wins' }, wins.map((b) => {
         const on = day.blocks.includes(b.id);
         return h('button', { class: 'trk-win' + (on ? ' on' : ''), onclick: () => toggle(b.id), 'aria-pressed': on }, h('small', null, b.tag.replace(' win', '')), h('b', null, on ? 'Done' : b.title));
