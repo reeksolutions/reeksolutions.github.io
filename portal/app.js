@@ -2035,6 +2035,40 @@
         ig: 'Think about when people look up a med spa.\n\nEvenings. Weekends. On their phone after work.\n\nThat\'s exactly when most front desks are closed.\n\nSo the person who was ready to book a consult tonight gets voicemail and books with whoever answers.',
         x: 'People search for med spas at night and on weekends.\n\nMost front desks are closed then.\n\nWhoever answers first gets the booking.',
         li: 'Most med spa searches happen outside business hours. Most med spa phones go to voicemail outside business hours.\n\nThat gap is where bookings quietly leak.\n\nAn AI receptionist that answers, answers basic questions and books the consult closes that gap without adding staff.' },
+      { hook: 'Speed to lead: who replies first wins',
+        ig: `A new customer fills out a form at 7pm.
+
+If nobody replies until tomorrow, they've already messaged two other spas.
+
+The business that answers in under a minute usually gets the booking. That's not luck, it's just speed.
+
+An AI can reply in seconds, ask the right questions, and offer a time. Every night. Every weekend.`,
+        x: `A lead fills out a form at 7pm.
+
+The spa that replies first usually wins.
+
+AI replies in seconds, even at 2am.`,
+        li: `Speed to lead is one of the cheapest wins in a service business. A new inquiry that gets a reply in a minute is far more likely to book than one that waits until morning.
+
+An AI can respond instantly, qualify the inquiry and offer times, without anyone staying late.` },
+      { hook: 'Your past clients are your cheapest revenue',
+        ig: `Every med spa has a list of clients who came once or twice and never came back.
+
+They already trust you. They just haven't heard from you in a while.
+
+A friendly text ("We miss you, want to book?") sent to the right people is the cheapest booking you'll ever get.
+
+Example math (yours will differ): 200 quiet clients × 5% rebook × $300 = $3,000.`,
+        x: `Your past clients already trust you.
+
+They just haven't heard from you in 6 months.
+
+Example: 200 quiet clients x 5% x $300 = $3,000.`,
+        li: `The cheapest new revenue in a med spa is often sitting in the client list: people who visited once or twice and drifted away.
+
+A simple, friendly follow-up to lapsed clients costs almost nothing and requires no new advertising.
+
+Illustrative math, not a statistic: 200 quiet clients, 5% rebook, $300 each, about $3,000.` },
     ],
     demo: [
       { hook: 'Watch an AI receptionist book a consult',
@@ -2045,6 +2079,32 @@
         ig: 'A call goes unanswered.\n\n60 seconds later the patient gets a text: "Sorry we missed you, want to book a consult? Here\'s our link."\n\nMost people reply to a text faster than they return a voicemail.',
         x: 'Missed call.\n\n60 seconds later: an automatic text with a booking link.\n\nPeople answer texts faster than they check voicemail.',
         li: 'Missed-call text-back in action: a call goes unanswered and the caller gets a friendly text with a booking link within a minute.\n\nIt turns a lost call into a conversation.' },
+      { hook: 'AI answers while your front desk is busy',
+        ig: `The front desk is checking a patient in. The phone rings. Nobody can get it.
+
+An AI receptionist picks up, answers the common questions (hours, prices, what to expect) and books the consult.
+
+The front desk keeps doing the work only a human can do.`,
+        x: `Front desk is with a patient. Phone rings.
+
+AI picks up, answers questions, books the consult.
+
+Humans handle humans. AI handles the phone.`,
+        li: `The busiest moments in a med spa are exactly when the phone goes unanswered.
+
+An AI receptionist covers those moments: it answers common questions, books consults and passes anything unusual to a person. It supports the front desk instead of replacing it.` },
+      { hook: 'Website chatbot: the 24/7 front door',
+        ig: `Most people check a med spa's website at night on their phone.
+
+A chatbot that answers "how much is filler?" and "do you have anything Saturday?" turns that visit into a booking.
+
+No waiting for the front desk to open.`,
+        x: `People browse med spa sites at night.
+
+A chatbot that answers questions and books the consult turns a visit into an appointment.`,
+        li: `A website that only displays information is a brochure. A website with an AI assistant that answers questions and books consults is a front door that never closes.
+
+For businesses that get evening and weekend traffic, that difference shows up in the calendar.` },
     ],
     audit: [
       { hook: 'I audited a med spa\'s front desk in 10 minutes',
@@ -2055,6 +2115,42 @@
         ig: 'Ask your front desk three questions today:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to a new inquiry?\n3. When did we last message clients who haven\'t booked in 6 months?\n\nIf nobody knows the answers, that\'s where the money is.',
         x: 'Ask your front desk:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to new inquiries?\n3. When did we last message lapsed clients?\n\nIf nobody knows, that\'s the leak.',
         li: 'Three questions every med spa owner should be able to answer: how many calls we missed this week, how quickly we respond to a new inquiry, and when we last contacted clients who haven\'t booked in six months.\n\nIf the answers aren\'t known, that is usually where revenue is leaking.' },
+      { hook: 'Call your own business at 7pm',
+        ig: `Try this tonight: call your own business at 7pm like a customer would.
+
+What happens?
+
+Voicemail? Rings forever? A message that says call back tomorrow?
+
+That's what every after-hours caller hears. It's the easiest leak to find, and the easiest to fix.`,
+        x: `Call your own business at 7pm tonight.
+
+Voicemail? Rings out?
+
+That's what every after-hours customer hears.`,
+        li: `A simple test for any owner: call your own business at 7pm and listen to the experience a new customer gets.
+
+If it ends in voicemail, you have found the easiest revenue leak to fix.` },
+      { hook: '4 things I check on any Google listing',
+        ig: `Four things I look at first on a business's Google listing:
+
+1. Do they answer the phone after 5pm?
+2. Is there a way to message or book without calling?
+3. How fast do they reply to reviews and questions?
+4. Are the hours accurate?
+
+Each one is a place where customers quietly give up.`,
+        x: `4 things I check on a Google listing:
+
+1. After-hours calls
+2. Message/booking options
+3. Reply speed
+4. Accurate hours
+
+Each is where customers quietly give up.`,
+        li: `When I look at a business's Google listing I check four things: whether the phone is answered after hours, whether customers can message or book without calling, how quickly the business replies, and whether the hours are accurate.
+
+Each is a small friction point, and together they decide who gets the booking.` },
     ],
     result: [
       { hook: 'Day-by-day scorecard',
@@ -2065,15 +2161,95 @@
         ig: 'Week of calling med spas, what I learned:\n\n• Front desks are busiest right before lunch\n• The owner usually picks up after 4pm\n• "We already have someone" usually means "we miss calls and don\'t know it"\n\nDials this week: {week}',
         x: 'A week of cold calling med spas:\n\n- Owners pick up more after 4pm\n- "We have someone" often means they miss calls and don\'t know it\n\nDials this week: {week}',
         li: 'A week of calling med spas taught me a few things: owners are easier to reach late in the afternoon, and "we already have someone covering the phones" often means missed calls nobody is counting.\n\nDials this week: {week}.' },
+      { hook: 'Inputs, not outcomes',
+        ig: `Day {day} of 30.
+
+I can't control who says yes. I can control the inputs.
+
+Dials today: {dials}
+Conversations: {talks}
+Audits booked: {demos}
+
+Show up, count honestly, repeat.`,
+        x: `Day {day}/30.
+
+Can't control who says yes. Can control inputs.
+
+Dials: {dials}
+Talks: {talks}
+Audits: {demos}`,
+        li: `Day {day} of the 30-day push. Outcomes are out of my hands; inputs aren't.
+
+Today: {dials} dials, {talks} conversations, {demos} audits booked. Tracking it honestly is the whole system.` },
+      { hook: 'What the free audit actually is',
+        ig: `People hear "free AI audit" and think it's a sales pitch.
+
+It's 30 minutes of me asking how your leads come in, who answers, what software you use, and where customers fall through.
+
+You leave knowing what's leaking and a ballpark of what fixing it costs. No card needed.
+
+Dials this week: {week}`,
+        x: `"Free AI audit" = 30 min.
+
+I ask how leads come in, who answers, where customers fall through.
+
+You leave with a ballpark. No card needed.`,
+        li: `The free AI audit is simple: thirty minutes to understand how a business gets leads, who handles them, what software is in use, and where customers fall through.
+
+The goal is a clear picture of the leak and a ballpark of the fix, whether or not we work together.` },
     ],
   };
   const CPLAT = [['ig', 'Instagram'], ['x', 'X'], ['li', 'LinkedIn']];
+
+  /* ================= demo videos (rendered MP4s in /demos, same CTA as the posts) ================= */
+  const DV_STYLES = { A: 'Flow map', B: 'Text thread', C: 'Money counter' };
+  const DV_TOPICS = {
+    missed: { name: 'Missed calls after 5', hook: 'Losing $1,200 a week to missed calls',
+      cap: { ig: 'A customer calls at 6:42 PM. The front desk is closed. Voicemail. She books your competitor.\n\nThree of those a week at $400 each is $1,200 a week walking out the door.\n\nThe fix: an AI receptionist that answers on the first ring and books the appointment.\n\n(Example numbers. Yours will differ.)', x: 'Customer calls at 6:42 PM. Voicemail. She books your competitor.\n\n3 a week x $400 = $1,200/week gone.\n\nAI answers on ring one and books it.\n\n(Example numbers)', li: 'A customer calls after hours, reaches voicemail and books a competitor. Three of those a week at $400 each is about $1,200 a week.\n\nAn AI receptionist that answers every call and books the appointment closes that gap.\n\n(Illustrative numbers, not a statistic.)' },
+      vo: { hook: "Your business could be losing twelve hundred dollars a week. Here's where it leaks.", problem: "It's Tuesday, six forty-two PM. A customer finds you on Google and calls. Your front desk is closed. It rings, then goes to voicemail. She doesn't leave a message. She books your competitor instead. That's about four hundred dollars, gone.", cost: "Say that happens three times a week. Three bookings, four hundred dollars each. That's twelve hundred a week. Over a year, over sixty-two thousand dollars walking out the door.", fix: "Now, same call. But an AI receptionist picks up on the first ring. It answers her questions and books her appointment for seven thirty, right on your calendar. She shows up, and you keep the four hundred." } },
+    slow: { name: 'Slow replies lose the job', hook: 'The first to reply wins',
+      cap: { ig: 'A new inquiry comes in at 7 PM. Nobody sees it until morning. By then she has hired someone who replied in minutes.\n\nTwo cold leads a week at $500 each is $1,000 a week.\n\nThe fix: an AI that replies in seconds, asks the right questions and books the visit.\n\n(Example numbers. Yours will differ.)', x: 'New inquiry at 7 PM. No reply until morning. She already hired someone else.\n\n2 leads a week x $500 = $1,000/week.\n\nAI replies in 20 seconds.\n\n(Example numbers)', li: 'A new inquiry that waits until morning has usually gone to whoever replied first. Two lost jobs a week at $500 each is about $1,000 a week.\n\nAn AI that replies in seconds, asks the right questions and books the visit fixes the delay.\n\n(Illustrative numbers, not a statistic.)' },
+      vo: { hook: "The first business to reply usually wins. Slow replies lose the job.", problem: "It's seven PM. A new customer fills out your form and asks for a quote. Nobody sees it tonight. Fourteen hours go by with no reply. By morning, she's already hired someone else. That's about five hundred dollars, gone.", cost: "Two leads a week going cold, at five hundred dollars each, is a thousand dollars every week. Over a year, that's fifty-two thousand dollars going to whoever replied first.", fix: "Now, same inquiry. An AI replies in twenty seconds, asks the right questions, and books the visit for Tuesday morning. You wake up to a booking you would have lost." } },
+    quiet: { name: 'Customers who went quiet', hook: '200 customers went quiet',
+      cap: { ig: 'Every business has customers who came once and never came back. Nobody followed up.\n\n200 quiet customers, 5% come back, $300 each: $3,000 sitting in your list.\n\nThe fix: an AI that texts them a friendly "we miss you" and books the ones who reply.\n\n(Example numbers. Yours will differ.)', x: '200 customers went quiet. Nobody followed up.\n\n5% come back x $300 = $3,000 sitting in your list.\n\nAI texts them and books the replies.\n\n(Example numbers)', li: 'Most businesses have a list of past customers who drifted away without a single follow-up. With 200 of them, a 5% return and $300 per visit, that is about $3,000 sitting unclaimed.\n\nAn AI follow-up that checks the list, sends a friendly text and books the replies costs no staff time.\n\n(Illustrative numbers, not a statistic.)' },
+      vo: { hook: "Two hundred customers went quiet. And nobody ever followed up.", problem: "She loved the service. Then six months passed, with no reminder and no check-in. She forgot about you and booked somewhere else. That's about three hundred dollars lost, and it happened with every one of them.", cost: "Take two hundred customers who've gone quiet. If just five percent come back, at three hundred dollars a visit, that's three thousand dollars sitting in your customer list.", fix: "With an AI follow-up, it checks your list every night and sends a friendly text: we miss you, want to book? She replies, the AI offers times that work, and she's booked with zero staff time." } },
+  };
+  const DV_ORDER = ['A-missed', 'B-slow', 'C-quiet', 'B-missed', 'C-slow', 'A-quiet', 'C-missed', 'A-slow', 'B-quiet'];
+  const DV_TIMES_UNUSED = { A: [['Hook', 0, 'hook'], ['Problem', 3.8, 'problem'], ['The cost', 11, 'cost'], ['The fix', 17.5, 'fix'], ['Call to action', 25.5, 'cta']], B: [['Hook', 0, 'hook'], ['Problem', 3.6, 'problem+cost'], ['The fix', 14.2, 'fix'], ['Call to action', 25, 'cta']], C: [['Hook', 0, 'hook'], ['Problem', 3.6, 'problem+cost'], ['The fix', 14.6, 'fix'], ['Call to action', 25.6, 'cta']] };
+  const VO_CTA = 'Want to know what your business is losing? DM me the word AUDIT for a free thirty-minute AI audit.';
+  const dvOf = (id) => { const [st, tp] = id.split('-'); return { id, style: st, topic: tp, t: DV_TOPICS[tp], styleName: DV_STYLES[st] }; };
+  const dvScript = (v) => ['hook', 'problem', 'cost', 'fix'].map((k) => v.t.vo[k]).concat(VO_CTA).join(' ');
+  const dvToday = (n) => { const i = ((n - 1) * 2) % DV_ORDER.length; return [DV_ORDER[i], DV_ORDER[(i + 1) % DV_ORDER.length]]; };
+  const DV_PLAT = [['ig', 'Instagram'], ['x', 'X'], ['li', 'LinkedIn']];
+  function dvCard(v, dayN, open) {
+    let plat = 'ig';
+    const key = 'rs_dv_' + dayN + '_' + v.id;
+    let posted = false; try { posted = localStorage.getItem(key) === '1'; } catch {}
+    const area = h('textarea', { class: 'ct-text', rows: 9 });
+    const setCap = () => { area.value = v.t.cap[plat] + '\n\n' + CTA[plat] + (plat === 'ig' ? '\n\n' + TAGS : ''); };
+    const tabs = h('div', { class: 'stagechips' });
+    const drawTabs = () => tabs.replaceChildren(...DV_PLAT.map(([k, label]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); setCap(); } }, label)));
+    drawTabs(); setCap();
+    const cp = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
+    const script = dvScript(v);
+    const doneBtn = h('button', { class: 'btn' + (posted ? ' ok on' : ''), onclick: () => { posted = !posted; try { localStorage.setItem(key, posted ? '1' : '0'); } catch {} doneBtn.textContent = posted ? 'Posted ✓ (tap to undo)' : 'Mark as posted'; doneBtn.classList.toggle('ok', posted); doneBtn.classList.toggle('on', posted); } }, posted ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
+    return h('div', { class: 'card dv-card' },
+      h('div', { class: 'dv-vid' }, h('video', { src: '/demos/' + v.id + '.mp4', poster: '/demos/' + v.id + '.jpg', controls: true, playsinline: true, preload: 'none', loop: true, muted: true })),
+      h('div', { class: 'dv-body' },
+        h('div', { class: 'dv-meta' }, h('span', { class: 'tag hot' }, v.styleName), h('b', null, v.t.name)),
+        h('p', { class: 'dim small' }, '32 seconds, silent. Add the voice track in CapCut using the script below, then post.'),
+        h('a', { class: 'btn primary', href: '/demos/' + v.id + '.mp4', download: 'reekon-' + v.id + '.mp4' }, 'Download video'),
+        tabs, area,
+        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => cp(area.value, 'Caption copied') }, 'Copy caption'), doneBtn),
+        h('details', { class: 'dv-vo', open: !!open }, h('summary', null, 'Voice-over script'),
+          h('p', { class: 'dv-script' }, script), h('button', { class: 'btn', onclick: () => cp(script, 'Script copied. Paste it into your voice tool') }, 'Copy script'))));
+  }
 
   async function viewContent() {
     const [r, trk] = await Promise.all([api('GET', '/content'), api('GET', '/tracker')]);
     const dayN = r.day_n;
     const typeFor = (n) => CONTENT_TYPES[(((n - 1) % 4) + 4) % 4];
-    const tplFor = (n) => { const t = typeFor(n); const lib = CONTENT_LIB[t.id]; return lib[Math.floor((((n - 1) % 8) + 8) % 8 / 4) % lib.length]; };
+    const tplFor = (n) => { const t = typeFor(n); const lib = CONTENT_LIB[t.id]; return lib[Math.floor(((((n - 1) % (4 * lib.length)) + 4 * lib.length) % (4 * lib.length)) / 4) % lib.length]; };
     const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
     const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
     const type = typeFor(dayN), tpl = tplFor(dayN);
@@ -2108,6 +2284,11 @@
         tabs, area,
         h('div', { class: 'row wrap' }, copy, doneBtn),
         h('p', { class: 'dim small' }, 'Edit the text first if you want. The numbers in example math are illustrations, so keep them labeled as examples. Marking a platform posted adds to your post count on Home.')),
+      h('h3', { class: 'trk-h' }, 'Demo videos for today (2 ready)'),
+      h('p', { class: 'dim small' }, 'Same call to action on every caption. Download, add the voice-over, post one now and one later.'),
+      h('div', { class: 'dv-grid' }, dvToday(dayN).map((id, i) => dvCard(dvOf(id), dayN, i === 0))),
+      h('h3', { class: 'trk-h' }, 'Video library'),
+      h('div', { class: 'ct-lib' }, DV_ORDER.map((id) => { const v = dvOf(id); return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, v.t.name), h('small', { class: 'dim' }, v.styleName + ' style')), dvCard(v, 'lib', false)); })),
       h('h3', { class: 'trk-h' }, 'This week'), strip,
       h('h3', { class: 'trk-h' }, 'More posts to pull from'), lib,
     ]);
