@@ -1226,3 +1226,7 @@ html,body{max-width:100%;overflow-x:hidden}
   .add-bar{left:10px;right:10px;width:auto}
   .add-bar select{min-width:0}
 }
+
+.stockbar{margin:0 0 14px;padding:14px;border-radius:16px;border:1px solid var(--line-2);background:var(--card-2,rgba(255,255,255,.04))}
+.stk-top{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}.stk-top b{font-size:30px;letter-spacing:-.03em}.stk-top span{color:var(--muted);font-size:14px}
+.stk-track{height:8px;border-radius:99px;background:rgba(255,255,255,.08);margin:10px 0 8px;overflow:hidden}.stk-track i{display:block;height:100%;background:var(--accent);border-radius:99px}

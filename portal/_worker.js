@@ -477,7 +477,14 @@ const FINDER_LIMITS = { day: 30, month: 900 };
 // TomTom free tier: 2,500 requests a month. Each search uses 2 (find the city, then the businesses).
 const TOMTOM_LIMITS = { day: 40, month: 1100 };
 const finderProvider = (env) => (env.GOOGLE_PLACES_KEY ? 'google' : env.TOMTOM_KEY ? 'tomtom' : '');
-const finderLimits = (env) => (finderProvider(env) === 'tomtom' ? TOMTOM_LIMITS : FINDER_LIMITS);
+const finderBase = (env) => (finderProvider(env) === 'tomtom' ? TOMTOM_LIMITS : FINDER_LIMITS);
+// the monthly cap is the real guard (you can raise it in the bot settings); the daily cap just stops runaway loops
+async function finderCaps(env) {
+  const base = finderBase(env); let m = 0;
+  try { m = parseInt(await getSetting(env, 'finder_month_cap'), 10) || 0; } catch { m = 0; }
+  const month = m > 0 ? m : base.month;
+  return { day: Math.max(base.day, 150), month, base_month: base.month };
+}
 const usPhone = (p) => { const d = normPhone(p); const t = d.length === 11 && d[0] === '1' ? d.slice(1) : d; return t.length === 10 ? `(${t.slice(0, 3)}) ${t.slice(3, 6)}-${t.slice(6)}` : String(p || ''); };
 // Search TomTom and return results shaped like Google's, so the rest of the finder works the same.
 async function tomtomSearch(env, what, where, offset) {
@@ -740,7 +747,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 }
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
-const AUTO_DEFAULTS = { enabled: false, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 20, max_reviews: 5000, include_social: true, any_site: true };
+const AUTO_DEFAULTS = { enabled: false, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 5000, include_social: true, any_site: true, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -749,16 +756,55 @@ async function autoState(env) {
   let st = {}; try { st = JSON.parse((await getSetting(env, 'auto_finder_state')) || '{}'); } catch { st = {}; }
   return { i: 0, pages: {}, night: '', done_tonight: 0, runs: [], ...st };
 }
+
+// Cities the bot moves into on its own when the ones you picked run dry: LA area first, then the rest of California, then big metros in other states.
+const EXPAND_CITIES = ['Hollywood, CA','Studio City, CA','Van Nuys, CA','Calabasas, CA','Malibu, CA','Marina del Rey, CA','El Segundo, CA','Redondo Beach, CA','Santa Clarita, CA','Pacific Palisades, CA','Brentwood, CA','Century City, CA','Downtown Los Angeles, CA','Inglewood, CA','Whittier, CA','Pomona, CA','West Covina, CA','Alhambra, CA','Arcadia, CA','Palmdale, CA','Lancaster, CA','Thousand Oaks, CA','Ventura, CA','Newport Beach, CA','Costa Mesa, CA','Huntington Beach, CA','Anaheim, CA','Orange, CA','Laguna Beach, CA','Mission Viejo, CA','Riverside, CA','Temecula, CA','Palm Springs, CA','San Diego, CA','La Jolla, CA','Carlsbad, CA','Encinitas, CA','Santa Barbara, CA','Bakersfield, CA','Fresno, CA','Sacramento, CA','San Jose, CA','San Francisco, CA','Oakland, CA','Walnut Creek, CA','Las Vegas, NV','Henderson, NV','Phoenix, AZ','Scottsdale, AZ','Tempe, AZ','Houston, TX','Dallas, TX','Austin, TX','San Antonio, TX','Plano, TX','Frisco, TX','Miami, FL','Fort Lauderdale, FL','Boca Raton, FL','Orlando, FL','Tampa, FL','Jacksonville, FL','Atlanta, GA','Charlotte, NC','Raleigh, NC','Nashville, TN','New York, NY','Brooklyn, NY','Long Island, NY','Newark, NJ','Philadelphia, PA','Boston, MA','Washington, DC','Chicago, IL','Denver, CO','Seattle, WA','Portland, OR','Salt Lake City, UT','Minneapolis, MN','Detroit, MI','Columbus, OH','Indianapolis, IN','Kansas City, MO','St. Louis, MO','Baltimore, MD','Oklahoma City, OK','New Orleans, LA','Louisville, KY','Memphis, TN','Birmingham, AL'];
+const READY_STATUS = "('new','demo_needed','demo_ready')";
+// fresh med-spa (focus) leads nobody has called yet: the stock the bot keeps topped up
+async function readyStock(env) {
+  const fx = focusSql(await focusTerms(env));
+  const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l WHERE ${fx.sql} AND l.status IN ${READY_STATUS} AND l.attempts = 0 AND COALESCE(l.phone_norm,'') != ''`).bind(...fx.args).first();
+  return r.n || 0;
+}
+// leads outside the focus niche that nobody has touched: safe to delete
+const PURGE_WHERE = (fxsql) => `NOT ${fxsql} AND l.status IN ${READY_STATUS} AND l.attempts = 0 AND l.callback_at IS NULL AND l.booked_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.lead_id = l.id) AND NOT EXISTS (SELECT 1 FROM notes n WHERE n.lead_id = l.id)
+  AND NOT EXISTS (SELECT 1 FROM demos m WHERE m.lead_id = l.id) AND COALESCE(l.call_notes,'') = '' AND COALESCE(l.instagram,'') = ''`;
+async function purgeNonFocus(env, { dry } = {}) {
+  const terms = await focusTerms(env);
+  if (!terms.length) return { count: 0, sample: [], kept_touched: 0, removed: 0 };
+  const fx = focusSql(terms);
+  const cnt = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l WHERE ${PURGE_WHERE(fx.sql)}`).bind(...fx.args).first()).n || 0;
+  const all = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l WHERE NOT ${fx.sql}`).bind(...fx.args).first()).n || 0;
+  const sample = (await env.DB.prepare(`SELECT l.business, l.city, l.category FROM leads l WHERE ${PURGE_WHERE(fx.sql)} ORDER BY l.id DESC LIMIT 8`).bind(...fx.args).all()).results;
+  if (dry) return { count: cnt, sample, kept_touched: Math.max(0, all - cnt), removed: 0 };
+  let removed = 0;
+  for (let i = 0; i < 40 && removed < cnt; i++) {
+    const ids = (await env.DB.prepare(`SELECT l.id FROM leads l WHERE ${PURGE_WHERE(fx.sql)} LIMIT 80`).bind(...fx.args).all()).results.map((x) => x.id);
+    if (!ids.length) break;
+    const q = ids.map(() => '?').join(',');
+    await env.DB.batch([
+      env.DB.prepare(`DELETE FROM calls WHERE lead_id IN (${q})`).bind(...ids),
+      env.DB.prepare(`DELETE FROM email_log WHERE lead_id IN (${q})`).bind(...ids),
+      env.DB.prepare(`DELETE FROM studio_drafts WHERE lead_id IN (${q})`).bind(...ids),
+      env.DB.prepare(`DELETE FROM leads WHERE id IN (${q})`).bind(...ids),
+    ]);
+    removed += ids.length;
+  }
+  return { count: cnt, sample, kept_touched: Math.max(0, all - cnt), removed };
+}
 // run one search for the next niche + city in the rotation, add the good ones to the CRM
 async function autoStep(env, { manual } = {}) {
   const cfg = await autoConfig(env), st = await autoState(env);
-  const combos = []; for (const c of cfg.cities) for (const n of cfg.niches) combos.push([n, c]);
+  st.expanded = Array.isArray(st.expanded) ? st.expanded : [];
+  const cityList = [...new Set([...cfg.cities, ...st.expanded])];
+  const combos = []; for (const c of cityList) for (const n of cfg.niches) combos.push([n, c]);
   if (!combos.length) return { skipped: 'Add at least one type of business and one city' };
   if (!finderProvider(env)) return { skipped: 'Lead Finder is not connected yet' };
   const night = ptParts().date;
   if (st.night !== night) { st.night = night; st.done_tonight = 0; }
   if (!manual && st.done_tonight >= cfg.per_night) return { skipped: 'done for tonight' };
-  const LIM = finderLimits(env), u = await finderUsage(env);
+  const LIM = await finderCaps(env), u = await finderUsage(env);
   // leave a few searches a day for you to use by hand
   if (u.today >= LIM.day - (manual ? 0 : 5) || u.month >= LIM.month) return { skipped: 'Free search limit reached for now' };
   // find the next combo that still has results
@@ -767,10 +813,20 @@ async function autoStep(env, { manual } = {}) {
     const idx = (st.i + k) % combos.length, key = combos[idx].join(' | ');
     if (st.pages[key] !== 'done') { pick = { idx, key, what: combos[idx][0], where: combos[idx][1] }; break; }
   }
-  if (!pick) { st.pages = {}; pick = { idx: 0, key: combos[0].join(' | '), what: combos[0][0], where: combos[0][1] }; }
+  if (!pick) {
+    // every search in these cities is used up: move into new cities by itself, or start another pass if there are none left
+    const fresh = cfg.expand ? EXPAND_CITIES.filter((c) => !cityList.includes(c)).slice(0, 4) : [];
+    if (fresh.length) {
+      st.expanded.push(...fresh);
+      const first = [cfg.niches[0], fresh[0]];
+      st.i = combos.length;
+      pick = { idx: combos.length, key: first.join(' | '), what: first[0], where: first[1] };
+      combos.push(...fresh.flatMap((c) => cfg.niches.map((n) => [n, c])));
+    } else { st.pages = {}; pick = { idx: 0, key: combos[0].join(' | '), what: combos[0][0], where: combos[0][1] }; }
+  }
   const run = { at: now(), search: pick.what + ' in ' + pick.where, checked: 0, added: 0, error: null };
   try {
-    const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, 6);
+    const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, cfg.any_site ? 0 : 6);
     run.checked = f.results.length;
     // any_site (med spas, gyms, insurance): keep businesses that already have a website, whatever their review count
     const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (cfg.any_site || x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
@@ -796,6 +852,19 @@ async function autoStep(env, { manual } = {}) {
   st.runs = [run, ...(st.runs || [])].slice(0, 30);
   await setSetting(env, 'auto_finder_state', JSON.stringify(st));
   return { run };
+}
+
+// keep searching until enough fresh leads are ready (or a limit is hit)
+async function autoFill(env, maxSteps = 3) {
+  const cfg = await autoConfig(env);
+  let stock = await readyStock(env), steps = 0, added = 0;
+  while (steps < maxSteps && stock < cfg.target_ready) {
+    const r = await autoStep(env);
+    steps++;
+    if (!r.run || r.skipped || r.run.error) break;
+    stock += r.run.added; added += r.run.added;
+  }
+  return { stock, steps, added };
 }
 
 /* ================= Dialer (Twilio) =================
@@ -2178,17 +2247,17 @@ async function api(request, env, url) {
   /* ---- Lead Finder (Google Places) ---- */
   if (path === '/finder' && method === 'GET') {
     need(user, 'admin');
-    return json({ ready: !!finderProvider(env), provider: finderProvider(env), usage: await finderUsage(env), limits: finderLimits(env) });
+    return json({ ready: !!finderProvider(env), provider: finderProvider(env), usage: await finderUsage(env), limits: await finderCaps(env) });
   }
   if (path === '/finder/search' && method === 'POST') {
     need(user, 'admin');
     if (!finderProvider(env)) bad('Add your free TomTom key in Cloudflare first (see the setup steps on this page).');
-    const LIM = finderLimits(env), provider = finderProvider(env);
+    const LIM = await finderCaps(env), provider = finderProvider(env);
     const what = str(body.what, 80), where = str(body.where, 80);
     if (!what || !where) bad('Type what kind of business and where');
     const u = await finderUsage(env);
     if (u.today >= LIM.day) bad(`You've hit today's ${LIM.day} searches. This cap keeps it free. It resets at midnight.`);
-    if (u.month >= LIM.month) bad(`You've used this month's ${LIM.month} free searches. It resets on the 1st.`);
+    if (u.month >= LIM.month) bad(`You've used this month's ${LIM.month} searches. It resets on the 1st (or raise the limit in the Auto lead bot settings).`);
     const f = await finderSearch(env, user.id, what, where, str(body.page_token, 600) || undefined);
     return json({ results: f.results, next_page_token: f.next, usage: await finderUsage(env), city: where, provider });
   }
@@ -2196,7 +2265,8 @@ async function api(request, env, url) {
     need(user, 'admin');
     const cfg = await autoConfig(env), st = await autoState(env);
     const added7 = await env.DB.prepare("SELECT COUNT(*) AS n FROM leads l JOIN batches b ON b.id = l.batch_id WHERE b.name LIKE 'Auto lead bot%' AND l.created_at >= ?").bind(new Date(Date.now() - 7 * 864e5).toISOString()).first();
-    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env) });
+    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env),
+      stock: await readyStock(env), expanded: st.expanded || [], caps: await finderCaps(env), usage: await finderUsage(env) });
   }
   if (path === '/finder/auto' && method === 'PUT') {
     need(user, 'admin');
@@ -2205,13 +2275,22 @@ async function api(request, env, url) {
     if (body.enabled !== undefined) out.enabled = !!body.enabled;
     if (body.niches !== undefined) out.niches = list(body.niches, 15);
     if (body.cities !== undefined) out.cities = list(body.cities, 15);
-    if (body.per_night !== undefined) out.per_night = Math.max(1, Math.min(20, parseInt(body.per_night, 10) || 10));
+    if (body.per_night !== undefined) out.per_night = Math.max(1, Math.min(150, parseInt(body.per_night, 10) || 60));
+    if (body.target_ready !== undefined) out.target_ready = Math.max(10, Math.min(2000, parseInt(body.target_ready, 10) || 200));
+    if (body.expand !== undefined) out.expand = !!body.expand;
+    if (body.purge_nonfocus !== undefined) out.purge_nonfocus = !!body.purge_nonfocus;
+    if (body.month_cap !== undefined) await setSetting(env, 'finder_month_cap', String(Math.max(0, Math.min(50000, parseInt(body.month_cap, 10) || 0))));
     if (body.max_reviews !== undefined) out.max_reviews = Math.max(0, Math.min(5000, parseInt(body.max_reviews, 10) || 50));
     if (body.include_social !== undefined) out.include_social = !!body.include_social;
     if (body.any_site !== undefined) out.any_site = !!body.any_site;
     if (out.enabled && (!out.niches.length || !out.cities.length)) bad('Add at least one type of business and one city');
     await setSetting(env, 'auto_finder', JSON.stringify(out));
     return json({ ok: true, config: out });
+  }
+
+  if (path === '/leads/cleanup' && method === 'POST') {
+    need(user, 'admin');
+    return json(await purgeNonFocus(env, { dry: !body.confirm }));
   }
 
   /* ---- next lead to dial (call mode) ---- */
@@ -3999,7 +4078,13 @@ export default {
       await ensureSchema(env);
       const cfg = await autoConfig(env);
       const h = ptParts().hour;
-      if (cfg.enabled && h < 6) await autoStep(env);
+      if (cfg.enabled && h < 6) {
+        await autoFill(env, 3);
+        if (cfg.purge_nonfocus) {
+          const st = await autoState(env), night = ptParts().date;
+          if (st.purged !== night) { await purgeNonFocus(env, {}); st.purged = night; await setSetting(env, 'auto_finder_state', JSON.stringify(st)); }
+        }
+      }
     } catch (e) { console.error('auto lead bot', e); }
     try { await enrichInstagram(env, 20); } catch (e) { console.error('instagram enrich', e); }
   },

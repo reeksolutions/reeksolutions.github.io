@@ -1527,7 +1527,7 @@
     const dirty = () => (save.hidden = false);
     const combos = cfg.niches.length * cfg.cities.length;
     const status = !d.ready ? 'Connect Lead Finder first' : cfg.enabled
-      ? 'On · ' + cfg.per_night + ' searches a night, midnight to 6 AM' + (d.added_week ? ' · ' + d.added_week + ' leads added this week' : '')
+      ? 'On · keeps ' + cfg.target_ready + ' fresh leads ready, searching midnight to 6 AM' + (d.added_week ? ' · ' + d.added_week + ' added this week' : '')
       : 'Off';
     const toggle = h('button', { class: 'btn small ' + (cfg.enabled ? '' : 'primary'), disabled: !d.ready, onclick: async () => {
       try { await api('PUT', '/finder/auto', { ...cfg, enabled: !cfg.enabled }); toast(cfg.enabled ? 'Auto lead bot off' : 'Auto lead bot on. Check your leads in the morning'); again(); } catch (e) { fail(e); } } },
@@ -1542,10 +1542,30 @@
         again();
       } catch (e) { fail(e); runNow.disabled = false; runNow.textContent = 'Run one search now'; }
     } }, 'Run one search now');
-    const perNight = h('input', { id: 'auto-per', type: 'number', min: 1, max: 20, inputmode: 'numeric', value: cfg.per_night, oninput: (e) => { cfg.per_night = +e.target.value || 1; dirty(); } });
+    const perNight = h('input', { id: 'auto-per', type: 'number', min: 1, max: 150, inputmode: 'numeric', value: cfg.per_night, oninput: (e) => { cfg.per_night = +e.target.value || 1; dirty(); } });
     const maxRev = h('input', { id: 'auto-rev', type: 'number', min: 0, max: 5000, inputmode: 'numeric', value: cfg.max_reviews, oninput: (e) => { cfg.max_reviews = +e.target.value || 0; dirty(); } });
     const anySite = h('input', { id: 'auto-anysite', type: 'checkbox', checked: !!cfg.any_site, onchange: (e) => { cfg.any_site = e.target.checked; dirty(); } });
     const social = h('input', { id: 'auto-social', type: 'checkbox', checked: cfg.include_social, onchange: (e) => { cfg.include_social = e.target.checked; dirty(); } });
+    const targetIn = h('input', { id: 'auto-target', type: 'number', min: 10, max: 2000, inputmode: 'numeric', value: cfg.target_ready, oninput: (e) => { cfg.target_ready = +e.target.value || 200; dirty(); } });
+    const capIn = h('input', { id: 'auto-cap', type: 'number', min: 0, max: 50000, inputmode: 'numeric', value: d.caps.month, oninput: (e) => { cfg.month_cap = +e.target.value || 0; dirty(); } });
+    const expandBox = h('input', { id: 'auto-expand', type: 'checkbox', checked: cfg.expand !== false, onchange: (e) => { cfg.expand = e.target.checked; dirty(); } });
+    const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
+    const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
+    const stockBar = h('div', { class: 'stockbar' },
+      h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh med spa leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
+      h('div', { class: 'stk-track' }, h('i', { style: 'width:' + pct + '%' + (pct >= 100 ? ';background:var(--ok)' : '') })),
+      h('div', { class: 'sub' }, d.usage.month.toLocaleString() + ' of ' + d.caps.month.toLocaleString() + ' searches used this month' + ((d.expanded || []).length ? ' · expanded into ' + d.expanded.length + ' more cities (latest: ' + d.expanded[d.expanded.length - 1] + ')' : '')));
+    const cleanBtn = h('button', { class: 'btn block', style: 'margin-top:10px', onclick: async () => {
+      try {
+        const p = await api('POST', '/leads/cleanup', {});
+        if (!p.count) return toast('Nothing to remove. Every other lead has been worked or is a med spa.');
+        const go = await sheet((box, close) => box.append(h('h2', null, 'Remove ' + p.count.toLocaleString() + ' old leads?'),
+          h('p', { class: 'sub' }, 'These are not med spas and nobody has called, noted or booked them. Med spa leads and anything you have worked stay' + (p.kept_touched ? ' (' + p.kept_touched + ' worked leads kept)' : '') + '. This cannot be undone.'),
+          h('div', { class: 'card', style: 'margin:10px 0' }, p.sample.map((x) => h('div', { class: 'sub' }, x.business + (x.city ? ' · ' + x.city : '')))),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'Remove ' + p.count.toLocaleString()), h('button', { class: 'btn', onclick: () => close(false) }, 'Cancel'))));
+        if (!go) return;
+        const r = await api('POST', '/leads/cleanup', { confirm: true }); toast(r.removed.toLocaleString() + ' old leads removed'); again();
+      } catch (e) { fail(e); } } }, 'Remove old non-med-spa leads');
     const runs = (d.runs || []).slice(0, 8);
     const isMed = cfg.niches.some((n) => /med|botox|aesthetic|laser/i.test(n)) && cfg.any_site && cfg.per_night >= 20;
     const medBtn = isMed ? null : h('button', { class: 'btn primary block', style: 'margin-bottom:12px', disabled: !d.ready, onclick: async () => {
@@ -1554,15 +1574,22 @@
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
       h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
         h('div', { class: 'row', style: 'gap:8px' }, toggle)),
+      stockBar,
       medBtn,
-      h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'Every night it searches each type of business in each city, skips anyone with a real website or already in your CRM, and adds the rest to your leads, ready to call in the morning.'),
-      h('details', { class: 'auto-set' }, h('summary', null, 'Settings · ' + cfg.niches.length + ' types × ' + cfg.cities.length + ' cities = ' + combos + ' searches to rotate through'),
+      h('div', { class: 'row', style: 'margin:0 0 10px' }, cleanBtn),
+      h('p', { class: 'sub', style: 'margin:0 0 12px' }, 'Every night it searches until your fresh lead goal is met, moving to new cities when needed, and skips anyone already in your CRM or on Do Not Call.'),
+      h('details', { class: 'auto-set' }, h('summary', null, 'Settings · ' + cfg.niches.length + ' types × ' + (cfg.cities.length + (d.expanded || []).length) + ' cities, grows by itself'),
         h('div', { class: 'grid2' },
           listEditor('auto-niches', 'Types of business (one per line)', 'niches', 'barber shop', 'Like barber shop, nail salon, auto detailing, lash tech'),
           listEditor('auto-cities', 'Cities (one per line)', 'cities', 'Palmdale, CA', 'Write them like Palmdale, CA')),
         h('div', { class: 'grid2' },
           h('div', { class: 'field' }, h('label', { for: 'auto-per' }, 'Searches per night'), perNight, h('span', { class: 'hint' }, 'Up to 20. Some daily searches are always saved for you.')),
           d.provider === 'google' ? h('div', { class: 'field' }, h('label', { for: 'auto-rev' }, 'Most Google reviews'), maxRev, h('span', { class: 'hint' }, 'Skip businesses with more reviews than this.')) : h('div')),
+        h('div', { class: 'grid2' },
+          h('div', { class: 'field' }, h('label', { for: 'auto-target' }, 'Fresh leads to keep ready'), targetIn, h('span', { class: 'hint' }, 'It keeps searching each night until this many uncalled med spa leads are waiting.')),
+          h('div', { class: 'field' }, h('label', { for: 'auto-cap' }, 'Searches allowed per month'), capIn, h('span', { class: 'hint' }, d.provider === 'google' ? 'Google gives about 900 free a month. Searches past that cost roughly 3 to 4 cents each.' : 'TomTom gives about 1,100 free a month here. Past that your plan may charge.'))),
+        h('label', { class: 'check' }, expandBox, ' Expand to new cities and states on its own when these run dry'),
+        h('label', { class: 'check' }, purgeBox, ' Each night, delete untouched leads that are not med spas'),
         h('label', { class: 'check' }, anySite, ' Include businesses that already have a website (use for med spas, gyms, insurance)'),
         cfg.any_site ? h('p', { class: 'sub', style: 'margin:4px 0 8px' }, 'On: the bot adds any business with a phone number, ignores the review limit, and files them under New instead of Demo needed.') : h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
         h('div', { class: 'row', style: 'justify-content:flex-end;margin-top:8px' }, save)),
