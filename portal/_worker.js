@@ -154,6 +154,7 @@ async function ensureSchema(env) {
       call_sid TEXT, status TEXT NOT NULL DEFAULT 'started', duration INTEGER, recording_sid TEXT, recording_url TEXT, recording_seconds INTEGER, created_at TEXT NOT NULL, ended_at TEXT)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_lead ON dial_calls(lead_id, id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS content_log (day TEXT NOT NULL, platform TEXT NOT NULL, type TEXT, created_at TEXT, PRIMARY KEY (day, platform))'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
@@ -2265,6 +2266,35 @@ async function api(request, env, url) {
       supply: { days, added: supply, open: sum(st, OPENF), focus_open: focusOpen, days_left: daysOfLeads },
       streak: trkStreak(byDay, goal, today), check,
     });
+  }
+
+
+  /* ---- content system (admin) ---- */
+  if (path === '/content' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date, start = (await getSetting(env, 'push_start')) || '2026-11-02';
+    const dayNum = (d) => Math.floor((Date.parse(d) - Date.parse(start)) / 864e5) + 1;
+    const from = trkShift(today, -6);
+    const rows = (await env.DB.prepare('SELECT day, platform FROM content_log WHERE day >= ?').bind(from).all()).results;
+    const week = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = trkShift(today, -i);
+      week.push({ day: d, n: Math.max(1, dayNum(d)), today: d === today, label: new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }), done: rows.filter((r) => r.day === d).map((r) => r.platform) });
+    }
+    const wk = week.find((x) => x.today);
+    return json({ today, day_n: Math.max(1, dayNum(today)), done_today: wk.done, week });
+  }
+  if (path === '/content/toggle' && method === 'POST') {
+    need(user, 'admin');
+    const today = ptParts().date, platform = str(body.platform, 10);
+    if (!['ig', 'x', 'li'].includes(platform)) bad('Pick Instagram, X or LinkedIn');
+    const had = await env.DB.prepare('SELECT 1 AS n FROM content_log WHERE day = ? AND platform = ?').bind(today, platform).first();
+    if (had) await env.DB.prepare('DELETE FROM content_log WHERE day = ? AND platform = ?').bind(today, platform).run();
+    else await env.DB.prepare('INSERT INTO content_log (day, platform, type, created_at) VALUES (?,?,?,?)').bind(today, platform, str(body.type, 20), now()).run();
+    const d = had ? -1 : 1;
+    await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, posts, updated_at) VALUES (?,?,'[]',?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET posts = MAX(0, posts + ?), updated_at = excluded.updated_at`).bind(user.id, today, Math.max(0, d), now(), d).run();
+    return json({ ok: true, posted: !had });
   }
 
   /* ---- personal tracker (admin) ---- */

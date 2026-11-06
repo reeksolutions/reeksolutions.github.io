@@ -147,14 +147,13 @@
   function navFor(role) {
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
-      ['Manage', [['users', 'Team members']]],
-      ['Tools', [['finder', 'Lead Finder'], ['emailbot', 'Email bot'], ['script', 'Call script']]],
+      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['script', 'Call script']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
   const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
@@ -201,7 +200,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -212,6 +211,7 @@
         case 'emailbot': return await viewEmailBot();
         case 'recordings': return await viewRecordings();
         case 'tracker': return await viewTracker();
+        case 'content': return await viewContent();
         case 'studio': return await viewStudio(+arg || null);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -1996,6 +1996,103 @@
       o.note ? h('p', { class: 'ov-note ' + (o.note[0] || '') }, o.note[1]) : null);
   }
 
+  /* ================= content system (from the notes: problem / demo / audit / result) ================= */
+  const CONTENT_TYPES = [
+    { id: 'problem', name: 'Problem post', job: 'Show where med spas are losing money right now.', visual: 'Text card or screenshot: one big number or one sentence on a dark background. No face needed.' },
+    { id: 'demo', name: 'Demo post', job: 'Show the AI actually working.', visual: 'Screen recording on your phone: the AI receptionist answering a call, or the missed-call text going out. 15–30 seconds.' },
+    { id: 'audit', name: 'Audit post', job: 'Break down a med spa\'s front desk and show what you would fix.', visual: 'Screenshot of a public Google listing (hours, phone, reviews) with arrows and 3 fixes. Blur the name if you haven\'t asked permission.' },
+    { id: 'result', name: 'Result post', job: 'Show the wins.', visual: 'Screenshot of your own scorecard (dials, audits booked) until you have client results. Never invent a client result.' },
+  ];
+  const CTA = { ig: 'Own a med spa? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your front desk.', x: 'Own a med spa? DM me "AUDIT" for a free 30-min AI audit.', li: 'If you run a med spa and want a free 30-minute AI audit of your front desk, send me a message.' };
+  const TAGS = '#medspa #medspamarketing #aesthetics #botox #aiautomation #smallbusiness';
+  const CONTENT_LIB = {
+    problem: [
+      { hook: 'Where med spas lose the most money',
+        ig: 'Most med spas don\'t lose clients to a competitor.\n\nThey lose them to a phone that rings and nobody picks up.\n\nThe front desk is with a patient. It\'s after 5pm. It\'s lunch. The caller books somewhere else in under 5 minutes.\n\nExample math (yours will differ): 10 missed calls a week × 3 that would have booked × $400 treatment = $1,200 a week walking out the door.',
+        x: 'Med spas rarely lose clients to competitors.\n\nThey lose them to a phone nobody answers after 5pm.\n\nExample: 3 missed bookings a week x $400 = $1,200/week gone.',
+        li: 'The most expensive problem I see in med spas isn\'t marketing. It\'s the phone.\n\nA caller who reaches voicemail rarely leaves a message. They call the next spa on Google.\n\nIllustrative math, not a statistic: if 3 missed calls a week would have booked a $400 treatment, that\'s about $1,200 a week and over $60,000 a year.\n\nThe fix is simple: every call answered, every missed call texted back within a minute.' },
+      { hook: 'The 5pm problem',
+        ig: 'Think about when people look up a med spa.\n\nEvenings. Weekends. On their phone after work.\n\nThat\'s exactly when most front desks are closed.\n\nSo the person who was ready to book a consult tonight gets voicemail and books with whoever answers.',
+        x: 'People search for med spas at night and on weekends.\n\nMost front desks are closed then.\n\nWhoever answers first gets the booking.',
+        li: 'Most med spa searches happen outside business hours. Most med spa phones go to voicemail outside business hours.\n\nThat gap is where bookings quietly leak.\n\nAn AI receptionist that answers, answers basic questions and books the consult closes that gap without adding staff.' },
+    ],
+    demo: [
+      { hook: 'Watch an AI receptionist book a consult',
+        ig: 'This is what happens when a patient calls a med spa at 7pm.\n\nThe AI answers on the first ring, answers questions about Botox and fillers, and books the consult into the calendar.\n\nNo voicemail. No missed lead. The front desk wakes up to a full schedule.',
+        x: '7pm. A patient calls a med spa.\n\nThe AI answers, answers questions, books the consult.\n\nNo voicemail. No lost lead.',
+        li: 'A short demo of an AI voice receptionist handling an after-hours call for a med spa: greeting, treatment questions, and booking a consult.\n\nThe point isn\'t the technology. It\'s that the caller never hit voicemail.' },
+      { hook: 'The missed-call text-back',
+        ig: 'A call goes unanswered.\n\n60 seconds later the patient gets a text: "Sorry we missed you, want to book a consult? Here\'s our link."\n\nMost people reply to a text faster than they return a voicemail.',
+        x: 'Missed call.\n\n60 seconds later: an automatic text with a booking link.\n\nPeople answer texts faster than they check voicemail.',
+        li: 'Missed-call text-back in action: a call goes unanswered and the caller gets a friendly text with a booking link within a minute.\n\nIt turns a lost call into a conversation.' },
+    ],
+    audit: [
+      { hook: 'I audited a med spa\'s front desk in 10 minutes',
+        ig: 'I looked at one med spa\'s Google listing for 10 minutes. Here\'s what I\'d fix:\n\n1. Phone goes to voicemail after 5pm\n2. No instant reply to new inquiries\n3. Old clients never get a "we miss you" message\n\nNone of it needs more staff. It needs a system.',
+        x: 'Audited a med spa\'s front desk in 10 minutes.\n\nFixes:\n1. After-hours calls answered\n2. Instant reply to inquiries\n3. Message past clients\n\nNo new staff needed.',
+        li: 'I spent ten minutes reviewing a med spa\'s public presence. Three fixes stood out: after-hours calls, response speed to new inquiries, and reactivating past clients.\n\nNone of them need more staff. They need a system that runs without anyone remembering to do it.' },
+      { hook: 'Three questions to ask your front desk today',
+        ig: 'Ask your front desk three questions today:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to a new inquiry?\n3. When did we last message clients who haven\'t booked in 6 months?\n\nIf nobody knows the answers, that\'s where the money is.',
+        x: 'Ask your front desk:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to new inquiries?\n3. When did we last message lapsed clients?\n\nIf nobody knows, that\'s the leak.',
+        li: 'Three questions every med spa owner should be able to answer: how many calls we missed this week, how quickly we respond to a new inquiry, and when we last contacted clients who haven\'t booked in six months.\n\nIf the answers aren\'t known, that is usually where revenue is leaking.' },
+    ],
+    result: [
+      { hook: 'Day-by-day scorecard',
+        ig: 'Day {day} of 30 building my AI agency in public.\n\nDials today: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nNo shortcuts. Inputs drive outputs.',
+        x: 'Day {day} of 30.\n\nDials: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nInputs drive outputs.',
+        li: 'Day {day} of a 30-day push to prove an AI front-desk offer for med spas.\n\nToday: {dials} dials, {talks} conversations, {demos} audits booked.\n\nBuilding in public, and the numbers stay honest.' },
+      { hook: 'What I learned this week',
+        ig: 'Week of calling med spas, what I learned:\n\n• Front desks are busiest right before lunch\n• The owner usually picks up after 4pm\n• "We already have someone" usually means "we miss calls and don\'t know it"\n\nDials this week: {week}',
+        x: 'A week of cold calling med spas:\n\n- Owners pick up more after 4pm\n- "We have someone" often means they miss calls and don\'t know it\n\nDials this week: {week}',
+        li: 'A week of calling med spas taught me a few things: owners are easier to reach late in the afternoon, and "we already have someone covering the phones" often means missed calls nobody is counting.\n\nDials this week: {week}.' },
+    ],
+  };
+  const CPLAT = [['ig', 'Instagram'], ['x', 'X'], ['li', 'LinkedIn']];
+
+  async function viewContent() {
+    const [r, trk] = await Promise.all([api('GET', '/content'), api('GET', '/tracker')]);
+    const dayN = r.day_n;
+    const typeFor = (n) => CONTENT_TYPES[(((n - 1) % 4) + 4) % 4];
+    const tplFor = (n) => { const t = typeFor(n); const lib = CONTENT_LIB[t.id]; return lib[Math.floor((((n - 1) % 8) + 8) % 8 / 4) % lib.length]; };
+    const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
+    const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
+    const type = typeFor(dayN), tpl = tplFor(dayN);
+    const done = new Set(r.done_today);
+    let plat = CPLAT.find(([k]) => !done.has(k))?.[0] || 'ig';
+    const area = h('textarea', { class: 'ct-text', rows: 11 });
+    const doneBtn = h('button', { class: 'btn ok' });
+    const setText = () => { area.value = fill(tpl[plat]) + '\n\n' + CTA[plat] + (plat === 'ig' ? '\n\n' + TAGS : ''); doneBtn.textContent = done.has(plat) ? 'Posted ✓ (tap to undo)' : 'Mark as posted'; doneBtn.classList.toggle('on', done.has(plat)); };
+    const tabs = h('div', { class: 'stagechips' });
+    const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, label]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); setText(); } }, label + (done.has(k) ? ' ✓' : ''))));
+    drawTabs(); setText();
+    const copy = h('button', { class: 'btn primary', onclick: async () => {
+      try { await navigator.clipboard.writeText(area.value); toast('Copied. Paste it into ' + CPLAT.find(([k]) => k === plat)[1]); } catch { area.select(); toast('Press copy on your keyboard', true); }
+    } }, 'Copy post');
+    doneBtn.onclick = async () => {
+      doneBtn.disabled = true;
+      try { await api('POST', '/content/toggle', { platform: plat, type: type.id }); viewContent(); } catch (e) { fail(e); doneBtn.disabled = false; }
+    };
+    const strip = h('div', { class: 'ct-week' }, r.week.map((d) => {
+      const t = typeFor(d.n);
+      return h('div', { class: 'ct-day' + (d.today ? ' now' : '') + (d.done.length === 3 ? ' full' : '') },
+        h('small', null, d.label), h('b', null, t.name.replace(' post', '')), h('span', null, d.future ? '' : d.done.length + '/3'));
+    }));
+    const lib = h('div', { class: 'ct-lib' }, CONTENT_TYPES.map((t) => h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, t.name), h('small', { class: 'dim' }, t.job)),
+      h('p', { class: 'ct-vis' }, 'Visual: ' + t.visual),
+      CONTENT_LIB[t.id].map((p) => h('div', { class: 'ct-tpl' }, h('b', null, p.hook), h('pre', null, fill(p.ig)))))));
+    shell('content', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Post today'), h('p', { class: 'sub' }, 'One post a day, on Instagram, X and LinkedIn. Faceless and phone-only. Takes 10 minutes.'))),
+      h('section', { class: 'ct-today' },
+        h('div', { class: 'ct-type' }, h('span', { class: 'tag hot' }, 'Today: ' + type.name), h('p', null, type.job), h('p', { class: 'dim small' }, 'Visual: ' + type.visual)),
+        h('div', { class: 'ct-hook' }, tpl.hook),
+        tabs, area,
+        h('div', { class: 'row wrap' }, copy, doneBtn),
+        h('p', { class: 'dim small' }, 'Edit the text first if you want. The numbers in example math are illustrations, so keep them labeled as examples. Marking a platform posted adds to your post count on Home.')),
+      h('h3', { class: 'trk-h' }, 'This week'), strip,
+      h('h3', { class: 'trk-h' }, 'More posts to pull from'), lib,
+    ]);
+  }
+
   async function viewAdminHome() {
     const ov = await api('GET', '/overview');
     const trk = ov;
@@ -2057,13 +2154,6 @@
       body: barChart({ labels: R.months.map((m) => new Date(m + '-15T12:00:00').toLocaleDateString([], { month: 'short' })), series: [{ name: 'Setup', values: R.setup.map((v) => v / 100), cls: 's1' }, { name: 'MRR added', values: R.mrr.map((v) => v / 100), cls: 's3' }], fmt: (v) => '$' + v.toLocaleString() }),
       note: [R.deals ? 'good' : 'bad', R.deals ? `${R.deals} client${R.deals === 1 ? '' : 's'} closed. One more $3k + $800/mo deal adds ${money(80000 * 12)} a year.` : 'No revenue yet. Add your first deal with a Monthly amount and MRR starts here.'] });
 
-    const rr = E.sent14 ? Math.round((100 * E.replied14) / E.sent14) : 0;
-    const emailCard = ovCard({
-      ic: 'mail', title: 'Email campaigns', manage: ['Email bot', '#/emailbot'],
-      big: [[E.sent14.toLocaleString(), 'sent · 14d'], [E.replied14.toLocaleString(), 'replies (' + rr + '%)'], [E.active.toLocaleString(), 'in sequence']],
-      body: barChart({ labels, series: [{ name: 'Sent', values: E.sent, cls: 's1' }, { name: 'Replies', values: E.replied, cls: 's2' }, { name: 'Bounced', values: E.bounced, cls: 's4' }] }),
-      note: [E.sent14 >= 20 && !E.replied14 ? 'warn' : '', `${E.with_email.toLocaleString()} leads have an email; ${E.unemailed.toLocaleString()} have not been emailed yet. ${E.bounced14} bounced, ${E.opted_out14} opted out.`] });
-
     const smsCard = ovCard({
       ic: 'sms', title: 'SMS and DMs', manage: ['Log on tracker', '#/tracker'],
       big: [[O.texts7.toLocaleString(), 'texts · 7d'], [O.dms7.toLocaleString(), 'DMs · 7d'], [(O.today_texts + O.today_dms).toLocaleString(), 'today']],
@@ -2072,10 +2162,10 @@
       note: ['', 'These are counts you log yourself. The portal can\'t see texts or DMs sent from your phone.'] });
 
     const contentCard = ovCard({
-      ic: 'spark', title: 'Content and referrals', manage: ['Log on tracker', '#/tracker'],
+      ic: 'spark', title: 'Content and referrals', manage: ['Open Content', '#/content'],
       big: [[T.posts7.toLocaleString(), 'posts · 7d'], [T.refs7.toLocaleString(), 'referral asks · 7d'], [(T.today_posts + T.today_refs).toLocaleString(), 'today']],
       body: barChart({ labels, series: [{ name: 'Posts', values: T.posts, cls: 's1' }, { name: 'Referral asks', values: T.refs, cls: 's3' }] }),
-      quick: [h('button', { class: 'trk-b', onclick: quickLog('posts', 1, T.today_posts) }, '+1 post'), h('button', { class: 'trk-b', onclick: quickLog('refs', 1, T.today_refs) }, '+1 referral ask')],
+      quick: [h('button', { class: 'trk-b', onclick: quickLog('refs', 1, T.today_refs) }, '+1 referral ask')],
       note: [T.posts7 ? 'good' : 'warn', T.posts7 ? `${T.posts7} posts this week. Content is the slow channel; keep it daily and it compounds.` : 'No posts logged this week. Content compounds, but only if it ships.'] });
 
     const supplyCard = ovCard({
@@ -2097,7 +2187,7 @@
     clearInterval(S.feedTimer);
     S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
 
-    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, emailCard, smsCard, contentCard, supplyCard), feed]);
+    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard), feed]);
   }
 
   async function viewHome() {
@@ -2999,10 +3089,9 @@ function api(method, path, body) {
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card' },
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
-        row('#/emailbot', 'mail', 'Email bot', 'Cold emails and follow-ups from your Gmail'),
+        row('#/content', 'spark', 'Content', 'Today\'s post for Instagram, X and LinkedIn'),
         row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
         row('#/script', 'script', 'Call script', 'What to say on the phone'),
-        row('#/users', 'users', 'Team members', 'Add reps, set goals and commission'),
         row('#/account', 'account', 'Account', 'Password and log out')),
     ]);
   }
