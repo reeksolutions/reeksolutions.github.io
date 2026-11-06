@@ -92,7 +92,7 @@ const SCHEMA = [
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
 const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -545,6 +545,35 @@ async function guessSite(name) {
     } catch { /* no site there */ }
   }
   return null;
+}
+
+// Find a business's Instagram from the links on its own website (no Instagram access needed).
+const IG_RESERVED = /^(p|reel|reels|explore|accounts|tv|stories|share|about|legal|developer|direct|directory|web|privacy|terms|instagram|sharer)$/i;
+function pickInstagram(html) {
+  const seen = new Map();
+  for (const m of String(html).matchAll(/instagram\.com\/(?:@)?([A-Za-z0-9._]{2,30})(?=[\/?"'#\s<)]|$)/gi)) {
+    const h = m[1].replace(/\.+$/, '');
+    if (!h || IG_RESERVED.test(h)) continue;
+    seen.set(h.toLowerCase(), (seen.get(h.toLowerCase()) || 0) + 1);
+  }
+  let best = null; for (const [h, n] of seen) if (!best || n > best[1]) best = [h, n];
+  return best ? best[0] : null;
+}
+async function enrichInstagram(env, limit = 20) {
+  const rows = (await env.DB.prepare(`SELECT id, website FROM leads WHERE instagram IS NULL AND ig_checked_at IS NULL AND website IS NOT NULL AND website != ''
+      AND website NOT LIKE '%facebook.com%' AND website NOT LIKE '%instagram.com%' ORDER BY id DESC LIMIT ?`).bind(limit).all()).results;
+  let found = 0;
+  for (const r of rows) {
+    let handle = null;
+    try {
+      const u = /^https?:\/\//i.test(r.website) ? r.website : 'https://' + r.website;
+      const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ReekonCheck/1.0)' } });
+      if (res.ok) handle = pickInstagram((await res.text()).slice(0, 400000));
+    } catch { /* site down or slow: skip */ }
+    await env.DB.prepare('UPDATE leads SET instagram = ?, ig_checked_at = ? WHERE id = ?').bind(handle ? 'https://instagram.com/' + handle : null, now(), r.id).run();
+    if (handle) found++;
+  }
+  return { checked: rows.length, found };
 }
 
 // Local testing only (FINDER_FAKE=1): a Google-shaped answer.
@@ -2311,6 +2340,19 @@ async function api(request, env, url) {
   }
 
 
+  /* ---- Instagram handles pulled from lead websites (admin) ---- */
+  if (path === '/instagram/enrich' && method === 'POST') {
+    need(user, 'admin');
+    const r = await enrichInstagram(env, 15);
+    const c = await env.DB.prepare("SELECT SUM(CASE WHEN instagram IS NOT NULL THEN 1 ELSE 0 END) AS have, SUM(CASE WHEN instagram IS NULL AND ig_checked_at IS NULL AND website IS NOT NULL AND website != '' THEN 1 ELSE 0 END) AS waiting, COUNT(*) AS total FROM leads").first();
+    return json({ ...r, have: c.have || 0, waiting: c.waiting || 0, total: c.total });
+  }
+  if (path === '/instagram/stats' && method === 'GET') {
+    need(user, 'admin');
+    const c = await env.DB.prepare("SELECT SUM(CASE WHEN instagram IS NOT NULL THEN 1 ELSE 0 END) AS have, SUM(CASE WHEN instagram IS NULL AND ig_checked_at IS NULL AND website IS NOT NULL AND website != '' THEN 1 ELSE 0 END) AS waiting, COUNT(*) AS total FROM leads").first();
+    return json({ have: c.have || 0, waiting: c.waiting || 0, total: c.total });
+  }
+
   /* ---- review cards inventory + sales (admin) ---- */
   if (path === '/cards' && method === 'GET') {
     need(user, 'admin');
@@ -3959,6 +4001,7 @@ export default {
       const h = ptParts().hour;
       if (cfg.enabled && h < 6) await autoStep(env);
     } catch (e) { console.error('auto lead bot', e); }
+    try { await enrichInstagram(env, 20); } catch (e) { console.error('instagram enrich', e); }
   },
   async fetch(request, env) {
     const url = new URL(request.url);
