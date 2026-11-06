@@ -460,10 +460,50 @@
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
     const seller = S.me.role === 'admin' || S.me.role === 'rep';
+
+    /* ---- call mode: Google profile, live notes, Google Voice popup + call bar ---- */
+    const isGoogleUrl = (u) => /^https?:\/\/([a-z0-9-]+\.)*(google\.[a-z.]+\/maps|goo\.gl|g\.page|maps\.app\.goo\.gl)/i.test(u || '');
+    const profileUrl = L.link && isGoogleUrl(L.link) ? L.link
+      : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([L.business, L.address || L.city].filter(Boolean).join(' ')) + (L.place_id ? '&query_place_id=' + encodeURIComponent(L.place_id) : '');
+    const live = h('textarea', { class: 'live-notes', rows: 5, placeholder: 'Type while you talk: owner name, what they use now, objections, what they said about missed calls…' });
+    live.value = L.call_notes || '';
+    const liveState = h('small', { class: 'dim' }, 'Autosaves as you type');
+    let liveT = null, livePending = false;
+    const flushLive = async () => {
+      clearTimeout(liveT);
+      if (!livePending) return;
+      livePending = false;
+      try { await api('POST', '/leads/' + id + '/meta', { call_notes: live.value }); liveState.textContent = 'Saved ✓'; } catch { livePending = true; liveState.textContent = 'Not saved, check your connection'; }
+    };
+    live.addEventListener('input', () => { livePending = true; liveState.textContent = 'Typing…'; clearTimeout(liveT); liveT = setTimeout(flushLive, 700); });
+    live.addEventListener('blur', flushLive);
+    const gvBar = h('div', { class: 'gvbar', hidden: true });
+    let gvTimer = null, gvStart = 0;
+    function stopBar() { clearInterval(gvTimer); gvBar.hidden = true; }
+    function startBar() {
+      gvStart = Date.now(); gvBar.hidden = false; clearInterval(gvTimer);
+      const clock = h('b', { class: 'gv-clock' }, '0:00');
+      gvBar.replaceChildren(h('div', { class: 'gv-top' }, h('span', { class: 'live' }), h('span', null, 'On call · ' + L.business), clock),
+        h('div', { class: 'gv-btns' }, [['no_answer', 'No answer'], ['voicemail', 'Voicemail'], ['gatekeeper', 'Gatekeeper'], ['not_interested', 'Not interested'], ['callback', 'Callback'], ['booked', 'Audit booked']]
+          .map(([k, label]) => h('button', { class: 'oc' + (k === 'booked' ? ' booked' : ''), onclick: () => logCall(k) }, label))));
+      gvTimer = setInterval(() => {
+        if (!document.body.contains(gvBar)) { clearInterval(gvTimer); return; }
+        const sec = Math.floor((Date.now() - gvStart) / 1000);
+        clock.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+      }, 1000);
+    }
+    function gvCall() {
+      const w = window.open(gvHref(L.phone), 'gvoice', 'popup=yes,width=440,height=780,left=' + Math.max(0, (screen.availWidth || 1200) - 470) + ',top=40');
+      if (!w) toast('Popup blocked. Allow popups for this site, then tap Call again.', true);
+      startBar();
+    }
+    const goNext = async () => {
+      try { const r = await api('GET', '/leads/next?after=' + id); if (r.id) location.hash = '#/lead/' + r.id; else toast('No more dialable leads right now', true); } catch (x) { fail(x); }
+    };
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
-      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('a', { class: 'btn ok wide', href: gvHref(L.phone), target: '_blank', rel: 'noopener' }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
-      L.phone && seller ? (dialer && dialer.ready ? h('a', { class: 'btn small', href: gvHref(L.phone), target: '_blank', rel: 'noopener' }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
+      L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('button', { class: 'btn ok wide', onclick: gvCall }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
+      L.phone && seller ? (dialer && dialer.ready ? h('button', { class: 'btn small', onclick: gvCall }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
       h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
@@ -524,9 +564,15 @@
         if (!(await confirmSheet('Not interested?', 'This closes the lead as lost.', 'Close as lost', true))) return;
       }
       try {
-        const r = await api('POST', '/leads/' + id + '/calls', Object.assign({ outcome }, extra));
+        await flushLive();
+        const r = await api('POST', '/leads/' + id + '/calls', Object.assign({ outcome }, seller ? { call_notes: live.value } : {}, extra));
+        stopBar();
         toast(OUTCOME_LABEL[outcome] + ' logged → ' + STATUS[r.status]);
         if (outcome === 'dnc' && S.me.role === 'rep') { location.hash = '#/leads'; return; }
+        if (seller && ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'dnc'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
+          const nx = await api('GET', '/leads/next?after=' + id).catch(() => null);
+          if (nx && nx.id) { location.hash = '#/lead/' + nx.id; return; }
+        }
         reload();
       } catch (e) { fail(e); }
     }
@@ -551,6 +597,50 @@
     const heatSeg = seller ? h('div', { class: 'seg heat-seg' }, HEAT.map(([k, l, e]) => h('button', { class: (L.heat || 'cold') === k ? 'on ' + k : k, onclick: async () => {
       try { await api('POST', '/leads/' + id + '/heat', { heat: k }); toast('Marked ' + l); reload(); } catch (x) { fail(x); }
     } }, e + ' ' + l))) : null;
+
+    async function moveStage(k) {
+      if (k === L.status || (k === 'new' && ['new', 'demo_needed', 'demo_ready'].includes(L.status))) return;
+      await flushLive();
+      try {
+        if (k === 'won') {
+          if (isAdmin && (await dealSheet({ lead: L }))) { toast('Deal closed 💰'); reload(); }
+          return;
+        }
+        let body = { status: k };
+        if (k === 'callback') {
+          const d0 = new Date(); d0.setDate(d0.getDate() + 1); d0.setHours(10, 0, 0, 0);
+          const when = await sheet((box, close) => {
+            const t = h('input', { type: 'datetime-local', value: toLocalInput(d0) });
+            const q = (label, fn) => h('button', { class: 'btn small', type: 'button', onclick: () => { const d = new Date(); fn(d); t.value = toLocalInput(d); } }, label);
+            box.append(h('h2', null, 'Callback time'), h('p', { class: 'sub' }, L.business),
+              h('div', { class: 'row wrap', style: 'margin-bottom:12px' }, q('In 1 hour', (d) => d.setHours(d.getHours() + 1, 0, 0, 0)), q('In 3 hours', (d) => d.setHours(d.getHours() + 3, 0, 0, 0)), q('Tomorrow 10am', (d) => { d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); })),
+              h('div', { class: 'field' }, h('label', null, 'Date & time'), t),
+              h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => close(t.value ? new Date(t.value).toISOString() : null) }, 'Save')));
+          });
+          if (!when) return;
+          body.callback_at = when;
+        }
+        await api('PATCH', '/leads/' + id, body);
+        toast('Moved to ' + STATUS[k]);
+        reload();
+      } catch (x) { fail(x); }
+    }
+    const STAGE_CHIPS = [['new', 'New'], ['called', 'Contacted'], ['callback', 'Callback'], ['booked', 'Audit booked'], ['call2', 'Call 2']].concat(isAdmin ? [['won', 'Won']] : []).concat([['lost', 'Lost']]);
+    const curChip = ['demo_needed', 'demo_ready'].includes(L.status) ? 'new' : L.status;
+    const stageRow = seller && L.status !== 'dnc' ? h('div', { class: 'callmode-stage' }, h('span', { class: 'eyebrow' }, 'Stage'),
+      h('div', { class: 'stagechips' }, STAGE_CHIPS.map(([k, label]) => h('button', { class: 'schip s-' + k + (curChip === k ? ' on' : ''), 'aria-pressed': curChip === k, onclick: () => moveStage(k) }, label)))) : null;
+    const gStars = L.rating ? '★ ' + L.rating + (L.reviews ? ' · ' + Number(L.reviews).toLocaleString() + ' reviews' : '') : (L.reviews ? Number(L.reviews).toLocaleString() + ' reviews' : '');
+    const profileRow = seller ? h('div', { class: 'profile-row' },
+      h('a', { class: 'btn primary profile-btn', href: profileUrl, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Open Google profile'),
+      gStars ? h('span', { class: 'profile-meta' }, gStars) : null,
+      h('button', { class: 'btn small', onclick: goNext }, 'Next lead →')) : null;
+    const earlier = notes.slice(0, 3);
+    const liveBox = seller && L.status !== 'dnc' ? h('div', { class: 'live-box section' },
+      h('div', { class: 'live-head' }, h('span', { class: 'eyebrow' }, 'Call notes'), liveState),
+      live,
+      earlier.length ? h('div', { class: 'earlier' }, earlier.map((n) => h('div', null, h('small', null, fmt(n.created_at, { month: 'short', day: 'numeric' }) + ' · '), n.body.length > 160 ? n.body.slice(0, 160) + '…' : n.body))) : null,
+      h('label', { class: 'autonext' }, h('input', { type: 'checkbox', checked: lsGet('rs_autonext', '1') === '1', onchange: (e) => lsSet('rs_autonext', e.target.checked ? '1' : '0') }),
+        'After a miss (no answer, voicemail, gatekeeper, not interested) jump to the next lead')) : null;
 
     const noteBox = h('textarea', { placeholder: 'Notes from this call…' });
     const saveNote = h('button', { class: 'btn primary block', style: 'margin-top:8px', onclick: async () => {
@@ -672,9 +762,12 @@
       h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
         L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
         h('h1', null, L.business), h('div', { class: 'detail-meta' }, repQuick, tagRow)),
+      profileRow,
+      actions,
+      liveBox,
+      stageRow,
       heatSeg,
       nextBox,
-      actions,
       emailCue,
       scriptPanel,
       h('div', { class: 'card section' }, info, botRow),
@@ -684,6 +777,7 @@
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Notes'), noteBox, saveNote),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'History'), h('div', { class: 'card' }, timeline)),
       adminPanel,
+      gvBar,
     ]);
   }
 
@@ -1817,8 +1911,153 @@
     return h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', null, title), right || null), ...body);
   }
 
+  /* ================= admin home: everything on one page ================= */
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs, ...kids) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v !== null && v !== undefined) el.setAttribute(k, v);
+    for (const k of kids.flat(Infinity)) if (k) el.append(k);
+    return el;
+  }
+  const shortDay = (d) => new Date(d + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+  // grouped bar chart. series: [{name, values, cls}], labels: strings, goal: optional dashed line
+  function barChart({ labels, series, goal, fmt }) {
+    const W = 340, H = 116, top = 8, n = labels.length, gw = W / n;
+    const f = fmt || ((v) => v.toLocaleString());
+    const max = Math.max(1, goal || 0, ...series.flatMap((s) => s.values));
+    const bw = Math.max(2, (gw * 0.68) / series.length);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, class: 'ov-svg', role: 'img', preserveAspectRatio: 'none' });
+    svg.append(sv('line', { x1: 0, y1: H - 0.5, x2: W, y2: H - 0.5, class: 'ov-axis' }));
+    labels.forEach((lab, i) => series.forEach((s, j) => {
+      const v = s.values[i] || 0, bh = v ? Math.max(3, (v / max) * (H - top)) : 0;
+      const x = i * gw + (gw - bw * series.length) / 2 + j * bw;
+      const r = sv('rect', { x: x.toFixed(1), y: (H - bh).toFixed(1), width: (bw - 1).toFixed(1), height: bh.toFixed(1), rx: 1.5, class: 'ov-bar ' + s.cls + (i === n - 1 ? ' last' : '') });
+      r.append(sv('title', null, document.createTextNode(`${lab} · ${s.name}: ${f(v)}`)));
+      svg.append(r);
+    }));
+    if (goal) svg.append(sv('line', { x1: 0, y1: (H - (goal / max) * (H - top)).toFixed(1), x2: W, y2: (H - (goal / max) * (H - top)).toFixed(1), class: 'ov-goal' }));
+    const wrap = h('div', { class: 'ov-chart' }, svg,
+      h('div', { class: 'ov-ax' }, h('span', null, labels[0]), h('span', null, labels[Math.floor(n / 2)]), h('span', null, labels[n - 1])),
+      series.length > 1 || goal ? h('div', { class: 'ov-legend' }, series.map((s) => h('span', null, h('i', { class: s.cls }), s.name)), goal ? h('span', null, h('i', { class: 'goalkey' }), 'Goal') : null) : null);
+    return wrap;
+  }
+  function ovCard(o) {
+    return h('section', { class: 'ov-card' },
+      h('div', { class: 'ov-head' }, h('span', { class: 'kic' }, icon(o.ic)), h('h3', null, o.title),
+        o.manage ? h('a', { class: 'btn small ov-manage', href: o.manage[1] }, o.manage[0] + ' →') : null),
+      o.big ? h('div', { class: 'ov-big' }, o.big.map(([v, l]) => h('div', null, h('b', null, v), h('small', null, l)))) : null,
+      o.body,
+      o.quick ? h('div', { class: 'ov-quick' }, o.quick) : null,
+      o.note ? h('p', { class: 'ov-note ' + (o.note[0] || '') }, o.note[1]) : null);
+  }
+
+  async function viewAdminHome() {
+    const ov = await api('GET', '/overview');
+    const trk = ov;
+    const niche = ov.focus_niche || 'med spa';
+    const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
+    const labels = C.days.map(shortDay);
+    const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    const quickLog = (field, n, today) => async () => {
+      try { await api('PUT', '/tracker', { [field]: today + n }); toast('Logged'); viewHome(); } catch (e) { fail(e); }
+    };
+    const startDialing = async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; }
+    };
+
+    const head = h('div', { class: 'page-head' },
+      h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine),
+        h('h1', null, 'Day ' + Math.min(ov.day_n, 30) + ' of 30'),
+        h('p', { class: 'sub' }, 'Everything in one place. Focus: ' + niche + 's.')),
+      h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing'));
+    const prog = h('div', { class: 'ov-days' }, Array.from({ length: 30 }, (_, i) => h('i', { class: i + 1 < ov.day_n ? 'past' : i + 1 === ov.day_n ? 'now' : '' })));
+
+    const reality = h('section', { class: 'ov-reality' },
+      h('div', { class: 'ov-head' }, h('span', { class: 'kic' }, icon('flag')), h('h3', null, 'Reality check'), h('span', { class: 'dim small' }, 'straight talk, no cheerleading')),
+      h('div', { class: 'ov-checks' }, ov.check.map((c) => h('div', { class: 'ov-check ' + c.level }, h('i'), h('span', null, c.text)))),
+      prog);
+
+    const kpi = (label, value, note, cls) => h('div', { class: 'ov-kpi' + (cls ? ' ' + cls : '') }, h('small', null, label), h('b', null, value), h('span', null, note));
+    const pct = (a, b) => (b ? Math.round((100 * a) / b) + '%' : '0%');
+    const kpis = h('div', { class: 'ov-kpis' },
+      kpi('Dials today', C.today.toLocaleString(), 'of ' + ov.goal, C.today >= ov.goal ? 'good' : C.today < C.expected_now * 0.6 && C.expected_now > 20 ? 'bad' : ''),
+      kpi('7-day average', C.avg7.toLocaleString(), 'dials per work day', C.avg7 >= ov.goal ? 'good' : C.avg7 < ov.goal * 0.75 ? 'bad' : ''),
+      kpi('Audits booked', C.demos7.toLocaleString(), 'last 7 days', C.demos7 ? 'good' : ''),
+      kpi('MRR', money(R.mrr_total), R.deals + (R.deals === 1 ? ' client' : ' clients'), R.mrr_total ? 'good' : ''),
+      kpi('Setup revenue', money(R.setup_total), money(R.month_setup) + ' this month', R.setup_total ? 'good' : ''),
+      kpi('Streak', ov.streak + 'd', 'all wins + goal dials', ov.streak ? 'good' : ''));
+
+    const callsCard = ovCard({
+      ic: 'phone', title: 'Calls', manage: ['Tracker', '#/tracker'],
+      big: [[C.dials7.toLocaleString(), 'dials · 7d'], [C.talks7.toLocaleString(), 'pick-ups (' + pct(C.talks7, C.dials7) + ')'], [C.demos7.toLocaleString(), 'audits (' + pct(C.demos7, C.talks7) + ' of pick-ups)']],
+      body: barChart({ labels, series: [{ name: 'Dials', values: C.dials, cls: 's1' }, { name: 'Pick-ups', values: C.talks, cls: 's2' }], goal: ov.goal }),
+      note: [C.avg7 < ov.goal * 0.75 ? 'bad' : C.avg7 >= ov.goal ? 'good' : 'warn', `${C.avg7}/day average against a goal of ${ov.goal}. ${C.demos7 ? C.demos7 + ' audit' + (C.demos7 === 1 ? '' : 's') + ' booked this week.' : 'No audits booked this week.'}`] });
+
+    const fmax = Math.max(1, F.focus_open, F.called, F.callback, F.booked, F.call2, F.won);
+    const stage = (label, v, href) => h('a', { class: 'ov-fstep', href }, h('span', null, label), h('div', { class: 'ov-ftrack' }, h('i', { style: 'width:' + Math.max(v ? 3 : 0, (v / fmax) * 100) + '%' })), h('b', null, v.toLocaleString()));
+    const go = (status) => () => Object.assign(S.leadFilters, { status, rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' });
+    const pipeCard = ovCard({
+      ic: 'chart', title: 'Pipeline', manage: ['Open leads', '#/leads'],
+      big: [[F.focus_open.toLocaleString(), 'fresh ' + niche + ' leads'], [(F.booked + F.call2).toLocaleString(), 'audits + call 2'], [F.won.toLocaleString(), 'won']],
+      body: h('div', { class: 'ov-funnel' },
+        [['Fresh', F.focus_open, 'new'], ['Contacted', F.called, 'called'], ['Callback', F.callback, 'callback'], ['Audit booked', F.booked, 'booked'], ['Call 2', F.call2, 'call2'], ['Won', F.won, 'won']].map(([l, v, st]) => {
+          const a = stage(l, v, '#/leads'); a.addEventListener('click', go(st)); return a;
+        })),
+      note: [F.booked + F.call2 ? 'good' : 'warn', `${F.total.toLocaleString()} leads in the CRM. ${F.focus_total.toLocaleString()} are ${niche}s; everything else is parked below them.`] });
+
+    const revCard = ovCard({
+      ic: 'deals', title: 'Revenue and MRR', manage: ['Deals', '#/deals'],
+      big: [[money(R.mrr_total), 'MRR'], [money(R.mrr_total * 12), 'annual run rate'], [money(R.setup_total), 'setup fees']],
+      body: barChart({ labels: R.months.map((m) => new Date(m + '-15T12:00:00').toLocaleDateString([], { month: 'short' })), series: [{ name: 'Setup', values: R.setup.map((v) => v / 100), cls: 's1' }, { name: 'MRR added', values: R.mrr.map((v) => v / 100), cls: 's3' }], fmt: (v) => '$' + v.toLocaleString() }),
+      note: [R.deals ? 'good' : 'bad', R.deals ? `${R.deals} client${R.deals === 1 ? '' : 's'} closed. One more $3k + $800/mo deal adds ${money(80000 * 12)} a year.` : 'No revenue yet. Add your first deal with a Monthly amount and MRR starts here.'] });
+
+    const rr = E.sent14 ? Math.round((100 * E.replied14) / E.sent14) : 0;
+    const emailCard = ovCard({
+      ic: 'mail', title: 'Email campaigns', manage: ['Email bot', '#/emailbot'],
+      big: [[E.sent14.toLocaleString(), 'sent · 14d'], [E.replied14.toLocaleString(), 'replies (' + rr + '%)'], [E.active.toLocaleString(), 'in sequence']],
+      body: barChart({ labels, series: [{ name: 'Sent', values: E.sent, cls: 's1' }, { name: 'Replies', values: E.replied, cls: 's2' }, { name: 'Bounced', values: E.bounced, cls: 's4' }] }),
+      note: [E.sent14 >= 20 && !E.replied14 ? 'warn' : '', `${E.with_email.toLocaleString()} leads have an email; ${E.unemailed.toLocaleString()} have not been emailed yet. ${E.bounced14} bounced, ${E.opted_out14} opted out.`] });
+
+    const smsCard = ovCard({
+      ic: 'sms', title: 'SMS and DMs', manage: ['Log on tracker', '#/tracker'],
+      big: [[O.texts7.toLocaleString(), 'texts · 7d'], [O.dms7.toLocaleString(), 'DMs · 7d'], [(O.today_texts + O.today_dms).toLocaleString(), 'today']],
+      body: barChart({ labels, series: [{ name: 'Texts', values: O.texts, cls: 's1' }, { name: 'DMs', values: O.dms, cls: 's3' }] }),
+      quick: [h('button', { class: 'trk-b', onclick: quickLog('texts', 10, O.today_texts) }, '+10 texts'), h('button', { class: 'trk-b', onclick: quickLog('texts', 1, O.today_texts) }, '+1 text'), h('button', { class: 'trk-b', onclick: quickLog('dms', 1, O.today_dms) }, '+1 DM')],
+      note: ['', 'These are counts you log yourself. The portal can\'t see texts or DMs sent from your phone.'] });
+
+    const contentCard = ovCard({
+      ic: 'spark', title: 'Content and referrals', manage: ['Log on tracker', '#/tracker'],
+      big: [[T.posts7.toLocaleString(), 'posts · 7d'], [T.refs7.toLocaleString(), 'referral asks · 7d'], [(T.today_posts + T.today_refs).toLocaleString(), 'today']],
+      body: barChart({ labels, series: [{ name: 'Posts', values: T.posts, cls: 's1' }, { name: 'Referral asks', values: T.refs, cls: 's3' }] }),
+      quick: [h('button', { class: 'trk-b', onclick: quickLog('posts', 1, T.today_posts) }, '+1 post'), h('button', { class: 'trk-b', onclick: quickLog('refs', 1, T.today_refs) }, '+1 referral ask')],
+      note: [T.posts7 ? 'good' : 'warn', T.posts7 ? `${T.posts7} posts this week. Content is the slow channel; keep it daily and it compounds.` : 'No posts logged this week. Content compounds, but only if it ships.'] });
+
+    const supplyCard = ovCard({
+      ic: 'search', title: 'Lead supply', manage: ['Lead Finder', '#/finder'],
+      big: [[SU.focus_open.toLocaleString(), niche + ' leads left'], [SU.days_left + 'd', 'at ' + ov.goal + ' dials/day'], [SU.added.slice(-7).reduce((a, b) => a + b, 0).toLocaleString(), 'added · 7d']],
+      body: barChart({ labels, series: [{ name: 'Leads added', values: SU.added, cls: 's2' }] }),
+      note: [SU.focus_open < ov.goal * 2 ? 'warn' : 'good', SU.focus_open < ov.goal * 2 ? 'You are about to run out of fresh leads. Turn on the lead bot or run a search.' : 'Enough fresh leads to keep dialing.'] });
+
+    // live feed
+    const feedBox = h('div', { class: 'feed' }, h('div', { class: 'empty-sm' }, h('div', { class: 'spinner', style: 'margin:auto' })));
+    const feed = panel('Live activity', h('span', { class: 'live-tag' }, h('span', { class: 'live' }), 'Live'), feedBox);
+    async function loadFeed() {
+      try {
+        const r = await api('GET', '/feed?limit=25');
+        feedBox.replaceChildren(...(r.feed.length ? r.feed.map(feedRow) : [h('div', { class: 'empty-sm' }, 'Nothing yet. Calls, notes, demos and deals show up here the second they happen.')]));
+      } catch { /* keep last */ }
+    }
+    loadFeed();
+    clearInterval(S.feedTimer);
+    S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
+
+    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, emailCard, smsCard, contentCard, supplyCard), feed]);
+  }
+
   async function viewHome() {
     const isAdmin = S.me.role === 'admin';
+    if (isAdmin) return viewAdminHome();
     const [from, until] = periodBounds(S.period);
     const [dfrom, duntil] = dayBounds();
     const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 6);
@@ -2157,6 +2396,7 @@
         h('div', { class: 'meta' }, [isAdmin ? d.rep_name || 'No rep' : null, d.package, fmt(d.created_at, { month: 'short', day: 'numeric', year: 'numeric' })].filter(Boolean).join(' · ')),
         h('div', { class: 'tags' },
           h('span', { class: 'tag' }, money(d.amount_cents) + ' deal'),
+          d.mrr_cents ? h('span', { class: 'tag good' }, money(d.mrr_cents) + '/mo') : null,
           h('span', { class: 'tag' }, pctTxt(d.commission_pct)),
           d.paid ? h('span', { class: 'tag good' }, '✓ Paid ' + fmt(d.paid_at, { month: 'short', day: 'numeric' })) : h('span', { class: 'tag hot' }, 'Unpaid'))),
       h('div', { class: 'amt' }, h('b', null, money(d.commission_cents)), h('small', null, 'commission')));
@@ -2171,6 +2411,7 @@
     return sheet((box, close) => {
       const pkg = h('select', null, h('option', { value: '' }, 'Pick a package (optional)'), settings.packages.map((p) => h('option', { value: p.name }, p.name + (p.amount ? ' · $' + p.amount.toLocaleString() : ''))));
       const amount = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0', value: deal ? String(deal.amount_cents / 100) : '' });
+      const mrr = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0', value: deal && deal.mrr_cents ? String(deal.mrr_cents / 100) : '' });
       const repSel = h('select', null, h('option', { value: '' }, 'No rep (no commission)'), reps.map((r) => h('option', { value: r.id }, r.name + (r.active ? '' : ' (off)'))));
       repSel.value = String(deal ? deal.rep_id || '' : lead.assigned_to || '');
       const pct = h('input', { type: 'number', inputmode: 'decimal', min: 0, max: 100, step: '0.5', value: deal ? deal.commission_pct : pctFor(repSel.value) });
@@ -2194,7 +2435,7 @@
       saveBtn.onclick = async () => {
         err.textContent = '';
         if (!String(amount.value).trim()) { err.textContent = 'Enter the deal amount'; return; }
-        const payload = { amount: amount.value, rep_id: repSel.value ? +repSel.value : null, commission_pct: repSel.value ? pct.value : 0, package: pkg.value, note: note.value, paid: paid.checked };
+        const payload = { amount: amount.value, rep_id: repSel.value ? +repSel.value : null, commission_pct: repSel.value ? pct.value : 0, package: pkg.value, note: note.value, paid: paid.checked, mrr: mrr.value };
         saveBtn.disabled = true;
         try {
           if (deal) await api('PATCH', '/deals/' + deal.id, payload);
@@ -2205,7 +2446,7 @@
       box.append(
         h('h2', null, deal ? 'Edit deal' : 'Close the deal'), h('p', { class: 'sub' }, lead.business || deal.business || ''),
         h('div', { class: 'field' }, h('label', null, 'Package'), pkg),
-        h('div', { class: 'field' }, h('label', null, 'Deal amount ($, setup fee)'), amount),
+        h('div', { class: 'grid2' }, h('div', { class: 'field' }, h('label', null, 'Setup fee ($)'), amount), h('div', { class: 'field' }, h('label', null, 'Monthly ($/mo, MRR)'), mrr)),
         h('div', { class: 'grid2' }, h('div', { class: 'field' }, h('label', null, 'Rep'), repSel), h('div', { class: 'field' }, h('label', null, 'Commission %'), pct)),
         calc,
         h('label', { class: 'check' }, paid, h('span', null, 'Commission already paid')),
@@ -2385,7 +2626,7 @@
       clearTimeout(saveT);
       saveT = setTimeout(async () => {
         try {
-          const x = await api('PUT', '/tracker', { day: day.day, blocks: day.blocks, dials: day.dials, talks: day.talks, demos: day.demos, note: day.note });
+          const x = await api('PUT', '/tracker', { day: day.day, blocks: day.blocks, dials: day.dials, talks: day.talks, demos: day.demos, texts: day.texts, dms: day.dms, posts: day.posts, refs: day.refs, note: day.note });
           streak = x.streak;
           const i = hist.findIndex((z) => z.day === day.day);
           if (i >= 0) hist[i] = { ...hist[i], ...day, kept: x.kept };
@@ -2419,7 +2660,8 @@
           h('button', { class: 'trk-b', onclick: () => bump('dials', 10) }, '+10'),
           h('button', { class: 'trk-b main', onclick: () => bump('dials', 1) }, '+1 dial')));
       const small = h('div', { class: 'trk-two' }, counter('Pick-ups', 'talks'), counter('Audits booked', 'demos'));
-      const crm = h('p', { class: 'trk-crm' }, 'CRM today: ' + r.crm.logged + ' calls logged, ' + r.crm.booked + ' booked. Your tally can be higher, since you dial in Google Voice.');
+      const crm = h('p', { class: 'trk-crm' }, 'CRM today: ' + r.crm.logged + ' calls logged, ' + r.crm.booked + ' booked. Every outcome you log on a lead adds to your dials, pick-ups and audits automatically, so only tap +1 for calls you did not log.');
+      const outreach = h('div', { class: 'trk-two four' }, counter('Texts sent', 'texts'), counter('DMs sent', 'dms'), counter('Posts published', 'posts'), counter('Referral asks', 'refs'));
       const winRow = h('div', { class: 'trk-wins' }, wins.map((b) => {
         const on = day.blocks.includes(b.id);
         return h('button', { class: 'trk-win' + (on ? ' on' : ''), onclick: () => toggle(b.id), 'aria-pressed': on }, h('small', null, b.tag.replace(' win', '')), h('b', null, on ? 'Done' : b.title));
@@ -2446,6 +2688,7 @@
           } }, 'Save')));
       root.replaceChildren(
         hero, small, crm,
+        h('h3', { class: 'trk-h' }, 'Outreach and content', h('span', { class: 'dim small' }, 'feeds your Home charts')), outreach,
         h('h3', { class: 'trk-h' }, 'Daily wins', h('span', { class: 'dim small' }, winsDone + ' of 3' + (allWins ? '' : ''))), winRow,
         h('h3', { class: 'trk-h' }, 'The day, 6 AM to 6 PM'), list,
         h('h3', { class: 'trk-h' }, 'Last 14 days'), bars,

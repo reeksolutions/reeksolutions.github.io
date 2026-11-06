@@ -89,9 +89,10 @@ const SCHEMA = [
 ];
 
 // Stage 2 columns added to the existing deals table. Only added if missing — never drops data.
-const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER' };
+const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
+const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -156,6 +157,13 @@ async function ensureSchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
+  const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
+  for (const [name, type] of Object.entries(TRACKER_COLUMNS)) {
+    if (!tcols.has(name)) {
+      try { await env.DB.prepare(`ALTER TABLE tracker_days ADD COLUMN ${name} ${type}`).run(); }
+      catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+    }
+  }
   if (newEmailCols) {
     // leads the first robot already emailed join the sequence at step 1, so they get follow-ups
     await env.DB.prepare(`UPDATE leads SET email_step = 1, email_last_at = emailed_at,
@@ -252,7 +260,7 @@ function trkDow(date) {
 function trkRow(r, day) {
   let blocks = [];
   try { blocks = JSON.parse(r && r.blocks || '[]').filter((b) => TRK_BLOCKS.includes(b)); } catch { /* keep empty */ }
-  return { day, blocks, dials: r ? r.dials : 0, talks: r ? r.talks : 0, demos: r ? r.demos : 0, note: r && r.note || '' };
+  return { day, blocks, dials: r ? r.dials : 0, talks: r ? r.talks : 0, demos: r ? r.demos : 0, texts: r && r.texts || 0, dms: r && r.dms || 0, posts: r && r.posts || 0, refs: r && r.refs || 0, note: r && r.note || '' };
 }
 const trkKept = (r, goal) => !!r && r.dials >= goal && TRK_WINS.every((w) => r.blocks.includes(w));
 // Sundays are the day off, so they never break a streak
@@ -272,6 +280,29 @@ async function trkGoal(env) {
 async function trkLoad(env, userId, today) {
   const rows = (await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day >= ? ORDER BY day').bind(userId, trkShift(today, -120)).all()).results;
   return new Map(rows.map((r) => [r.day, trkRow(r, r.day)]));
+}
+
+// add to today's tracker counters (used when a call outcome is logged in the CRM)
+async function trkBump(env, userId, add) {
+  const day = ptParts().date;
+  await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, updated_at) VALUES (?,?,'[]',?,?,?,?)
+    ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, updated_at = excluded.updated_at`)
+    .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, now()).run();
+}
+const FOCUS_DEFAULT = 'med spa';
+async function focusTerms(env) {
+  const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
+  const base = String(raw).toLowerCase().trim();
+  if (!base) return [];
+  const terms = new Set([base, base.replace(/\s+/g, '')]);
+  if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
+  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 12);
+}
+function focusSql(terms) {
+  if (!terms.length) return { sql: '0', args: [] };
+  const parts = [], args = [];
+  for (const t of terms) { parts.push('(LOWER(COALESCE(l.category,\'\')) LIKE ? OR LOWER(l.business) LIKE ?)'); args.push('%' + t + '%', '%' + t + '%'); }
+  return { sql: '(' + parts.join(' OR ') + ')', args };
 }
 
 async function getSetting(env, key) {
@@ -1314,17 +1345,21 @@ async function api(request, env, url) {
   if (path === '/leads' && method === 'GET') {
     need(user, 'admin', 'rep');
     const p = url.searchParams;
-    const { w, args } = leadFilter(p, user);
+    let { w, args } = leadFilter(p, user);
+    const fx = focusSql(await focusTerms(env));
+    if (p.get('focus') === '1') { w = (w ? w + ' AND ' : 'WHERE ') + fx.sql; args = [...args, ...fx.args]; }
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
     const SORTS = { business: 'l.business COLLATE NOCASE', city: 'l.city COLLATE NOCASE', status: 'l.status', last_call: 'l.last_call_at', next: 'l.next_action_at', added: 'l.id', rep: 'u.name' };
     const sortKey = SORTS[p.get('sort')], dir = p.get('dir') === 'desc' ? 'DESC' : 'ASC';
-    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
+    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
+    const orderArgs = sortKey ? [] : fx.args;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
               l.attempts, l.last_call_at, l.demo_url, l.demo_sent, l.assigned_to, u.name AS rep_name,
-              l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at, l.tags, l.next_action_at, l.next_action
+              l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at, l.tags, l.next_action_at, l.next_action,
+              l.rating, l.reviews, l.link, l.place_id, l.website, l.address, (${fx.sql}) AS focus
        FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${w} ${order} LIMIT ? OFFSET ?`
-    ).bind(...args, limit + 1, offset).all();
+    ).bind(...fx.args, ...args, ...orderArgs, limit + 1, offset).all();
     const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first();
     return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
   }
@@ -1335,15 +1370,17 @@ async function api(request, env, url) {
     const { w, args } = leadFilter(p, user);
     const base = w ? w + ' AND' : 'WHERE';
     const per = Math.min(+url.searchParams.get('per') || 40, 100);
+    const fx = focusSql(await focusTerms(env));
     const out = [];
     for (const [key, label, list] of BOARD_STAGES) {
       const inList = `l.status IN (${list.map(() => '?').join(',')})`;
       const [rows, cnt] = await Promise.all([
         env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at, l.attempts, l.last_call_at, l.demo_url,
-            l.assigned_to, u.name AS rep_name, l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.next_action_at, l.next_action, l.updated_at
+            l.assigned_to, u.name AS rep_name, l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.next_action_at, l.next_action, l.updated_at,
+            l.rating, l.reviews, l.link, l.place_id, l.address, (${fx.sql}) AS focus
           FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${base} ${inList}
-          ORDER BY CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
-          .bind(...args, ...list, per).all(),
+          ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
+          .bind(...fx.args, ...args, ...list, ...fx.args, per).all(),
         env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${base} ${inList}`).bind(...args, ...list).first(),
       ]);
       out.push({ key, label, count: cnt.n, leads: rows.results });
@@ -1399,6 +1436,7 @@ async function api(request, env, url) {
       sets.push('next_action_at = ?'); args.push(v);
     }
     if (body.next_action !== undefined) { sets.push('next_action = ?'); args.push(str(body.next_action, 140) || null); }
+    if (body.call_notes !== undefined) { sets.push('call_notes = ?'); args.push(str(body.call_notes, 4000) || null); }
     if (!sets.length) return json({ ok: true });
     sets.push('updated_at = ?'); args.push(now());
     await env.DB.prepare(`UPDATE leads SET ${sets.join(', ')} WHERE id = ?`).bind(...args, lead.id).run();
@@ -1576,10 +1614,16 @@ async function api(request, env, url) {
       env.DB.prepare(`UPDATE leads SET ${sets.join(', ')} WHERE id = ?`).bind(...args, lead.id),
       env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, outcome, lead.status, to, t),
     ];
-    const note = str(body.note, 4000);
-    if (note) stmts.push(env.DB.prepare('INSERT INTO notes (lead_id,user_id,body,created_at) VALUES (?,?,?,?)').bind(lead.id, user.id, note, t));
+    const typed = str(body.note, 4000);
+    const live = str(body.call_notes !== undefined ? body.call_notes : lead.call_notes, 4000);
+    const note = [live, typed].filter(Boolean).join('\n\n');
+    if (note) stmts.push(env.DB.prepare('INSERT INTO notes (lead_id,user_id,body,created_at) VALUES (?,?,?,?)').bind(lead.id, user.id, note.slice(0, 4000), t));
+    if (live || lead.call_notes) stmts.push(env.DB.prepare('UPDATE leads SET call_notes = NULL WHERE id = ?').bind(lead.id));
     if (outcome === 'dnc' && lead.phone_norm) stmts.push(env.DB.prepare('INSERT OR IGNORE INTO dnc (phone_norm, lead_id, user_id, created_at) VALUES (?,?,?,?)').bind(lead.phone_norm, lead.id, user.id, t));
     await env.DB.batch(stmts);
+    if (user.role === 'admin' && outcome !== 'demo_sent') {
+      await trkBump(env, user.id, { dials: 1, talks: ['no_answer', 'voicemail'].includes(outcome) ? 0 : 1, demos: outcome === 'booked' ? 1 : 0 });
+    }
     return json({ ok: true, status: to });
   }
 
@@ -1751,7 +1795,7 @@ async function api(request, env, url) {
   /* ---- settings (admin) ---- */
   if (path === '/settings' && method === 'GET') {
     need(user, 'admin');
-    return json({ default_commission_pct: await defaultPct(env), packages: PACKAGES });
+    return json({ default_commission_pct: await defaultPct(env), packages: PACKAGES, focus_niche: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT });
   }
   if (path === '/settings' && method === 'PUT') {
     need(user, 'admin');
@@ -1760,6 +1804,7 @@ async function api(request, env, url) {
       if (v === null) bad('Enter a commission %');
       await setSetting(env, 'default_commission_pct', String(v));
     }
+    if (body.focus_niche !== undefined) await setSetting(env, 'focus_niche', str(body.focus_niche, 40).toLowerCase());
     return json({ ok: true });
   }
 
@@ -1954,7 +1999,7 @@ async function api(request, env, url) {
     if (p.get('paid') === '1') where.push('d.paid = 1');
     const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const deals = (await env.DB.prepare(
-      `SELECT d.id, d.lead_id, d.rep_id, d.amount_cents, d.commission_pct, d.paid, d.paid_at, d.note, d.package, d.created_at,
+      `SELECT d.id, d.lead_id, d.rep_id, d.amount_cents, d.commission_pct, d.paid, d.paid_at, d.note, d.package, d.created_at, d.mrr_cents,
               l.business, l.owner, l.city, u.name AS rep_name
        FROM deals d LEFT JOIN leads l ON l.id = d.lead_id LEFT JOIN users u ON u.id = d.rep_id
        ${w} ORDER BY d.paid ASC, d.created_at DESC LIMIT 500`
@@ -2001,8 +2046,8 @@ async function api(request, env, url) {
     if (!rep) pct = 0;
     const paid = body.paid ? 1 : 0, t = now();
     const stmts = [
-      env.DB.prepare(`INSERT INTO deals (lead_id, rep_id, amount_cents, commission_pct, paid, paid_at, note, package, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-        .bind(lead.id, rep ? rep.id : null, amount, pct, paid, paid ? t : null, str(body.note, 1000), str(body.package, 60), user.id, t),
+      env.DB.prepare(`INSERT INTO deals (lead_id, rep_id, amount_cents, commission_pct, paid, paid_at, note, package, created_by, created_at, mrr_cents) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(lead.id, rep ? rep.id : null, amount, pct, paid, paid ? t : null, str(body.note, 1000), str(body.package, 60), user.id, t, body.mrr === undefined || body.mrr === '' || body.mrr === null ? 0 : centsVal(body.mrr)),
     ];
     if (lead.status !== 'won') {
       stmts.push(env.DB.prepare(`UPDATE leads SET status = 'won', callback_at = NULL, updated_at = ? WHERE id = ?`).bind(t, lead.id));
@@ -2050,6 +2095,7 @@ async function api(request, env, url) {
     }
     if (body.note !== undefined) { sets.push('note = ?'); args.push(str(body.note, 1000)); }
     if (body.package !== undefined) { sets.push('package = ?'); args.push(str(body.package, 60)); }
+    if (body.mrr !== undefined) { sets.push('mrr_cents = ?'); args.push(body.mrr === '' || body.mrr === null ? 0 : centsVal(body.mrr)); }
     if (body.paid !== undefined) {
       sets.push('paid = ?', 'paid_at = ?'); args.push(body.paid ? 1 : 0, body.paid ? (deal.paid_at || now()) : null);
     }
@@ -2124,6 +2170,103 @@ async function api(request, env, url) {
     await setSetting(env, 'auto_finder', JSON.stringify(out));
     return json({ ok: true, config: out });
   }
+
+  /* ---- next lead to dial (call mode) ---- */
+  if (path === '/leads/next' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const cur = +url.searchParams.get('after') || 0;
+    const fx = focusSql(await focusTerms(env));
+    const t = now(), recent = new Date(Date.now() - 4 * 3600e3).toISOString();
+    const who = user.role === 'rep' ? 'AND l.assigned_to = ?' : '';
+    const row = await env.DB.prepare(
+      `SELECT l.id FROM leads l WHERE l.id != ? AND l.phone_norm IS NOT NULL AND l.phone_norm != ''
+         AND l.status IN ('new','demo_needed','demo_ready','called','callback') AND (l.status != 'callback' OR l.callback_at <= ?)
+         AND (l.last_call_at IS NULL OR l.last_call_at < ?) ${who}
+       ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
+         CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, l.attempts ASC, l.id ASC LIMIT 1`
+    ).bind(cur, t, recent, ...(user.role === 'rep' ? [user.id] : []), ...fx.args).first();
+    return json({ id: row ? row.id : null });
+  }
+
+  /* ---- everything-on-one-page overview (admin home) ---- */
+  if (path === '/overview' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date, pt = ptParts();
+    const goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
+    const start = (await getSetting(env, 'push_start')) || '2026-11-02';
+    const dayN = Math.max(1, Math.floor((Date.parse(today) - Date.parse(start)) / 864e5) + 1);
+    const days = []; for (let i = 13; i >= 0; i--) days.push(trkShift(today, -i));
+    const ptDate = (iso) => ptParts(new Date(iso)).date;
+    const fx = focusSql(await focusTerms(env));
+    const since14 = new Date(Date.now() - 16 * 864e5).toISOString();
+    const [statusRows, focusRows, newLeads, emailRows, emailLead, dealRows, sinceCalls] = await Promise.all([
+      env.DB.prepare("SELECT status, COUNT(*) AS n FROM leads GROUP BY status").all(),
+      env.DB.prepare(`SELECT l.status AS status, COUNT(*) AS n FROM leads l WHERE ${fx.sql} GROUP BY l.status`).bind(...fx.args).all(),
+      env.DB.prepare('SELECT created_at, source FROM leads WHERE created_at >= ?').bind(since14).all(),
+      env.DB.prepare('SELECT kind, created_at FROM email_log WHERE created_at >= ?').bind(since14).all(),
+      env.DB.prepare("SELECT SUM(CASE WHEN email_status = 'active' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN email IS NOT NULL AND email != '' AND emailed_at IS NULL THEN 1 ELSE 0 END) AS unemailed, SUM(CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END) AS with_email FROM leads").first(),
+      env.DB.prepare('SELECT amount_cents, mrr_cents, created_at FROM deals').all(),
+      env.DB.prepare("SELECT created_at, outcome, to_status FROM calls WHERE created_at >= ?").bind(since14).all(),
+    ]);
+    const st = Object.fromEntries(statusRows.results.map((r) => [r.status, r.n]));
+    const fst = Object.fromEntries(focusRows.results.map((r) => [r.status, r.n]));
+    const OPENF = ['new', 'demo_needed', 'demo_ready'];
+    const sum = (o, keys) => keys.reduce((a, k) => a + (o[k] || 0), 0);
+    // per-day series
+    const series = (key) => days.map((d) => (byDay.get(d) || trkRow(null, d))[key] || 0);
+    const dialsDay = series('dials'), talksDay = series('talks'), demosDay = series('demos');
+    const perDay = (rows, pick) => { const m = Object.fromEntries(days.map((d) => [d, 0])); for (const r of rows) { const d = ptDate(r.created_at); if (d in m && (!pick || pick(r))) m[d]++; } return days.map((d) => m[d]); };
+    const emailSeries = { sent: perDay(emailRows.results, (r) => r.kind === 'sent'), replied: perDay(emailRows.results, (r) => r.kind === 'replied'), bounced: perDay(emailRows.results, (r) => r.kind === 'bounced') };
+    const eKind = (k) => emailRows.results.filter((r) => r.kind === k).length;
+    const sent14 = eKind('sent'), replied14 = eKind('replied');
+    const supply = perDay(newLeads.results);
+    // revenue
+    const monthKey = (iso) => ptDate(iso).slice(0, 7), thisMonth = today.slice(0, 7);
+    const months = []; { let [y, m] = today.split('-').map(Number); for (let i = 5; i >= 0; i--) { const dt = new Date(Date.UTC(y, m - 1 - i, 1)); months.push(dt.toISOString().slice(0, 7)); } }
+    const rev = Object.fromEntries(months.map((k) => [k, { setup: 0, mrr: 0 }]));
+    let mrrTotal = 0, setupTotal = 0;
+    for (const d of dealRows.results) {
+      mrrTotal += d.mrr_cents || 0; setupTotal += d.amount_cents || 0;
+      const k = monthKey(d.created_at); if (rev[k]) { rev[k].setup += d.amount_cents || 0; rev[k].mrr += d.mrr_cents || 0; }
+    }
+    // today / week rollups
+    const tdy = byDay.get(today) || trkRow(null, today);
+    const last7 = days.slice(-7), tot = (key, ds) => ds.reduce((a, d) => a + ((byDay.get(d) || {})[key] || 0), 0);
+    const workDays7 = last7.filter((d) => trkDow(d) !== 0 && d <= today);
+    const dials7 = tot('dials', last7), talks7 = tot('talks', last7), demos7 = tot('demos', last7);
+    const avg7 = workDays7.length ? Math.round(dials7 / workDays7.length) : 0;
+    const texts7 = tot('texts', last7), dms7 = tot('dms', last7), posts7 = tot('posts', last7), refs7 = tot('refs', last7);
+    const hoursIn = Math.max(0, Math.min(12, pt.hour - 6)), expectedNow = trkDow(today) === 0 ? 0 : Math.round(goal * hoursIn / 12);
+    const wonN = st.won || 0, focusOpen = sum(fst, OPENF), focusAll = Object.values(fst).reduce((a, b) => a + b, 0);
+    const daysOfLeads = goal ? Math.floor(focusOpen / goal * 10) / 10 : 0;
+    // honest reality check
+    const check = [];
+    const add = (level, text) => check.push({ level, text });
+    if (trkDow(today) !== 0 && pt.hour >= 9 && tdy.dials < expectedNow * 0.6) add('bad', `${tdy.dials} dials so far — at this hour you should be near ${expectedNow}. You're behind pace.`);
+    else if (trkDow(today) !== 0 && tdy.dials >= goal) add('good', `You hit ${goal} dials today. That's the whole game.`);
+    if (workDays7.length >= 3 && avg7 < goal * 0.75) add('bad', `Your 7-day average is ${avg7} dials/day against a goal of ${goal}. The formula can't be proven at that volume.`);
+    else if (workDays7.length >= 3 && avg7 >= goal) add('good', `7-day average is ${avg7} dials/day. Volume is on target.`);
+    if (dayN >= 4 && demos7 === 0) add('bad', `Zero audits booked in the last 7 days. Dials without bookings means the opener or the list needs work.`);
+    else if (dials7 >= 50 && talks7 > 0 && demos7 / talks7 < 0.1) add('warn', `Only ${demos7} audit${demos7 === 1 ? '' : 's'} from ${talks7} conversations (${Math.round(100 * demos7 / talks7)}%). Tighten the first 20 seconds of the call.`);
+    if (dials7 >= 30 && talks7 / dials7 < 0.05) add('warn', `Pick-up rate is ${Math.round(100 * talks7 / dials7)}%. Try calling med spas 10–12 and 2–4, when the front desk is quieter.`);
+    if (setupTotal === 0 && dayN >= 7) add('bad', `No revenue yet and you're on day ${dayN} of 30. Every day without a booked audit makes day 30 harder.`);
+    if (focusOpen < goal * 2) add('warn', `Only ${focusOpen} fresh ${(await getSetting(env, 'focus_niche')) || FOCUS_DEFAULT} leads left — ${daysOfLeads < 1 ? 'less than a day' : 'about ' + daysOfLeads + ' days'} of dialing. Turn on the lead bot or run the Lead Finder.`);
+    if (sent14 >= 20 && replied14 === 0) add('warn', `${sent14} cold emails sent in 14 days and no replies. The email isn't your channel yet — the phone is.`);
+    if (posts7 === 0 && dayN >= 3) add('warn', 'No content posted in 7 days. Log your posts on the tracker so this stays honest.');
+    if (!check.length) add('good', 'Nothing alarming. Keep stacking dials.');
+    return json({
+      today, day_n: dayN, goal, focus_niche: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT,
+      calls: { days, dials: dialsDay, talks: talksDay, demos: demosDay, today: tdy.dials, dials7, talks7, demos7, avg7, expected_now: expectedNow },
+      funnel: { new: sum(st, OPENF), called: st.called || 0, callback: st.callback || 0, booked: st.booked || 0, call2: st.call2 || 0, won: wonN, lost: st.lost || 0, focus_open: focusOpen, focus_total: focusAll, total: Object.values(st).reduce((a, b) => a + b, 0) },
+      revenue: { months, setup: months.map((k) => rev[k].setup), mrr: months.map((k) => rev[k].mrr), mrr_total: mrrTotal, setup_total: setupTotal, month_setup: rev[thisMonth] ? rev[thisMonth].setup : 0, deals: dealRows.results.length },
+      email: { days, sent: emailSeries.sent, replied: emailSeries.replied, bounced: emailSeries.bounced, sent14, replied14, bounced14: eKind('bounced'), opted_out14: eKind('opted_out'), active: emailLead.active || 0, unemailed: emailLead.unemailed || 0, with_email: emailLead.with_email || 0 },
+      outreach: { days, texts: series('texts'), dms: series('dms'), texts7, dms7, today_texts: tdy.texts, today_dms: tdy.dms },
+      content: { days, posts: series('posts'), posts7, refs: series('refs'), refs7, today_posts: tdy.posts, today_refs: tdy.refs },
+      supply: { days, added: supply, open: sum(st, OPENF), focus_open: focusOpen, days_left: daysOfLeads },
+      streak: trkStreak(byDay, goal, today), check,
+    });
+  }
+
   /* ---- personal tracker (admin) ---- */
   if (path === '/tracker' && method === 'GET') {
     need(user, 'admin');
@@ -2141,12 +2284,12 @@ async function api(request, env, url) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < trkShift(today, -7)) bad('You can only edit today or the last 7 days');
     const cur = trkRow(await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day = ?').bind(user.id, day).first(), day);
     const num = (v, old) => (v === undefined ? old : Math.max(0, Math.min(5000, parseInt(v, 10) || 0)));
-    const out = { ...cur, dials: num(body.dials, cur.dials), talks: num(body.talks, cur.talks), demos: num(body.demos, cur.demos) };
+    const out = { ...cur, dials: num(body.dials, cur.dials), talks: num(body.talks, cur.talks), demos: num(body.demos, cur.demos), texts: num(body.texts, cur.texts), dms: num(body.dms, cur.dms), posts: num(body.posts, cur.posts), refs: num(body.refs, cur.refs) };
     if (body.blocks !== undefined) out.blocks = [...new Set((Array.isArray(body.blocks) ? body.blocks : []).filter((b) => TRK_BLOCKS.includes(b)))];
     if (body.note !== undefined) out.note = str(body.note, 500);
-    await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, note, updated_at) VALUES (?,?,?,?,?,?,?,?)
-      ON CONFLICT(user_id, day) DO UPDATE SET blocks = excluded.blocks, dials = excluded.dials, talks = excluded.talks, demos = excluded.demos, note = excluded.note, updated_at = excluded.updated_at`)
-      .bind(user.id, day, JSON.stringify(out.blocks), out.dials, out.talks, out.demos, out.note, now()).run();
+    await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, texts, dms, posts, refs, note, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET blocks = excluded.blocks, dials = excluded.dials, talks = excluded.talks, demos = excluded.demos, texts = excluded.texts, dms = excluded.dms, posts = excluded.posts, refs = excluded.refs, note = excluded.note, updated_at = excluded.updated_at`)
+      .bind(user.id, day, JSON.stringify(out.blocks), out.dials, out.talks, out.demos, out.texts, out.dms, out.posts, out.refs, out.note, now()).run();
     const goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
     return json({ ok: true, day: out, streak: trkStreak(byDay, goal, today), kept: trkKept(out, goal) });
   }
