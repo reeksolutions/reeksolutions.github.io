@@ -2286,8 +2286,15 @@
     { id: 'audit', name: 'Audit post', job: 'Break down a med spa\'s front desk and show what you would fix.', visual: 'Screenshot of a public Google listing (hours, phone, reviews) with arrows and 3 fixes. Blur the name if you haven\'t asked permission.' },
     { id: 'result', name: 'Result post', job: 'Show the wins.', visual: 'Screenshot of your own scorecard (dials, audits booked) until you have client results. Never invent a client result.' },
   ];
-  const CTA = { ig: 'Own a med spa? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your front desk.', x: 'Own a med spa? DM me "AUDIT" for a free 30-min AI audit.', li: 'If you run a med spa and want a free 30-minute AI audit of your front desk, send me a message.' };
+  const CTA = {
+    ig: 'Own a med spa? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your front desk.',
+    fb: 'Own a med spa? Send me a message with the word AUDIT and I\'ll run a free 30-minute AI audit of your front desk.',
+    tt: 'Own a med spa? DM me AUDIT for a free AI audit.',
+    yt: 'Own a med spa? DM me AUDIT for a free 30-minute AI audit.',
+    x: 'Own a med spa? DM me "AUDIT" for a free 30-min AI audit.',
+    li: 'If you run a med spa and want a free 30-minute AI audit of your front desk, send me a message.' };
   const TAGS = '#medspa #medspamarketing #aesthetics #botox #aiautomation #smallbusiness';
+  const TAGSBY = { ig: TAGS, fb: '', tt: '#medspa #aiautomation #smallbusiness #businesstips', yt: '#shorts #medspa #aiautomation', x: '', li: '#medspa #aiautomation #smallbusiness' };
   const CONTENT_LIB = {
     problem: [
       { hook: 'Where med spas lose the most money',
@@ -2462,7 +2469,7 @@ You leave with a ballpark. No card needed.`,
 The goal is a clear picture of the leak and a ballpark of the fix, whether or not we work together.` },
     ],
   };
-  const CPLAT = [['ig', 'Instagram'], ['x', 'X'], ['li', 'LinkedIn']];
+  const CPLAT = [['ig', 'Instagram'], ['fb', 'Facebook'], ['tt', 'TikTok'], ['yt', 'YT Shorts'], ['x', 'X'], ['li', 'LinkedIn']];
 
   /* ================= demo videos (rendered MP4s in /demos, same CTA as the posts) ================= */
   const DV_STYLES = { A: 'Flow map', B: 'Text thread', C: 'Money counter' };
@@ -2483,13 +2490,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const dvOf = (id) => { const [st, tp] = id.split('-'); return { id, style: st, topic: tp, t: DV_TOPICS[tp], styleName: DV_STYLES[st] }; };
   const dvScript = (v) => ['hook', 'problem', 'cost', 'fix'].map((k) => v.t.vo[k]).concat(VO_CTA).join(' ');
   const dvToday = (n) => { const i = ((n - 1) * 2) % DV_ORDER.length; return [DV_ORDER[i], DV_ORDER[(i + 1) % DV_ORDER.length]]; };
-  const DV_PLAT = [['ig', 'Instagram'], ['x', 'X'], ['li', 'LinkedIn']];
+  const DV_PLAT = CPLAT;
   function dvCard(v, dayN, open) {
     let plat = 'ig';
     const key = 'rs_dv_' + dayN + '_' + v.id;
     let posted = false; try { posted = localStorage.getItem(key) === '1'; } catch {}
     const area = h('textarea', { class: 'ct-text', rows: 9 });
-    const setCap = () => { area.value = v.t.cap[plat] + '\n\n' + CTA[plat] + (plat === 'ig' ? '\n\n' + TAGS : ''); };
+    const setCap = () => { const ck = { ig: 'ig', fb: 'ig', tt: 'x', yt: 'x', x: 'x', li: 'li' }[plat]; area.value = v.t.cap[ck] + '\n\n' + CTA[plat] + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : ''); };
     const tabs = h('div', { class: 'stagechips' });
     const drawTabs = () => tabs.replaceChildren(...DV_PLAT.map(([k, label]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); setCap(); } }, label)));
     drawTabs(); setCap();
@@ -2508,6 +2515,164 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
           h('p', { class: 'dv-script' }, script), h('button', { class: 'btn', onclick: () => cp(script, 'Script copied. Paste it into your voice tool') }, 'Copy script'))));
   }
 
+  /* ================= content generator v2: topic x stage x platform, all free and in the CRM ================= */
+  const GEN_TOPICS = {
+    missed: { name: 'Missed calls',
+      hooks: ['Your phone just cost you a booking.', 'Nobody leaves a voicemail anymore.', 'Where your med spa bleeds money: the phone.'],
+      symptom: 'Your front desk is with a patient. The phone rings. Nobody picks up.',
+      diagnosis: "That caller doesn't leave a voicemail. They call the next spa on Google, usually within minutes.",
+      math: '3 missed bookings a week × $400 = $1,200 a week',
+      surgery: 'An AI receptionist answers every call on the first ring, answers questions and books the consult.',
+      recovery: 'You keep the booking, and your front desk stays with the patient in the room.',
+      question: 'How many calls did your spa miss this week? Be honest 👇',
+      scenes: ['Luxury med spa front desk at dusk, empty chair, desk phone lighting up and ringing, warm light, slow push-in', 'Woman on a couch in the evening looking at her phone, hearing voicemail, frustrated, cinematic', 'Phone screen showing an appointment confirmed, glowing calendar, dark background'] },
+    slow: { name: 'Slow replies',
+      hooks: ['The first spa to reply wins.', 'A 7pm inquiry and a 9am reply. Already lost.', 'Speed is the whole game.'],
+      symptom: 'A new inquiry comes in at 7pm. Nobody sees it until morning.',
+      diagnosis: 'By then she has messaged two other spas, and whoever replied first got the booking.',
+      math: '2 lost leads a week × $500 = $1,000 a week',
+      surgery: 'An AI replies in seconds, asks the right questions and offers a time.',
+      recovery: 'You wake up to a booked consult instead of a cold lead.',
+      question: 'How fast do you reply to a new inquiry? Be honest 👇',
+      scenes: ['Woman at night typing an inquiry on her phone in a dim living room, cinematic close-up', 'Clock on a wall showing hours passing while a phone sits unanswered on a desk', 'Phone lighting up with an instant reply and a booked time, soft glow'] },
+    quiet: { name: 'Quiet customers',
+      hooks: ['200 customers went quiet.', 'Your best leads are already in your list.', 'Past clients are the cheapest bookings.'],
+      symptom: 'Every spa has clients who came once and never came back. Nobody followed up.',
+      diagnosis: "They didn't leave unhappy. They just forgot, and no one reminded them.",
+      math: '200 quiet clients × 5% returning × $300 = $3,000 sitting in your list',
+      surgery: 'An AI texts them a friendly "we miss you" and books the ones who reply.',
+      recovery: 'Revenue from people you already earned, with zero staff time.',
+      question: 'When did you last follow up with a past client? 👇',
+      scenes: ['Rows of old client cards in a drawer in a quiet med spa, soft light, dust in the air', 'Woman smiling as a friendly text message arrives on her phone', 'Treatment room with a client relaxing, calm and premium, shallow depth of field'] },
+    reviews: { name: 'Reviews',
+      hooks: ['Two spas. Same quality. Different reviews.', 'Reviews are a system, not luck.', 'Your Google rating is your front desk.'],
+      symptom: 'Happy clients leave without ever posting a review.',
+      diagnosis: 'Nobody asks at the right moment, and leaving one takes too many steps.',
+      math: '',
+      surgery: 'One tap after the visit sends them straight to your Google review page, automatically.',
+      recovery: 'More 5-star reviews every week, without the awkward ask.',
+      question: 'How many reviews did you get last month? 👇',
+      scenes: ['Phone showing two spa listings side by side, one with many five-star reviews, cinematic', 'Happy client leaving a med spa holding her phone, golden hour', 'Close-up of a phone tapping a review link, stars lighting up'] },
+    noshow: { name: 'No-shows',
+      hooks: ['No-shows are a leak you can fix.', 'An empty chair costs more than an ad.', 'A text can save the appointment.'],
+      symptom: 'Clients forget their appointment and the chair sits empty.',
+      diagnosis: 'One missed reminder turns a $400 slot into zero, and nobody can fill it last minute.',
+      math: '4 no-shows a week × $300 = $1,200 a week',
+      surgery: 'Automatic reminders and a quick reschedule text keep the calendar full.',
+      recovery: 'Fewer empty chairs, and a waitlist that fills open slots.',
+      question: "What's your no-show rate? 👇",
+      scenes: ['Empty treatment chair in a bright med spa, clock ticking, quiet and still', 'Woman at home glancing at a phone reminder, then smiling', 'Full appointment calendar on a tablet at a reception desk'] },
+    afterhours: { name: 'After hours',
+      hooks: ['People search for med spas at night.', 'The 5pm problem.', 'Weekends are when they book.'],
+      symptom: 'Most people look up a med spa in the evening or on the weekend.',
+      diagnosis: "That's exactly when most front desks are closed, so they book whoever answers.",
+      math: '',
+      surgery: 'An AI answers calls and messages 24/7 and books the consult.',
+      recovery: 'Your spa never closes, even when your team does.',
+      question: 'What happens to calls at 9pm at your spa? 👇',
+      scenes: ['City street at night through a window, a closed med spa with a dark front desk, neon reflections', 'Woman searching on her phone in bed at night, screen glow on her face', 'Phone confirming a booking at 9pm, calm and satisfying'] },
+  };
+  const GEN_STAGES = [['symptom', 'Symptom'], ['diagnosis', 'Diagnosis'], ['surgery', 'The surgery'], ['recovery', 'Recovery'], ['question', 'Question']];
+  const genEx = (t) => (t.math ? t.math + ' (Example numbers. Yours will differ.)' : '');
+  function genLines(tid, stage) {
+    const t = GEN_TOPICS[tid];
+    if (stage === 'symptom') return ['Symptom: ' + t.symptom, genEx(t)].filter(Boolean);
+    if (stage === 'diagnosis') return ['Diagnosis: ' + t.diagnosis, genEx(t)].filter(Boolean);
+    if (stage === 'surgery') return ['The surgery: ' + t.surgery, t.recovery];
+    if (stage === 'recovery') return ['Before: ' + t.symptom, 'After: ' + t.recovery, 'How: ' + t.surgery];
+    return [t.symptom, t.question];
+  }
+  function genPost(tid, stage, seed, plat) {
+    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], lines = genLines(tid, stage), cta = CTA[plat], tags = TAGSBY[plat];
+    if (plat === 'x') {
+      const parts = [hook].concat(lines);
+      while (parts.length > 1 && (parts.join('\n\n') + '\n\n' + cta).length > 280) parts.pop();
+      return parts.join('\n\n') + '\n\n' + cta;
+    }
+    if (plat === 'yt') return 'Title: ' + (hook.length > 52 ? hook.slice(0, 51) + '…' : hook) + ' #shorts\n\nDescription:\n' + lines.join('\n\n') + '\n\n' + cta + '\n\n' + tags;
+    const lead = (plat === 'ig' || plat === 'fb' || plat === 'tt') ? '🩺 ' + hook : hook;
+    const body = plat === 'tt' ? lines.slice(0, 1) : lines;
+    return lead + '\n\n' + body.join('\n\n') + '\n\n' + cta + (tags ? '\n\n' + tags : '');
+  }
+  const spoken = (s) => s.replace(/ × /g, ' times ').replace(/ = /g, ' equals ').replace(/\$([\d,]+)/g, '$1 dollars').replace(/ 👇/g, '').replace(/(\d+)%/g, '$1 percent');
+  function genVideo(tid, seed) {
+    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
+    const script = [hook, t.symptom, t.diagnosis, t.math ? 'Say that adds up: ' + t.math + '.' : '', 'Now, same situation. ' + t.surgery, t.recovery, VO_CTA].filter(Boolean).map(spoken).join(' ');
+    const captions = [hook, t.symptom, t.math || t.diagnosis, t.surgery, 'DM "AUDIT" for a free AI audit'];
+    const scenes = t.scenes.map((s, i) => 'Vertical 9:16, cinematic, premium, no text, no logos. ' + s + (i === 0 ? '' : ''));
+    return { script, captions, scenes };
+  }
+  const WEEK1 = [
+    ['Day 1: Intro', "I'm the Business Surgeon. I find where your business is bleeding money and fix it with AI. Missed calls, slow replies, no reviews. Most owners don't know it's happening. I'll show you how to spot it. 🩺"],
+    ['Day 2: Symptom (missed calls)', "Symptom: your phone rings during a treatment and nobody picks up. That caller doesn't leave a voicemail. They call the next spa on Google. An AI receptionist answers in seconds, 24/7, and books them. Do you know how many calls you missed this week?"],
+    ['Day 3: Diagnosis (slow replies)', "Diagnosis: you reply to a new lead 3 hours later. They already booked somewhere else. The first business to answer usually wins. Speed is the cure."],
+    ['Day 4: Reviews', "Two spas, same quality. One has 400 reviews and one has 40. Guess who gets the call. Reviews aren't luck, they're a system. Ask every happy client at the right moment, and make it one tap."],
+    ['Day 5: The surgery', "The surgery: 1) AI answers every call. 2) Every lead gets a text back instantly. 3) Reviews are collected automatically. You keep treating clients, and the system does the rest."],
+    ['Day 6: Engagement', "Business owners: what's the one thing in your business you wish ran without you? Drop it below. I'll tell you if AI can fix it. 👇"],
+    ['Day 7: Call to action', 'Free AI audit. I look at your business and show you exactly where you are losing customers. No pitch, no pressure. DM "AUDIT" and I\'ll send it over.'],
+  ];
+  const copyText = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
+  function genSection(dayN, done) {
+    const ids = Object.keys(GEN_TOPICS);
+    const G = { topic: ids[(dayN - 1) % ids.length], stage: GEN_STAGES[(dayN - 1) % GEN_STAGES.length][0], seed: dayN, plat: (CPLAT.find(([k]) => !done.has(k)) || CPLAT[0])[0] };
+    const root = h('section', { class: 'ct-today' });
+    const area = h('textarea', { class: 'ct-text', rows: 12 });
+    const count = h('small', { class: 'dim' });
+    const chips = (items, cur, on) => h('div', { class: 'stagechips' }, items.map(([k, label]) => h('button', { class: 'schip' + (cur === k ? ' on' : ''), onclick: () => on(k) }, label)));
+    const vid = h('div', { class: 'gen-vid' });
+    const fillText = () => {
+      area.value = genPost(G.topic, G.stage, G.seed, G.plat);
+      count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters';
+      count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : '';
+    };
+    const fillVideo = () => {
+      const v = genVideo(G.topic, G.seed);
+      vid.replaceChildren(
+        h('p', { class: 'dim small' }, 'Voice-over script (about 30 seconds). Copy it into the voice step when it is ready, or any voice tool for now.'),
+        h('p', { class: 'dv-script' }, v.script), h('button', { class: 'btn', onclick: () => copyText(v.script, 'Script copied') }, 'Copy script'),
+        h('p', { class: 'dim small' }, 'On-screen text, one line per scene:'),
+        h('pre', { class: 'gen-pre' }, v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n')),
+        h('button', { class: 'btn', onclick: () => copyText(v.captions.join('\n'), 'On-screen text copied') }, 'Copy on-screen text'),
+        h('p', { class: 'dim small' }, 'Scene prompts for the image/video generator:'),
+        h('pre', { class: 'gen-pre' }, v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n')),
+        h('button', { class: 'btn', onclick: () => copyText(v.scenes.join('\n\n'), 'Scene prompts copied') }, 'Copy scene prompts'));
+    };
+    const draw = () => {
+      const isDone = done.has(G.plat);
+      const doneBtn = h('button', { class: 'btn ok' + (isDone ? ' on' : ''), onclick: async () => {
+        doneBtn.disabled = true;
+        try { await api('POST', '/content/toggle', { platform: G.plat, type: G.stage }); if (done.has(G.plat)) done.delete(G.plat); else done.add(G.plat); draw(); } catch (e) { fail(e); doneBtn.disabled = false; }
+      } }, isDone ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
+      root.replaceChildren(
+        h('div', { class: 'ct-type' }, h('span', { class: 'tag hot' }, 'Post generator'), h('p', null, 'Pick what the post is about and where it goes. Shuffle gives a new version of the same post.')),
+        h('p', { class: 'dim small' }, 'Topic'), chips(ids.map((k) => [k, GEN_TOPICS[k].name]), G.topic, (k) => { G.topic = k; draw(); }),
+        h('p', { class: 'dim small' }, 'Stage of the series'), chips(GEN_STAGES, G.stage, (k) => { G.stage = k; draw(); }),
+        h('p', { class: 'dim small' }, 'Platform'), chips(CPLAT.map(([k, l]) => [k, l + (done.has(k) ? ' ✓' : '')]), G.plat, (k) => { G.plat = k; draw(); }),
+        area, count,
+        h('div', { class: 'row wrap' },
+          h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Copied. Paste it into ' + CPLAT.find(([k]) => k === G.plat)[1]) }, 'Copy post'),
+          h('button', { class: 'btn', onclick: () => { G.seed += 1; draw(); } }, 'Shuffle'), doneBtn),
+        h('p', { class: 'dim small' }, 'Example math is labeled as an example. Never swap in a client result you do not have.'),
+        h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Video post'), h('small', { class: 'dim' }, 'script, on-screen text, scene prompts')), vid));
+      fillText(); fillVideo();
+      area.oninput = () => { count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters'; count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : ''; };
+    };
+    draw();
+    return root;
+  }
+  function weekOneSection() {
+    return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Week one posts (ready to go)'), h('small', { class: 'dim' }, 'The first 7 days, one per day')),
+      WEEK1.map(([title, text]) => {
+        let plat = 'ig';
+        const area = h('textarea', { class: 'ct-text', rows: 7 });
+        const set = () => { area.value = text + (title.startsWith('Day 7') ? '' : '\n\n' + CTA[plat]) + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : ''); };
+        const tabs = h('div', { class: 'stagechips' });
+        const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, l]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); set(); } }, l)));
+        drawTabs(); set();
+        return h('div', { class: 'ct-tpl' }, h('b', null, title), tabs, area, h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Copied') }, 'Copy post'));
+      }));
+  }
+
   async function viewContent() {
     const [r, trk] = await Promise.all([api('GET', '/content'), api('GET', '/tracker')]);
     const dayN = r.day_n;
@@ -2515,38 +2680,19 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const tplFor = (n) => { const t = typeFor(n); const lib = CONTENT_LIB[t.id]; return lib[Math.floor(((((n - 1) % (4 * lib.length)) + 4 * lib.length) % (4 * lib.length)) / 4) % lib.length]; };
     const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
     const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
-    const type = typeFor(dayN), tpl = tplFor(dayN);
     const done = new Set(r.done_today);
-    let plat = CPLAT.find(([k]) => !done.has(k))?.[0] || 'ig';
-    const area = h('textarea', { class: 'ct-text', rows: 11 });
-    const doneBtn = h('button', { class: 'btn ok' });
-    const setText = () => { area.value = fill(tpl[plat]) + '\n\n' + CTA[plat] + (plat === 'ig' ? '\n\n' + TAGS : ''); doneBtn.textContent = done.has(plat) ? 'Posted ✓ (tap to undo)' : 'Mark as posted'; doneBtn.classList.toggle('on', done.has(plat)); };
-    const tabs = h('div', { class: 'stagechips' });
-    const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, label]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); setText(); } }, label + (done.has(k) ? ' ✓' : ''))));
-    drawTabs(); setText();
-    const copy = h('button', { class: 'btn primary', onclick: async () => {
-      try { await navigator.clipboard.writeText(area.value); toast('Copied. Paste it into ' + CPLAT.find(([k]) => k === plat)[1]); } catch { area.select(); toast('Press copy on your keyboard', true); }
-    } }, 'Copy post');
-    doneBtn.onclick = async () => {
-      doneBtn.disabled = true;
-      try { await api('POST', '/content/toggle', { platform: plat, type: type.id }); viewContent(); } catch (e) { fail(e); doneBtn.disabled = false; }
-    };
     const strip = h('div', { class: 'ct-week' }, r.week.map((d) => {
       const t = typeFor(d.n);
-      return h('div', { class: 'ct-day' + (d.today ? ' now' : '') + (d.done.length === 3 ? ' full' : '') },
-        h('small', null, d.label), h('b', null, t.name.replace(' post', '')), h('span', null, d.future ? '' : d.done.length + '/3'));
+      return h('div', { class: 'ct-day' + (d.today ? ' now' : '') + (d.done.length >= CPLAT.length ? ' full' : '') },
+        h('small', null, d.label), h('b', null, t.name.replace(' post', '')), h('span', null, d.future ? '' : d.done.length + '/' + CPLAT.length));
     }));
     const lib = h('div', { class: 'ct-lib' }, CONTENT_TYPES.map((t) => h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, t.name), h('small', { class: 'dim' }, t.job)),
       h('p', { class: 'ct-vis' }, 'Visual: ' + t.visual),
       CONTENT_LIB[t.id].map((p) => h('div', { class: 'ct-tpl' }, h('b', null, p.hook), h('pre', null, fill(p.ig)))))));
     shell('content', [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Post today'), h('p', { class: 'sub' }, 'One post a day, on Instagram, X and LinkedIn. Faceless and phone-only. Takes 10 minutes.'))),
-      h('section', { class: 'ct-today' },
-        h('div', { class: 'ct-type' }, h('span', { class: 'tag hot' }, 'Today: ' + type.name), h('p', null, type.job), h('p', { class: 'dim small' }, 'Visual: ' + type.visual)),
-        h('div', { class: 'ct-hook' }, tpl.hook),
-        tabs, area,
-        h('div', { class: 'row wrap' }, copy, doneBtn),
-        h('p', { class: 'dim small' }, 'Edit the text first if you want. The numbers in example math are illustrations, so keep them labeled as examples. Marking a platform posted adds to your post count on Home.')),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Post today'), h('p', { class: 'sub' }, 'One post a day on every platform. Pick a topic and stage, shuffle until it sounds like you, copy, post. Faceless and phone-only.'))),
+      genSection(dayN, done),
+      weekOneSection(),
       h('h3', { class: 'trk-h' }, 'Demo videos for today (2 ready)'),
       h('p', { class: 'dim small' }, 'Same call to action on every caption. Download, add the voice-over, post one now and one later.'),
       h('div', { class: 'dv-grid' }, dvToday(dayN).map((id, i) => dvCard(dvOf(id), dayN, i === 0))),

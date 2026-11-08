@@ -2472,7 +2472,7 @@ async function api(request, env, url) {
   if (path === '/content/toggle' && method === 'POST') {
     need(user, 'admin');
     const today = ptParts().date, platform = str(body.platform, 10);
-    if (!['ig', 'x', 'li'].includes(platform)) bad('Pick Instagram, X or LinkedIn');
+    if (!['ig', 'fb', 'tt', 'yt', 'x', 'li'].includes(platform)) bad('Pick a platform: Instagram, Facebook, TikTok, YouTube Shorts, X or LinkedIn');
     const had = await env.DB.prepare('SELECT 1 AS n FROM content_log WHERE day = ? AND platform = ?').bind(today, platform).first();
     if (had) await env.DB.prepare('DELETE FROM content_log WHERE day = ? AND platform = ?').bind(today, platform).run();
     else await env.DB.prepare('INSERT INTO content_log (day, platform, type, created_at) VALUES (?,?,?,?)').bind(today, platform, str(body.type, 20), now()).run();
@@ -2560,7 +2560,7 @@ async function api(request, env, url) {
     if (!sunday) {
       if (t.dials < goal) todo.push(`${goal - t.dials} dials short of the goal`);
       if (wins.length < 3) todo.push('Missing wins: ' + ['pray', 'gym', 'mind'].filter((w) => !wins.includes(w)).map((w) => ({ pray: 'spiritual', gym: 'physical', mind: 'mental' }[w])).join(', '));
-      if (posted.length < 3 && day === today) todo.push('Post on ' + ['ig', 'x', 'li'].filter((x) => !posted.includes(x)).map((x) => ({ ig: 'Instagram', x: 'X', li: 'LinkedIn' }[x])).join(', '));
+      if (posted.length < 3 && day === today) todo.push('Post on ' + ['ig', 'fb', 'tt', 'yt', 'x', 'li'].filter((x) => !posted.includes(x)).slice(0, 3).map((x) => ({ ig: 'Instagram', fb: 'Facebook', tt: 'TikTok', yt: 'YT Shorts', x: 'X', li: 'LinkedIn' }[x])).join(', '));
       if (!t.refs) todo.push('One referral ask not logged');
     }
     return json({
