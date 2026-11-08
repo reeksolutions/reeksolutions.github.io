@@ -2809,14 +2809,232 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
   const CS = { step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {} };
-  const csReset = () => Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {} });
+  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {} }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
+
+  /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
+  const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
+  const VM = { voice: null, sfx: true, result: null, busy: false };
+  const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
+  const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
+  function vidPlan(tid, seed, plain, voiceDur) {
+    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], fix = fixOf(t, plain);
+    const m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0;
+    const scenes = [
+      { kind: 'text', label: 'THE BUSINESS SURGEON', text: hook, big: true, vo: hook },
+      { kind: 'text', label: 'SYMPTOM', text: t.symptom, vo: t.symptom },
+      { kind: 'text', label: 'DIAGNOSIS', text: t.diagnosis, vo: t.diagnosis },
+      week ? { kind: 'cost', label: 'WHAT IT COSTS', week, sub: 'Example numbers. Yours will differ.', vo: 'Say that adds up: ' + t.math + '.' }
+        : { kind: 'text', label: 'WHAT IT COSTS', text: t.save, vo: t.save },
+      { kind: 'text', label: 'THE FIX', text: fix, sub: t.recovery, vo: fix + ' ' + t.recovery },
+      { kind: 'cta', label: 'NEXT STEP', text: plain ? 'for a free audit' : 'for a free AI audit', vo: plain ? plainCta(VO_CTA) : VO_CTA },
+    ];
+    const words = scenes.map((s) => Math.max(3, wordCount(s.vo)));
+    let durs;
+    if (voiceDur) {
+      const tot = words.reduce((a, b) => a + b, 0), body = Math.max(8, voiceDur);
+      durs = words.map((w) => Math.max(2.2, (w / tot) * body));
+      const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => (d * (body / sum)));
+      durs[0] += 0.4; durs[durs.length - 1] += 0.9;
+    } else durs = words.map((w) => Math.min(5.8, Math.max(3, 1.3 + w * 0.27)));
+    let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; });
+    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name };
+  }
+  const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const easeOut = (x) => 1 - Math.pow(1 - clamp01(x), 3);
+  const easeBack = (x) => { const c = 1.7, k = clamp01(x) - 1; return 1 + (c + 1) * k * k * k + c * k * k; };
+  function layoutText(ctx, text, maxW, fs) {
+    ctx.font = '800 ' + fs + 'px ' + VFONT;
+    const sp = ctx.measureText(' ').width, words = text.split(/\s+/), lines = []; let cur = [], w = 0;
+    words.forEach((word) => { const ww = ctx.measureText(word).width; if (cur.length && w + sp + ww > maxW) { lines.push({ items: cur, w }); cur = []; w = 0; } w += (cur.length ? sp : 0) + ww; cur.push({ word, ww }); });
+    if (cur.length) lines.push({ items: cur, w });
+    return { lines, sp, fs, lh: Math.round(fs * 1.18) };
+  }
+  function ekgY(p, healthy) {
+    if (!healthy) return 0.06 * Math.sin(p * 1.7) + 0.03 * Math.sin(p * 4.1);
+    const q = ((p % 6.283) + 6.283) % 6.283;
+    if (q > 1.0 && q < 1.35) return 0.25 * Math.sin((q - 1.0) / 0.35 * Math.PI);
+    if (q > 2.35 && q < 2.55) return -0.35 * ((q - 2.35) / 0.2);
+    if (q >= 2.55 && q < 2.8) return -0.35 + 2.35 * ((q - 2.55) / 0.25);
+    if (q >= 2.8 && q < 3.05) return 2.0 - 2.8 * ((q - 2.8) / 0.25);
+    if (q >= 3.05 && q < 3.2) return -0.8 + 0.8 * ((q - 3.05) / 0.15);
+    if (q > 3.9 && q < 4.6) return 0.4 * Math.sin((q - 3.9) / 0.7 * Math.PI);
+    return 0;
+  }
+  const RED = [255, 90, 106], BLUE = [91, 140, 255], GREEN = [61, 220, 151];
+  function drawFrame(ctx, plan, t, cache) {
+    const W = VW, H = VH, tt = Math.min(t, plan.total - 0.001);
+    let i = plan.scenes.findIndex((s) => tt < s.end); if (i < 0) i = plan.scenes.length - 1;
+    const sc = plan.scenes[i], lt = tt - sc.start;
+    const fixIdx = plan.scenes.findIndex((s) => s.label === 'THE FIX');
+    const sick = i < fixIdx ? 1 : i === fixIdx ? clamp01(1 - lt / 0.7) : 0;
+    const accent = mixC(RED, i >= fixIdx ? GREEN : BLUE, 1 - sick);
+    const accentRaw = i < fixIdx ? RED : (i === fixIdx ? [0, 0, 0].map((_, k) => Math.round(RED[k] + (GREEN[k] - RED[k]) * (1 - sick))) : GREEN);
+    const rgba = (a) => 'rgba(' + accentRaw.join(',') + ',' + a + ')';
+    // background
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#04060c'); g.addColorStop(1, '#0a1022'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const gx = W * (0.5 + 0.25 * Math.sin(tt * 0.5)), gy = H * (0.38 + 0.08 * Math.cos(tt * 0.4));
+    const rg = ctx.createRadialGradient(gx, gy, 20, gx, gy, 620); rg.addColorStop(0, rgba(0.28)); rg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 1; const off = (tt * 14) % 60;
+    for (let x = 0; x <= W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = -60 + off; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // ripples
+    for (let k = 0; k < 3; k++) { const pr = ((tt * 0.3 + k / 3) % 1); ctx.strokeStyle = rgba((1 - pr) * 0.28); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2, H * 0.42, 60 + pr * 520, 0, 6.283); ctx.stroke(); }
+    // top bar
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, W, 6); ctx.fillStyle = accent; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 6);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.font = '700 24px ' + VFONT; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText('REEKON SYSTEMS', 40, 72);
+    const lab = sc.label, lw = (ctx.measureText(lab).width || 200) + 36;
+    ctx.textAlign = 'right'; ctx.font = '800 22px ' + VFONT; const lw2 = ctx.measureText(lab).width + 34;
+    ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W - 40 - lw2, 44, lw2, 38, 19) : ctx.rect(W - 40 - lw2, 44, lw2, 38); ctx.stroke();
+    ctx.fillStyle = accent; ctx.fillText(lab, W - 40 - 17, 71);
+    // EKG
+    const by = H * 0.91, amp = 58; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = accent; ctx.shadowColor = accent; ctx.shadowBlur = 14; ctx.beginPath();
+    for (let x = 0; x <= W; x += 4) { const p = x * 0.016 - tt * 5.2; const y = by - amp * ((1 - sick) * ekgY(p, true) + sick * ekgY(p, false)); x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke(); ctx.shadowBlur = 0;
+    // scene content
+    ctx.textAlign = 'center';
+    const aIn = easeOut(lt / 0.35);
+    if (sc.kind === 'cost') {
+      const val = Math.round(sc.week * easeOut(lt / 2.2));
+      ctx.globalAlpha = aIn; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '700 40px ' + VFONT; ctx.fillText('Walking out the door', W / 2, H * 0.30);
+      ctx.fillStyle = mixC(RED, RED, 0); ctx.font = '900 150px ' + VFONT; ctx.shadowColor = 'rgba(255,90,106,.6)'; ctx.shadowBlur = 30; ctx.fillText('$' + val.toLocaleString('en-US'), W / 2, H * 0.46); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff'; ctx.font = '700 46px ' + VFONT; ctx.fillText('every week', W / 2, H * 0.52);
+      if (lt > 2.5) { ctx.globalAlpha = easeOut((lt - 2.5) / 0.4); ctx.fillStyle = 'rgb(255,150,160)'; ctx.font = '800 54px ' + VFONT; ctx.fillText('about $' + (sc.week * 52).toLocaleString('en-US') + ' a year', W / 2, H * 0.62); }
+      ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '600 28px ' + VFONT; if (lt > 1) ctx.fillText(sc.sub, W / 2, H * 0.70);
+    } else if (sc.kind === 'cta') {
+      ctx.globalAlpha = aIn; ctx.fillStyle = '#fff'; ctx.font = '800 80px ' + VFONT; ctx.fillText('DM me', W / 2, H * 0.34);
+      const pulse = 1 + 0.035 * Math.sin(lt * 5);
+      ctx.save(); ctx.translate(W / 2, H * 0.49); ctx.scale(pulse, pulse);
+      ctx.shadowColor = rgba(0.8); ctx.shadowBlur = 50; ctx.fillStyle = accent; const pw = 520, ph = 190; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 44) : ctx.rect(-pw / 2, -ph / 2, pw, ph); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#04120a'; ctx.font = '900 130px ' + VFONT; ctx.textBaseline = 'middle'; ctx.fillText('AUDIT', 0, 6); ctx.restore(); ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '700 46px ' + VFONT; ctx.fillText(sc.text, W / 2, H * 0.64);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '600 30px ' + VFONT; ctx.fillText('Reekon Systems · Los Angeles', W / 2, H * 0.70); ctx.globalAlpha = 1;
+    } else {
+      const key = sc.label + sc.text, fs0 = sc.big ? 92 : 62;
+      let L = cache[key]; if (!L) { for (const k of [1, 0.88, 0.78, 0.7]) { L = layoutText(ctx, sc.text, W - 110, Math.round(fs0 * k)); if (L.lines.length <= (sc.sub ? 5 : 6)) break; } cache[key] = L; }
+      const total = L.lines.reduce((n, l) => n + l.items.length, 0), step = Math.min(0.3, (sc.dur * 0.55) / Math.max(1, total));
+      const block = L.lines.length * L.lh, y0 = H * (sc.sub ? 0.40 : 0.44) - block / 2 + L.lh * 0.8;
+      ctx.font = '800 ' + L.fs + 'px ' + VFONT; ctx.textAlign = 'left'; let wi = 0;
+      L.lines.forEach((ln, li) => {
+        let x = (W - ln.w) / 2;
+        ln.items.forEach((it) => {
+          const p = clamp01((lt - 0.2 - wi * step) / 0.24); wi++;
+          if (p > 0) { const hi = /^[$\d]|^AUDIT|%/.test(it.word); ctx.globalAlpha = p; ctx.fillStyle = hi ? 'rgb(169,194,255)' : '#fff'; if (hi && accentRaw === RED) ctx.fillStyle = 'rgb(255,150,160)'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 12; ctx.fillText(it.word, x, y0 + li * L.lh + (1 - easeBack(p)) * 26); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
+          x += it.ww + L.sp;
+        });
+      });
+      if (sc.sub) { const a = easeOut((lt - 0.2 - total * step - 0.2) / 0.5); if (a > 0) { ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.font = '600 38px ' + VFONT; const sl = layoutText(ctx, sc.sub, W - 140, 38); ctx.font = '600 38px ' + VFONT; sl.lines.forEach((ln, k) => ctx.fillText(ln.items.map((x) => x.word).join(' '), W / 2, y0 + block + 24 + k * 48)); ctx.globalAlpha = 1; } }
+    }
+    ctx.textAlign = 'center';
+    if (lt < 0.25) { ctx.fillStyle = 'rgba(255,255,255,' + ((1 - lt / 0.25) * 0.14) + ')'; ctx.fillRect(0, 0, W, H); }
+  }
+  // sound effects made in the browser: whoosh between scenes, a hit on the hook, ticks on the counter, a chime on the fix
+  function sfxSchedule(ac, out, plan, t0) {
+    const noise = (when, dur, f0, f1, vol) => { const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0); for (let n = 0; n < len; n++) d[n] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource(); src.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.9; f.frequency.setValueAtTime(f0, when); f.frequency.exponentialRampToValueAtTime(f1, when + dur);
+      const gn = ac.createGain(); gn.gain.setValueAtTime(0.0001, when); gn.gain.exponentialRampToValueAtTime(vol, when + dur * 0.4); gn.gain.exponentialRampToValueAtTime(0.0001, when + dur); src.connect(f); f.connect(gn); gn.connect(out); src.start(when); };
+    const tone = (when, freq, dur, vol, type, endFreq) => { const o = ac.createOscillator(); o.type = type || 'sine'; o.frequency.setValueAtTime(freq, when); if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, when + dur); const gn = ac.createGain(); gn.gain.setValueAtTime(vol, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + dur); o.connect(gn); gn.connect(out); o.start(when); o.stop(when + dur + 0.05); };
+    plan.scenes.forEach((s, i) => {
+      const w = t0 + s.start;
+      if (i === 0) tone(w + 0.05, 80, 0.5, 0.9, 'sine', 32); else noise(w - 0.05, 0.45, 400, 3200, 0.5);
+      if (s.kind === 'cost') for (let k = 0; k < 24; k++) tone(w + 0.1 + k * 0.085, 520 + k * 28, 0.05, 0.12, 'triangle');
+      if (s.label === 'THE FIX') { [660, 990, 1320].forEach((f, k) => tone(w + 0.1 + k * 0.09, f, 0.9, 0.16, 'sine')); }
+      if (s.kind === 'cta') tone(w + 0.05, 220, 0.35, 0.5, 'sine', 110);
+    });
+    // quiet low pad under everything
+    [110, 164.81, 220].forEach((f) => { const o = ac.createOscillator(), lp = ac.createBiquadFilter(), gn = ac.createGain(); o.type = 'sine'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 500;
+      gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(0.045, t0 + 1.5); gn.gain.setValueAtTime(0.045, t0 + plan.total - 1.5); gn.gain.linearRampToValueAtTime(0.0001, t0 + plan.total); o.connect(lp); lp.connect(gn); gn.connect(out); o.start(t0); o.stop(t0 + plan.total + 0.1); });
+  }
+  async function decodeVoice(blob) {
+    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+    try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf; } finally { try { ac.close(); } catch { /* ignore */ } }
+  }
+  const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+  async function recordVideo(plan, voiceBuf, sfxOn, onProgress) {
+    const canvas = document.createElement('canvas'); canvas.width = VW; canvas.height = VH; const ctx = canvas.getContext('2d');
+    if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
+    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
+    const dest = ac.createMediaStreamDestination(), out = ac.createGain(); out.gain.value = 1; out.connect(dest);
+    const t0 = ac.currentTime + 0.25;
+    if (voiceBuf) { const src = ac.createBufferSource(); src.buffer = voiceBuf; const vg = ac.createGain(); vg.gain.value = 1.0; src.connect(vg); vg.connect(out); src.start(t0 + plan.lead); }
+    if (sfxOn) { const sg = ac.createGain(); sg.gain.value = voiceBuf ? 0.45 : 0.8; sg.connect(out); sfxSchedule(ac, sg, plan, t0); }
+    const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3500000 } : undefined), chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise((res) => { rec.onstop = res; });
+    const cache = {}; drawFrame(ctx, plan, 0, cache); rec.start(250);
+    const start = performance.now() + 250;
+    await new Promise((resolve) => {
+      const tick = () => { const t = Math.max(0, (performance.now() - start) / 1000); drawFrame(ctx, plan, t, cache); onProgress(clamp01(t / plan.total)); if (t >= plan.total + 0.2) resolve(); else requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    rec.stop(); await done; try { ac.close(); } catch { /* ignore */ }
+    const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
+    return { blob: new Blob(chunks, { type }), type, ext: type.includes('mp4') ? 'mp4' : 'webm' };
+  }
+  function videoMaker(tid, seed, plain, parent) {
+    const v = genVideo(tid, seed, plain);
+    const wrap = h('div', { class: 'vm' });
+    const voiceDur = VM.voice ? VM.voice.dur : 0, plan = vidPlan(tid, seed, plain, voiceDur);
+    const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH });
+    drawFrame(prev.getContext('2d'), plan, plan.scenes[0].start + 1.7, {});
+    const voiceBox = h('div', { class: 'cs-blk' });
+    const drawVoice = () => {
+      voiceBox.replaceChildren(...[
+        h('p', { class: 'dim small' }, '1. Voice. Record yourself, upload a file (like an ElevenLabs download), or skip it.'),
+        VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice ready: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }),
+          h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remove voice')) : null,
+        h('div', { class: 'row wrap' }, recBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f) }; toast('Voice added'); parent(); } catch { toast('Could not read that audio file', true); }
+        } })))].filter(Boolean));
+    };
+    let rec = null, chunks = [], recStart = 0, timer = null;
+    const recBtn = () => { const b = h('button', { class: 'btn primary', onclick: async () => {
+      if (rec) { rec.stop(); return; }
+      try {
+        const ms = await navigator.mediaDevices.getUserMedia({ audio: true }); chunks = []; rec = new MediaRecorder(ms);
+        rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+        rec.onstop = async () => { clearInterval(timer); ms.getTracks().forEach((t) => t.stop()); const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }); rec = null;
+          try { const buf = await decodeVoice(blob); vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: 'my recording', url: URL.createObjectURL(blob) }; toast('Voice saved'); } catch { toast('Could not read the recording. Try again.', true); }
+          parent(); };
+        rec.start(); recStart = Date.now(); b.textContent = 'Stop recording (0s)'; b.classList.add('rec');
+        timer = setInterval(() => { b.textContent = 'Stop recording (' + Math.round((Date.now() - recStart) / 1000) + 's)'; }, 500);
+        teleprompter.hidden = false;
+      } catch { toast('Allow the microphone to record your voice', true); }
+    } }, VM.voice ? 'Record again' : 'Record my voice'); return b; };
+    const teleprompter = h('div', { class: 'tele', hidden: true }, h('p', { class: 'dim small' }, 'Read this out loud:'), h('p', null, v.script));
+    drawVoice();
+    const sfxChips = h('div', { class: 'stagechips' }, [[true, 'Sound effects on'], [false, 'No sound effects']].map(([val, l]) => h('button', { class: 'schip' + (VM.sfx === val ? ' on' : ''), onclick: () => { VM.sfx = val; parent(); } }, l)));
+    const bar = h('div', { class: 'vm-bar', hidden: true }, h('i'));
+    const status = h('p', { class: 'dim small' });
+    const genBtn = h('button', { class: 'btn primary big', onclick: async () => {
+      if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true; bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open for about ' + Math.round(plan.total) + ' seconds.';
+      try {
+        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; });
+        if (!r.blob.size) throw new Error('The video came out empty. Try again.');
+        VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, tid, secs: Math.round(plan.total) };
+        toast('Video ready'); VM.busy = false; parent();
+      } catch (e) { VM.busy = false; fail(e); genBtn.disabled = false; bar.hidden = true; status.textContent = ''; }
+    } }, VM.result ? 'Generate again' : 'Generate video');
+    const res = VM.result ? h('div', { class: 'cs-blk' }, h('video', { class: 'vm-video', src: VM.result.url, controls: true, playsinline: true, loop: true }),
+      h('p', { class: 'dim small' }, VM.result.secs + ' seconds · ' + (VM.result.blob.size / 1048576).toFixed(1) + ' MB · ' + VM.result.ext.toUpperCase()),
+      h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: async () => {
+        const file = new File([VM.result.blob], 'reekon-' + tid + '-' + new Date().toISOString().slice(0, 10) + '.' + VM.result.ext, { type: VM.result.type });
+        try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+        const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
+      } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-' + tid + '.' + VM.result.ext }, 'Download'))) : null;
+    wrap.append(...[h('p', { class: 'dim small' }, 'Preview (the first scene). Your video gets animated text, a heartbeat line, sound effects and your voice.'), prev, voiceBox, teleprompter,
+      h('p', { class: 'dim small' }, '2. Sound'), sfxChips, h('p', { class: 'dim small' }, '3. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
+    return wrap;
+  }
 
   function contentStart(r) {
     const root = h('div', { class: 'cs' });
     const tile = (title, sub, ic, fn) => h('button', { class: 'hub-tile', type: 'button', onclick: fn }, ic ? h('span', { class: 'hub-ic' }, icon(ic)) : null, h('b', null, title), sub ? h('small', null, sub) : null);
-    const go = (step) => { CS.step = step; CS.posted = {}; draw(); window.scrollTo(0, 0); };
+    const go = (step) => { CS.step = step; CS.posted = {}; if (step !== 'edit') vmClear(true); draw(); window.scrollTo(0, 0); };
     const key = () => [CS.fmt, CS.topic, CS.stage, CS.seed, CS.plat, CS.plain, CS.secs, CS.news].join('|');
     const field = (rows, gen) => {
       const k = key(), ta = h('textarea', { class: 'ct-text', rows });
@@ -2865,11 +3083,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       } else if (CS.fmt === 'video') {
         const v = genVideo(CS.topic, CS.seed, plain), cap = genPost(CS.topic, CS.stage, CS.seed, CS.plat, plain), ta = field(9, cap);
         const blk = (title, text, msg) => h('div', { class: 'cs-blk' }, h('p', { class: 'dim small' }, title), h('pre', { class: 'gen-pre' }, text), h('button', { class: 'btn small', onclick: () => copyText(text, msg) }, 'Copy'));
-        parts.push(blk('1. Voiceover script (about 30 seconds)', v.script, 'Script copied'),
-          blk('2. On-screen text, one line per scene', v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n'), 'On-screen text copied'),
-          blk('3. Scene prompts for an image or video generator', v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n'), 'Scene prompts copied'),
-          h('p', { class: 'dim small' }, '4. Caption. Pick the platform you are posting this video to.'), platChips(), ta, markRow(() => ta.value),
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset caption')), painChips());
+        parts.push(videoMaker(CS.topic, CS.seed, plain, draw),
+          h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Script, on-screen text and scene prompts'), h('small', { class: 'dim' }, 'for a voice tool or another generator')),
+            blk('Voiceover script (about 30 seconds)', v.script, 'Script copied'),
+            blk('On-screen text, one line per scene', v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n'), 'On-screen text copied'),
+            blk('Scene prompts for an image or video generator', v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n'), 'Scene prompts copied')),
+          h('p', { class: 'dim small' }, '4. Caption. Pick the platform you are posting this video to, then mark it posted.'), platChips(), ta, markRow(() => ta.value),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; vmClear(true); draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset caption')), painChips());
       } else if (CS.fmt === 'face') {
         const f = genFace(CS.topic, CS.secs, CS.seed, plain), cap = genPost(CS.topic, 'story', CS.seed, CS.plat, plain);
         const script = h('textarea', { class: 'ct-text', rows: 14 }); script.value = f.text; script.readOnly = true;

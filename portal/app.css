@@ -1374,3 +1374,11 @@ html.nonav{--nav:0px}
 @media (min-width:1000px){.cat-launch{display:none}}
 .cat-launch{margin:4px 0 18px}
 .cat-launch .start-btn{margin-top:0}
+
+.vm{display:flex;flex-direction:column;gap:10px}
+.vm-prev{width:min(100%,260px);aspect-ratio:9/16;border-radius:18px;border:1px solid var(--line-2);align-self:center;background:#04060c}
+.vm-video{width:min(100%,300px);aspect-ratio:9/16;border-radius:18px;background:#000;align-self:center}
+.vm-bar{height:10px;border-radius:99px;background:var(--card-2);overflow:hidden}.vm-bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.btn.big{min-height:56px;font-size:17px;width:100%}
+.btn.rec{background:var(--bad);border-color:var(--bad);color:#fff}
+.tele{padding:12px 14px;border:1px solid var(--line-2);border-radius:14px;background:var(--card-2);font-size:18px;line-height:1.5}
