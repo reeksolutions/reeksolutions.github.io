@@ -4141,5 +4141,9 @@ function api(method, path, body) {
     ]);
   }
 
+    // iOS Safari ignores user-scalable=no, so stop the pinch gesture directly
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+
   render();
 })();

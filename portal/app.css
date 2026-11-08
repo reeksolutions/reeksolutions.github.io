@@ -1365,3 +1365,7 @@ button.hub-tile{font:inherit;text-align:left;cursor:pointer;width:100%}
 .log-row:first-of-type{border-top:0}
 .dot.posted,.cal-bar.posted{background:#35d0ba}
 .tag.k-posted{color:#35d0ba;border-color:rgba(53,208,186,.45)}
+
+/* app feel on phones: no pinch or double-tap zoom, and inputs never trigger iOS focus-zoom */
+html{touch-action:manipulation}
+@media (max-width:999px){input,select,textarea{font-size:16px}}
