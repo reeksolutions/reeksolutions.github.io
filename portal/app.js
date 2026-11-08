@@ -242,7 +242,12 @@
     if (S.me.role === 'admin') tabActive = CAT_OF[active] || (active === 'home' ? 'home' : 'more');
     else if (active === 'rep') tabActive = 'more';
     const catKey = S.me.role === 'admin' ? CAT_OF[active] : null;
-    const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label) : (catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0]) : null);
+    const isAdmin = S.me.role === 'admin';
+    document.documentElement.classList.toggle('nonav', isAdmin);
+    const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label)
+      : catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0])
+      : isAdmin && !['home', 'sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/more' }, icon('chev'), 'More')
+      : isAdmin && ['sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home') : null;
     const sideActive = active === 'rep' ? 'users' : active;
     const nav = h('nav', { class: 'tabs', 'aria-label': 'Main' },
       tabs.map(([k, label]) => h('a', { href: '#/' + k, class: tabActive === k ? 'on' : null }, icon(TAB_ICON[k] || k), h('span', null, label),
@@ -259,7 +264,7 @@
       h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
       h('a', { href: '#/account', class: 'me', title: S.me.name }, initials(S.me.name)));
     const main = h('main', { id: 'view', class: 'enter' }, crumb, content);
-    $app.replaceChildren(side, h('div', { class: 'frame' }, top, main), nav);
+    $app.replaceChildren(...[side, h('div', { class: 'frame' }, top, main), isAdmin ? null : nav].filter(Boolean));
     ensureOrb();
     if (S.me.role !== 'dev') refreshCallbackBadge();
     window.scrollTo(0, 0);
@@ -281,7 +286,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -3192,7 +3197,15 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     clearInterval(S.feedTimer);
     S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
 
-    shell('home', [head, reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard, cardsCard), feed]);
+    shell('home', [head, catLauncher(), reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard, cardsCard), feed]);
+  }
+
+  // phone home: the four categories as big buttons (there is no bottom bar for the admin)
+  function catLauncher() {
+    const tiles = [['sell', 'Sell', 'Leads, calls, deals', 'phone', true], ['create', 'Create', 'Posts, videos, demos', 'spark'], ['crew', 'Team', 'Reps, devs, lead lists', 'users'], ['more', 'More', 'Everything and settings', 'more']];
+    return h('section', { class: 'cat-launch' },
+      h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
+      h('div', { class: 'hub-grid' }, tiles.map(([k, t, sub, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + k }, h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, sub)))));
   }
 
   async function viewHome() {

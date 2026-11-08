@@ -1369,3 +1369,8 @@ button.hub-tile{font:inherit;text-align:left;cursor:pointer;width:100%}
 /* app feel on phones: no pinch or double-tap zoom, and inputs never trigger iOS focus-zoom */
 html{touch-action:manipulation}
 @media (max-width:999px){input,select,textarea{font-size:16px}}
+
+html.nonav{--nav:0px}
+@media (min-width:1000px){.cat-launch{display:none}}
+.cat-launch{margin:4px 0 18px}
+.cat-launch .start-btn{margin-top:0}
