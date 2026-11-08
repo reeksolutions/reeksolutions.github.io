@@ -140,7 +140,7 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['tracker', 'Tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['more', 'More']];
+    if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['crew', 'Team'], ['more', 'More']];
     if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
@@ -155,9 +155,23 @@
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
-  // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['calendar', 'recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
+  const TAB_ICON = { sell: 'phone', create: 'spark', crew: 'users', calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
+  const CATS = {
+    sell: ['Sell', 'Leads, calls and deals', [
+      ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
+      ['calendar', 'Calendar', 'Audits, closings, posts', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
+      ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart'],
+      ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['script', 'Call script', 'What to say', 'script']]],
+    create: ['Create', 'Posts, videos and demos', [
+      ['content', 'Content', 'Start posting', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'],
+      ['demos', 'Demo queue', 'Demos to build and send', 'demos'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
+    crew: ['Team', 'Reps, devs and lead lists', [
+      ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
+      ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
+  };
+  const CAT_OF = { lead: 'sell', rep: 'crew', demo: 'create' };
+  Object.entries(CATS).forEach(([k, c]) => c[2].forEach((i) => { CAT_OF[i[0]] = k; }));
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
 
@@ -222,15 +236,17 @@
     orbTimer = setTimeout(wanderOrb, 6000);
   }
 
-  function shell(active, content) {
+  function shell(active, content, crumbOver) {
     const tabs = tabsFor(S.me.role);
     let tabActive = active;
-    if (S.me.role === 'admin' && UNDER_MORE.includes(active)) tabActive = 'more';
-    if (active === 'rep') tabActive = 'more';
+    if (S.me.role === 'admin') tabActive = CAT_OF[active] || (active === 'home' ? 'home' : 'more');
+    else if (active === 'rep') tabActive = 'more';
+    const catKey = S.me.role === 'admin' ? CAT_OF[active] : null;
+    const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label) : (catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0]) : null);
     const sideActive = active === 'rep' ? 'users' : active;
     const nav = h('nav', { class: 'tabs', 'aria-label': 'Main' },
       tabs.map(([k, label]) => h('a', { href: '#/' + k, class: tabActive === k ? 'on' : null }, icon(TAB_ICON[k] || k), h('span', null, label),
-        k === 'callbacks' || (k === 'more' && S.me.role === 'admin') ? h('span', { class: 'count cb-count', hidden: true }) : null)));
+        k === 'callbacks' || (k === 'sell' && S.me.role === 'admin') ? h('span', { class: 'count cb-count', hidden: true }) : null)));
     const side = h('aside', { class: 'side', 'aria-label': 'Sidebar' },
       h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
       h('div', { class: 'side-scroll' }, navFor(S.me.role).map(([group, items]) => h('div', { class: 'side-group' },
@@ -242,7 +258,7 @@
     const top = h('header', { class: 'top' },
       h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
       h('a', { href: '#/account', class: 'me', title: S.me.name }, initials(S.me.name)));
-    const main = h('main', { id: 'view', class: 'enter' }, content);
+    const main = h('main', { id: 'view', class: 'enter' }, crumb, content);
     $app.replaceChildren(side, h('div', { class: 'frame' }, top, main), nav);
     ensureOrb();
     if (S.me.role !== 'dev') refreshCallbackBadge();
@@ -276,7 +292,7 @@
         case 'emailbot': return await viewEmailBot();
         case 'recordings': return await viewRecordings();
         case 'tracker': return await viewTracker();
-        case 'content': return await viewContent();
+        case 'content': return await viewContent(arg);
         case 'rebrief': return await viewRebrief(arg);
         case 'cards': return await viewCards();
         case 'settings': return await viewSettings();
@@ -286,6 +302,7 @@
         case 'deals': return await viewDeals();
         case 'earnings': return await viewEarnings();
         case 'more': return viewMore();
+        case 'sell': case 'create': case 'crew': return viewCategory(route);
         case 'script': return await viewScript();
         case 'leads': return await viewLeads();
         case 'lead': return await viewLead(+arg);
@@ -986,11 +1003,11 @@
   }
 
   /* ================= calendar ================= */
-  const CAL_KIND = { audit: 'Audit call', closing: 'Closing call', demo: 'Demo', meeting: 'Meeting', training: 'Training', call: 'Call', followup: 'Follow-up', event: 'Other' };
-  const CAL_MINS = { audit: 30, closing: 45, demo: 30, meeting: 30, training: 60, call: 15, followup: 15, event: 0 };
-  const CAL_GROUP = { audit: 'audits', closing: 'closing', demo: 'demos', meeting: 'meetings', training: 'meetings', call: 'calls', followup: 'calls', callback: 'calls', booked: 'calls', event: 'other' };
-  const CAL_FILTERS = [['all', 'All'], ['audits', 'Audits'], ['closing', 'Closing'], ['demos', 'Demos'], ['meetings', 'Meetings'], ['calls', 'Calls'], ['other', 'Other']];
-  const CAL_LEGEND = [['audit', 'Audit'], ['closing', 'Closing'], ['demo', 'Demo'], ['meeting', 'Meeting'], ['callback', 'Callback'], ['booked', 'Booked']];
+  const CAL_KIND = { audit: 'Audit call', closing: 'Closing call', demo: 'Demo', meeting: 'Meeting', training: 'Training', call: 'Call', followup: 'Follow-up', posted: 'Posted', event: 'Other' };
+  const CAL_MINS = { audit: 30, closing: 45, demo: 30, meeting: 30, training: 60, call: 15, followup: 15, posted: 0, event: 0 };
+  const CAL_GROUP = { audit: 'audits', closing: 'closing', demo: 'demos', meeting: 'meetings', training: 'meetings', call: 'calls', followup: 'calls', callback: 'calls', booked: 'calls', posted: 'posted', event: 'other' };
+  const CAL_FILTERS = [['all', 'All'], ['audits', 'Audits'], ['closing', 'Closing'], ['demos', 'Demos'], ['meetings', 'Meetings'], ['calls', 'Calls'], ['posted', 'Posted'], ['other', 'Other']];
+  const CAL_LEGEND = [['audit', 'Audit'], ['closing', 'Closing'], ['demo', 'Demo'], ['meeting', 'Meeting'], ['callback', 'Callback'], ['booked', 'Booked'], ['posted', 'Posted']];
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const CAL = { view: 'month', month: null, sel: null, filter: 'all' };
@@ -1029,7 +1046,7 @@
       const base = ev ? new Date(ev.starts_at) : new Date(presetDay + 'T09:00');
       const done = await sheet((box, close) => {
         const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Glow Med Spa', value: ev ? ev.title : '' });
-        const kind = h('select', null, Object.entries(CAL_KIND).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'audit') === v ? true : null }, t)));
+        const kind = h('select', null, Object.entries(CAL_KIND).filter(([v]) => v !== 'posted' || (ev && ev.kind === 'posted')).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'audit') === v ? true : null }, t)));
         const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
         const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
         const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : '' });
@@ -2746,84 +2763,6 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     ['Day 7: Call to action', 'Free AI audit. I look at your business and show you exactly where you are losing customers. No pitch, no pressure. DM "AUDIT" and I\'ll send it over.'],
   ];
   const copyText = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
-  function genSection(dayN, done) {
-    const ids = Object.keys(GEN_TOPICS);
-    const G = { topic: ids[(dayN - 1) % ids.length], stage: GEN_STAGES[(dayN - 1) % GEN_STAGES.length][0], seed: dayN, plat: (CPLAT.find(([k]) => !done.has(k)) || CPLAT[0])[0], plain: true };
-    const root = h('section', { class: 'ct-today' });
-    const area = h('textarea', { class: 'ct-text', rows: 12 });
-    const count = h('small', { class: 'dim' });
-    const chips = (items, cur, on) => h('div', { class: 'stagechips' }, items.map(([k, label]) => h('button', { class: 'schip' + (cur === k ? ' on' : ''), onclick: () => on(k) }, label)));
-    const vid = h('div', { class: 'gen-vid' });
-    const fillText = () => {
-      area.value = genPost(G.topic, G.stage, G.seed, G.plat, G.plain);
-      count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters';
-      count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : '';
-    };
-    const fillVideo = () => {
-      const v = genVideo(G.topic, G.seed, G.plain);
-      vid.replaceChildren(
-        h('p', { class: 'dim small' }, 'Voice-over script (about 30 seconds). Copy it into the voice step when it is ready, or any voice tool for now.'),
-        h('p', { class: 'dv-script' }, v.script), h('button', { class: 'btn', onclick: () => copyText(v.script, 'Script copied') }, 'Copy script'),
-        h('p', { class: 'dim small' }, 'On-screen text, one line per scene:'),
-        h('pre', { class: 'gen-pre' }, v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n')),
-        h('button', { class: 'btn', onclick: () => copyText(v.captions.join('\n'), 'On-screen text copied') }, 'Copy on-screen text'),
-        h('p', { class: 'dim small' }, 'Scene prompts for the image/video generator:'),
-        h('pre', { class: 'gen-pre' }, v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n')),
-        h('button', { class: 'btn', onclick: () => copyText(v.scenes.join('\n\n'), 'Scene prompts copied') }, 'Copy scene prompts'));
-    };
-    const draw = () => {
-      const isDone = done.has(G.plat);
-      const doneBtn = h('button', { class: 'btn ok' + (isDone ? ' on' : ''), onclick: async () => {
-        doneBtn.disabled = true;
-        try { await api('POST', '/content/toggle', { platform: G.plat, type: G.stage }); if (done.has(G.plat)) done.delete(G.plat); else done.add(G.plat); draw(); } catch (e) { fail(e); doneBtn.disabled = false; }
-      } }, isDone ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
-      root.replaceChildren(
-        h('div', { class: 'ct-type' }, h('span', { class: 'tag hot' }, 'Post generator'), h('p', null, 'Pick what the post is about and where it goes. Shuffle gives a new version of the same post.')),
-        h('p', { class: 'dim small' }, 'Topic'), chips(ids.map((k) => [k, GEN_TOPICS[k].name]), G.topic, (k) => { G.topic = k; draw(); }),
-        h('p', { class: 'dim small' }, 'Stage of the series'), chips(GEN_STAGES, G.stage, (k) => { G.stage = k; draw(); }),
-        h('p', { class: 'dim small' }, 'Platform'), chips(CPLAT.map(([k, l]) => [k, l + (done.has(k) ? ' ✓' : '')]), G.plat, (k) => { G.plat = k; draw(); }),
-        h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (G.plain === v ? ' on' : ''), onclick: () => { G.plain = v; draw(); } }, l))),
-        area, count,
-        h('div', { class: 'row wrap' },
-          h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Copied. Paste it into ' + CPLAT.find(([k]) => k === G.plat)[1]) }, 'Copy post'),
-          h('button', { class: 'btn', onclick: () => { G.seed += 1; draw(); } }, 'Shuffle'), doneBtn),
-        h('p', { class: 'dim small' }, 'Example math is labeled as an example. Never swap in a client result you do not have.'),
-        h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Video post'), h('small', { class: 'dim' }, 'script, on-screen text, scene prompts')), vid));
-      fillText(); fillVideo();
-      area.oninput = () => { count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters'; count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : ''; };
-    };
-    draw();
-    return root;
-  }
-  function faceSection(dayN) {
-    const ids = Object.keys(GEN_TOPICS);
-    const F = { topic: ids[(dayN + 2) % ids.length], secs: 60, seed: dayN, plain: true, plat: 'ig' };
-    const root = h('details', { class: 'card ct-det' });
-    const draw = () => {
-      const f = genFace(F.topic, F.secs, F.seed, F.plain);
-      const cap = genPost(F.topic, 'story', F.seed, F.plat, F.plain);
-      const area = h('textarea', { class: 'ct-text', rows: 14 }); area.value = f.text;
-      const capArea = h('textarea', { class: 'ct-text', rows: 8 }); capArea.value = cap;
-      const open = root.open;
-      root.replaceChildren(
-        h('summary', null, h('b', null, 'Face-to-camera scripts'), h('small', { class: 'dim' }, '30, 60 or 90 seconds, with a cue for every beat')),
-        h('p', { class: 'dim small' }, 'Topic'), h('div', { class: 'stagechips' }, ids.map((k) => h('button', { class: 'schip' + (F.topic === k ? ' on' : ''), onclick: () => { F.topic = k; draw(); } }, GEN_TOPICS[k].name))),
-        h('p', { class: 'dim small' }, 'Length'), h('div', { class: 'stagechips' }, [30, 60, 90].map((n) => h('button', { class: 'schip' + (F.secs === n ? ' on' : ''), onclick: () => { F.secs = n; draw(); } }, n + ' sec'))),
-        h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (F.plain === v ? ' on' : ''), onclick: () => { F.plain = v; draw(); } }, l))),
-        h('p', { class: 'dim small' }, 'About ' + f.est + ' seconds when spoken at a natural pace. The brackets are cues for you, not words to say.'),
-        area,
-        h('div', { class: 'row wrap' },
-          h('button', { class: 'btn primary', onclick: () => copyText(f.text, 'Script with cues copied') }, 'Copy with cues'),
-          h('button', { class: 'btn', onclick: () => copyText(f.plainText, 'Plain script copied (teleprompter)') }, 'Copy plain script'),
-          h('button', { class: 'btn', onclick: () => { F.seed += 1; draw(); } }, 'Shuffle hook')),
-        h('p', { class: 'dim small' }, 'Caption to post with it'),
-        h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => h('button', { class: 'schip' + (F.plat === k ? ' on' : ''), onclick: () => { F.plat = k; draw(); } }, l))),
-        capArea, h('button', { class: 'btn', onclick: () => copyText(capArea.value, 'Caption copied') }, 'Copy caption'));
-      root.open = open;
-    };
-    draw();
-    return root;
-  }
   function newsSection() {
     const root = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'AI news: what it means for a business'), h('small', { class: 'dim' }, 'Week of ' + NEWS.week)));
     root.append(h('p', { class: 'dim small' }, 'Source: ' + NEWS.source));
@@ -2854,35 +2793,168 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       }));
   }
 
-  async function viewContent() {
-    const [r, trk] = await Promise.all([api('GET', '/content'), api('GET', '/tracker')]);
+  /* ================= content: start posting (guided editor), posted log, library ================= */
+  const PN = Object.fromEntries(CPLAT);
+  const FMT_LABEL = { post: 'Text post', video: 'Voiceover video', face: 'Face video', news: 'AI news post' };
+  const CS_FMT = [
+    ['post', 'Text post', 'A caption for any platform', 'copy'],
+    ['video', 'Voiceover video', 'Script, on-screen text and scene prompts', 'spark'],
+    ['face', 'Face video', 'A script you say to the camera', 'users'],
+    ['news', 'AI news', 'What it means for a business', 'bolt'],
+  ];
+  const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
+  const CS = { step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {} };
+  const csReset = () => Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {} });
+  const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
+
+  function contentStart(r) {
+    const root = h('div', { class: 'cs' });
+    const tile = (title, sub, ic, fn) => h('button', { class: 'hub-tile', type: 'button', onclick: fn }, ic ? h('span', { class: 'hub-ic' }, icon(ic)) : null, h('b', null, title), sub ? h('small', null, sub) : null);
+    const go = (step) => { CS.step = step; CS.posted = {}; draw(); window.scrollTo(0, 0); };
+    const key = () => [CS.fmt, CS.topic, CS.stage, CS.seed, CS.plat, CS.plain, CS.secs, CS.news].join('|');
+    const field = (rows, gen) => {
+      const k = key(), ta = h('textarea', { class: 'ct-text', rows });
+      ta.value = CS.edits[k] != null ? CS.edits[k] : gen;
+      ta.oninput = () => { CS.edits[k] = ta.value; };
+      return ta;
+    };
+    const platChips = () => h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => {
+      const n = r.today_posts.filter((p) => p.platform === k).length;
+      return h('button', { class: 'schip' + (CS.plat === k ? ' on' : ''), onclick: () => { CS.plat = k; CS.posted = {}; draw(); } }, l + (n ? ' ✓' : ''));
+    }));
+    const painChips = () => h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (CS.plain === v ? ' on' : ''), onclick: () => { CS.plain = v; draw(); } }, l)));
+    const topicName = () => (CS.fmt === 'news' ? NEWS.items[CS.news].title.slice(0, 40) : GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : '');
+    const markRow = (getText) => {
+      const id = CS.posted[CS.plat];
+      const b = h('button', { class: 'btn ok' + (id ? ' on' : ''), onclick: async () => {
+        b.disabled = true;
+        try {
+          if (CS.posted[CS.plat]) {
+            await api('DELETE', '/content/posted/' + CS.posted[CS.plat]);
+            r.today_posts = r.today_posts.filter((p) => p.id !== CS.posted[CS.plat]); delete CS.posted[CS.plat];
+            toast('Removed from your calendar and tracker');
+          } else {
+            const x = await api('POST', '/content/posted', { platform: CS.plat, format: CS.fmt, topic: topicName(), type: (CS.stage || CS.fmt).slice(0, 20) });
+            CS.posted[CS.plat] = x.id; r.today_posts.unshift({ id: x.id, platform: CS.plat, format: CS.fmt });
+            toast('Logged. It is on your calendar and your tracker.');
+          }
+          draw();
+        } catch (e) { fail(e); b.disabled = false; }
+      } }, id ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
+      return h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(getText(), 'Copied. Paste it into ' + PN[CS.plat]) }, 'Copy'), b);
+    };
+    const doneBanner = () => (Object.keys(CS.posted).length ? h('div', { class: 'cs-done' }, h('b', null, '✓ Logged'), h('span', null, 'Added to your calendar as "Posted" and counted in your tracker.'),
+      h('div', { class: 'row wrap' }, h('a', { class: 'btn small', href: '#/calendar' }, 'See calendar'), h('button', { class: 'btn small primary', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Make another'))) : null);
+
+    const editor = () => {
+      const plain = CS.plain, parts = [];
+      if (CS.fmt === 'post') {
+        const t = genPost(CS.topic, CS.stage, CS.seed, CS.plat, plain), ta = field(12, t);
+        const count = h('small', { class: 'dim' });
+        const upd = () => { count.textContent = CS.plat === 'x' ? ta.value.length + ' / 280' : ta.value.length + ' characters'; count.style.color = CS.plat === 'x' && ta.value.length > 280 ? 'var(--bad)' : ''; };
+        const oi = ta.oninput; ta.oninput = () => { oi(); upd(); }; upd();
+        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset text')),
+          painChips());
+      } else if (CS.fmt === 'video') {
+        const v = genVideo(CS.topic, CS.seed, plain), cap = genPost(CS.topic, CS.stage, CS.seed, CS.plat, plain), ta = field(9, cap);
+        const blk = (title, text, msg) => h('div', { class: 'cs-blk' }, h('p', { class: 'dim small' }, title), h('pre', { class: 'gen-pre' }, text), h('button', { class: 'btn small', onclick: () => copyText(text, msg) }, 'Copy'));
+        parts.push(blk('1. Voiceover script (about 30 seconds)', v.script, 'Script copied'),
+          blk('2. On-screen text, one line per scene', v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n'), 'On-screen text copied'),
+          blk('3. Scene prompts for an image or video generator', v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n'), 'Scene prompts copied'),
+          h('p', { class: 'dim small' }, '4. Caption. Pick the platform you are posting this video to.'), platChips(), ta, markRow(() => ta.value),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset caption')), painChips());
+      } else if (CS.fmt === 'face') {
+        const f = genFace(CS.topic, CS.secs, CS.seed, plain), cap = genPost(CS.topic, 'story', CS.seed, CS.plat, plain);
+        const script = h('textarea', { class: 'ct-text', rows: 14 }); script.value = f.text; script.readOnly = true;
+        const ta = field(8, cap);
+        parts.push(h('p', { class: 'dim small' }, 'Length'), h('div', { class: 'stagechips' }, [30, 60, 90].map((n) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; CS.posted = {}; draw(); } }, n + ' sec'))),
+          h('p', { class: 'dim small' }, 'About ' + f.est + ' seconds when spoken at a natural pace. The brackets are cues for you, not words to say.'), script,
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(f.text, 'Script with cues copied') }, 'Copy with cues'), h('button', { class: 'btn', onclick: () => copyText(f.plainText, 'Plain script copied') }, 'Copy plain script'), h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle hook')),
+          h('p', { class: 'dim small' }, 'After you film it: pick the platform you posted to and add the caption.'), platChips(), ta, markRow(() => ta.value), painChips());
+      } else {
+        const n = NEWS.items[CS.news], ta = field(12, newsPost(n, CS.plat));
+        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, markRow(() => ta.value),
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => copyText(newsFace(n), 'Face script copied') }, 'Copy face script'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset text')),
+          h('p', { class: 'dim small' }, 'Source: ' + NEWS.source));
+      }
+      return h('div', { class: 'cs-edit' }, doneBanner(), parts);
+    };
+
+    function draw() {
+      const order = CS.fmt === 'news' ? ['fmt', 'news', 'edit'] : CS.fmt === 'face' ? ['fmt', 'topic', 'edit'] : ['fmt', 'topic', 'angle', 'edit'];
+      const idx = Math.max(0, order.indexOf(CS.step)), labels = { fmt: 'Format', topic: 'Topic', angle: 'Angle', news: 'Story', edit: 'Edit' };
+      const bar = h('div', { class: 'cs-steps' }, order.map((k, i) => h('span', { class: 'cs-step' + (i === idx ? ' on' : i < idx ? ' past' : '') }, h('i', null, String(i + 1)), labels[k])));
+      let title, sub, body;
+      if (CS.step === 'fmt') {
+        title = 'What are you making?'; sub = 'Pick one. You can make another right after.';
+        body = h('div', { class: 'hub-grid' }, CS_FMT.map(([k, t, s, ic]) => tile(t, s, ic, () => { CS.fmt = k; CS.edits = {}; go(k === 'news' ? 'news' : 'topic'); })));
+      } else if (CS.step === 'topic') {
+        title = 'What is it about?'; sub = 'Each one is something you sell or a pain your buyer feels.';
+        body = h('div', { class: 'hub-grid' }, Object.keys(GEN_TOPICS).map((k) => tile(GEN_TOPICS[k].name, GEN_TOPICS[k].hooks[CS.seed % GEN_TOPICS[k].hooks.length], null, () => { CS.topic = k; if (CS.fmt === 'face') go('edit'); else go('angle'); })));
+      } else if (CS.step === 'angle') {
+        title = 'Pick an angle'; sub = 'This is the part of the story the post tells.';
+        body = h('div', null, h('div', { class: 'hub-grid' }, GEN_STAGES.map(([k, l]) => tile(l, STAGE_SUB[k], null, () => { CS.stage = k; go('edit'); }))), h('p', { class: 'dim small', style: 'margin-top:14px' }, 'Tone'), painChips());
+      } else if (CS.step === 'news') {
+        title = 'Which story?'; sub = 'Week of ' + NEWS.week + '. Open the original announcement before you post.';
+        body = h('div', { class: 'hub-grid one' }, NEWS.items.map((n, i) => tile(n.title, n.date + ' · ' + n.hook, null, () => { CS.news = i; go('edit'); })));
+      } else {
+        title = FMT_LABEL[CS.fmt]; sub = CS.fmt === 'news' ? NEWS.items[CS.news].title : GEN_TOPICS[CS.topic].name + (CS.stage ? ' · ' + (GEN_STAGES.find((x) => x[0] === CS.stage) || [0, ''])[1] : '');
+        body = editor();
+      }
+      const nav = h('div', { class: 'row wrap cs-nav' }, idx > 0 ? h('button', { class: 'btn small', onclick: () => go(order[idx - 1]) }, 'Back') : null, h('button', { class: 'btn small', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Start over'));
+      root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), h('p', { class: 'sub' }, sub), body, nav);
+    }
+    draw();
+    return root;
+  }
+
+  function postedLog(r) {
+    const byDay = {};
+    r.recent.forEach((p) => { (byDay[p.day] = byDay[p.day] || []).push(p); });
+    const days = Object.keys(byDay).sort().reverse();
+    const row = (p) => h('div', { class: 'log-row' },
+      h('div', { style: 'min-width:0;flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, (p.topic || '') + (p.topic ? ' · ' : '') + timeOf(p.created_at))),
+      h('button', { class: 'btn small', onclick: async () => { try { await api('DELETE', '/content/posted/' + p.id); toast('Removed'); viewContent('log'); } catch (e) { fail(e); } } }, 'Undo'));
+    return days.length ? days.map((d) => h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, new Date(d + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' · ' + byDay[d].length + ' posted'), byDay[d].map(row)))
+      : h('div', { class: 'card empty' }, h('b', null, 'Nothing logged yet'), 'Tap Start posting, make a post, and mark it as posted. It shows up here and on your calendar.');
+  }
+
+  async function viewContent(arg) {
+    const r = await api('GET', '/content');
     const dayN = r.day_n;
     const typeFor = (n) => CONTENT_TYPES[(((n - 1) % 4) + 4) % 4];
-    const tplFor = (n) => { const t = typeFor(n); const lib = CONTENT_LIB[t.id]; return lib[Math.floor(((((n - 1) % (4 * lib.length)) + 4 * lib.length) % (4 * lib.length)) / 4) % lib.length]; };
-    const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
-    const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
-    const done = new Set(r.done_today);
-    const strip = h('div', { class: 'ct-week' }, r.week.map((d) => {
-      const t = typeFor(d.n);
-      return h('div', { class: 'ct-day' + (d.today ? ' now' : '') + (d.done.length >= CPLAT.length ? ' full' : '') },
-        h('small', null, d.label), h('b', null, t.name.replace(' post', '')), h('span', null, d.future ? '' : d.done.length + '/' + CPLAT.length));
-    }));
-    const lib = h('div', { class: 'ct-lib' }, CONTENT_TYPES.map((t) => h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, t.name), h('small', { class: 'dim' }, t.job)),
-      h('p', { class: 'ct-vis' }, 'Visual: ' + t.visual),
-      CONTENT_LIB[t.id].map((p) => h('div', { class: 'ct-tpl' }, h('b', null, p.hook), h('pre', null, fill(p.ig)))))));
-    shell('content', [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Post today'), h('p', { class: 'sub' }, 'One post a day on every platform. Pick a topic and stage, shuffle until it sounds like you, copy, post. Faceless and phone-only.'))),
-      genSection(dayN, done),
-      faceSection(dayN),
-      newsSection(),
-      weekOneSection(),
-      h('h3', { class: 'trk-h' }, 'Demo videos for today (2 ready)'),
-      h('p', { class: 'dim small' }, 'Same call to action on every caption. Download, add the voice-over, post one now and one later.'),
+    const sub = (title, p, nodes) => shell('content', [h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, title), p ? h('p', { class: 'sub' }, p) : null)), nodes], { href: '#/content', label: 'Content' });
+    if (arg === 'start') { return sub('Start posting', 'Make it, post it, log it. It lands on your calendar and your tracker.', contentStart(r)); }
+    if (arg === 'log') return sub('Posted log', 'Everything you actually posted. Undo removes it from the calendar and tracker too.', postedLog(r));
+    if (arg === 'news') { const d = newsSection(); d.open = true; return sub('AI news', 'What happened this week and what it means for a business.', d); }
+    if (arg === 'week1') { const d = weekOneSection(); d.open = true; return sub('Week one posts', 'Seven days of ready posts.', d); }
+    if (arg === 'videos') return sub('Demo videos', 'Rendered videos with sound effects. Add your voice in CapCut, then post.', [
       h('div', { class: 'dv-grid' }, dvToday(dayN).map((id, i) => dvCard(dvOf(id), dayN, i === 0))),
       h('h3', { class: 'trk-h' }, 'Video library'),
-      h('div', { class: 'ct-lib' }, DV_ORDER.map((id) => { const v = dvOf(id); return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, v.t.name), h('small', { class: 'dim' }, v.styleName + ' style')), dvCard(v, 'lib', false)); })),
-      h('h3', { class: 'trk-h' }, 'This week'), strip,
-      h('h3', { class: 'trk-h' }, 'More posts to pull from'), lib,
+      h('div', { class: 'ct-lib' }, DV_ORDER.map((id) => { const v = dvOf(id); return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, v.t.name), h('small', { class: 'dim' }, v.styleName + ' style')), dvCard(v, 'lib', false)); }))]);
+    if (arg === 'library') {
+      const trk = await api('GET', '/tracker');
+      const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
+      const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
+      const lib = h('div', { class: 'ct-lib' }, CONTENT_TYPES.map((t) => h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, t.name), h('small', { class: 'dim' }, t.job)),
+        h('p', { class: 'ct-vis' }, 'Visual: ' + t.visual),
+        CONTENT_LIB[t.id].map((p) => h('div', { class: 'ct-tpl' }, h('b', null, p.hook), h('pre', null, fill(p.ig)))))));
+      return sub('Post ideas', 'Ready-made posts from your four post types.', lib);
+    }
+    // home
+    const done = new Set(r.today_posts.map((p) => p.platform));
+    const tiles = [['Post ideas', 'Ready-made posts', 'script', '#/content/library'], ['AI news', 'This week, in plain English', 'bolt', '#/content/news'], ['Week one', '7 days of posts', 'calendar', '#/content/week1'], ['Demo videos', 'Rendered clips', 'spark', '#/content/videos'], ['Posted log', 'Everything you posted', 'chart', '#/content/log']];
+    shell('content', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Content'), h('p', { class: 'sub' }, 'Make a post or a video, post it, and it is logged for you.'))),
+      h('section', { class: 'ct-hero' },
+        h('div', { class: 'ct-stats' }, h('div', null, h('b', null, String(r.today_posts.length)), h('small', null, 'posted today')), h('div', null, h('b', null, String(r.streak)), h('small', null, 'day streak')), h('div', null, h('b', null, String(r.week_posts)), h('small', null, 'this week'))),
+        h('div', { class: 'stagechips plat-row' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' + (done.has(k) ? ' on' : '') }, l + (done.has(k) ? ' ✓' : '')))),
+        h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
+        h('p', { class: 'dim small', style: 'text-align:center' }, 'Today is day ' + dayN + '. Every post you mark as posted goes on your calendar.')),
+      h('div', { class: 'hub-grid' }, tiles.map(([t, s, ic, href]) => h('a', { class: 'hub-tile', href }, h('span', { class: 'hub-ic' }, icon(ic)), h('b', null, t), h('small', null, s)))),
+      r.today_posts.length ? h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Posted today'), r.today_posts.slice(0, 4).map((p) => h('div', { class: 'log-row' }, h('div', { style: 'flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, timeOf(p.created_at))))) ) : null,
     ]);
   }
 
@@ -4014,6 +4086,16 @@ function api(method, path, body) {
             d.key ? h('div', { class: 'sub', style: 'margin-top:8px' }, 'Key ' + d.key.prefix + '… · ' + (d.key.last_used_at ? 'last used ' + ago(d.key.last_used_at) : 'never used yet')) : null)))),
     ]);
     window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); }, { once: true });
+  }
+
+  function viewCategory(key) {
+    const [title, sub, items] = CATS[key];
+    shell(key, [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Category'), h('h1', null, title), h('p', { class: 'sub' }, sub))),
+      key === 'create' ? h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting') : null,
+      h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
+        h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s)))),
+    ]);
   }
 
   function viewMore() {

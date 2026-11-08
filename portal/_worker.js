@@ -159,6 +159,8 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS cards_log (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, qty INTEGER NOT NULL, price_cents INTEGER NOT NULL DEFAULT 0, business TEXT, note TEXT, created_at TEXT)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_log (day TEXT NOT NULL, platform TEXT NOT NULL, type TEXT, created_at TEXT, PRIMARY KEY (day, platform))'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS content_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, day TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, topic TEXT, title TEXT, cal_id INTEGER, created_at TEXT)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS content_posts_day ON content_posts(day, id)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
@@ -2232,7 +2234,7 @@ async function api(request, env, url) {
   }
 
   /* ---- calendar ---- */
-  const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup'];
+  const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup', 'posted'];
   if (path === '/calendar' && method === 'GET') {
     need(user, 'admin', 'rep');
     const from = validIso(url.searchParams.get('from')), until = validIso(url.searchParams.get('until'));
@@ -2467,7 +2469,42 @@ async function api(request, env, url) {
       week.push({ day: d, n: Math.max(1, dayNum(d)), today: d === today, label: new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }), done: rows.filter((r) => r.day === d).map((r) => r.platform) });
     }
     const wk = week.find((x) => x.today);
-    return json({ today, day_n: Math.max(1, dayNum(today)), done_today: wk.done, week });
+    const todayPosts = (await env.DB.prepare('SELECT id, platform, format, topic, created_at FROM content_posts WHERE day = ? ORDER BY id DESC').bind(today).all()).results;
+    const recent = (await env.DB.prepare('SELECT id, day, platform, format, topic, created_at FROM content_posts ORDER BY id DESC LIMIT 60').all()).results;
+    const days = (await env.DB.prepare('SELECT DISTINCT day FROM content_posts WHERE day >= ? ORDER BY day DESC').bind(trkShift(today, -60)).all()).results.map((r) => r.day);
+    let streak = 0, cur = days.includes(today) ? today : trkShift(today, -1);
+    while (days.includes(cur)) { streak++; cur = trkShift(cur, -1); }
+    const weekPosts = (await env.DB.prepare('SELECT COUNT(*) AS n FROM content_posts WHERE day >= ?').bind(from).first()).n;
+    return json({ today, day_n: Math.max(1, dayNum(today)), done_today: wk.done, week, today_posts: todayPosts, recent, streak, week_posts: weekPosts });
+  }
+  const PLAT_NAME = { ig: 'Instagram', fb: 'Facebook', tt: 'TikTok', yt: 'YouTube Shorts', x: 'X', li: 'LinkedIn' };
+  const FMT_NAME = { post: 'post', video: 'video', face: 'face video', news: 'news post' };
+  const bumpPosts = (day, d) => env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, posts, updated_at) VALUES (?,?,'[]',?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET posts = MAX(0, posts + ?), updated_at = excluded.updated_at`).bind(user.id, day, Math.max(0, d), now(), d).run();
+  if (path === '/content/posted' && method === 'POST') {
+    need(user, 'admin');
+    const plat = str(body.platform, 10), fmt = str(body.format, 10) || 'post';
+    if (!PLAT_NAME[plat]) bad('Pick a platform: Instagram, Facebook, TikTok, YouTube Shorts, X or LinkedIn');
+    if (!FMT_NAME[fmt]) bad('Pick post, video, face or news');
+    const day = ptParts().date, topic = str(body.topic, 40) || null, title = 'Posted ' + FMT_NAME[fmt] + ' on ' + PLAT_NAME[plat];
+    const cal = await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, lead_id, link, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .bind(user.id, title, 'posted', now(), null, topic ? 'Topic: ' + topic : null, null, null, now()).run();
+    const r = await env.DB.prepare('INSERT INTO content_posts (user_id, day, platform, format, topic, title, cal_id, created_at) VALUES (?,?,?,?,?,?,?,?)')
+      .bind(user.id, day, plat, fmt, topic, title, cal.meta.last_row_id, now()).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO content_log (day, platform, type, created_at) VALUES (?,?,?,?)').bind(day, plat, str(body.type, 20), now()).run();
+    await bumpPosts(day, 1);
+    return json({ ok: true, id: r.meta.last_row_id, title });
+  }
+  if ((m = path.match(/^\/content\/posted\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin');
+    const row = await env.DB.prepare('SELECT * FROM content_posts WHERE id = ?').bind(+m[1]).first();
+    if (!row) throw new HttpError(404, 'Post not found');
+    if (row.cal_id) await env.DB.prepare('DELETE FROM cal_events WHERE id = ?').bind(row.cal_id).run();
+    await env.DB.prepare('DELETE FROM content_posts WHERE id = ?').bind(row.id).run();
+    await bumpPosts(row.day, -1);
+    const left = await env.DB.prepare('SELECT 1 AS n FROM content_posts WHERE day = ? AND platform = ?').bind(row.day, row.platform).first();
+    if (!left) await env.DB.prepare('DELETE FROM content_log WHERE day = ? AND platform = ?').bind(row.day, row.platform).run();
+    return json({ ok: true });
   }
   if (path === '/content/toggle' && method === 'POST') {
     need(user, 'admin');
