@@ -2572,36 +2572,170 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       question: 'What happens to calls at 9pm at your spa? 👇',
       scenes: ['City street at night through a window, a closed med spa with a dark front desk, neon reflections', 'Woman searching on her phone in bed at night, screen glow on her face', 'Phone confirming a booking at 9pm, calm and satisfying'] },
   };
-  const GEN_STAGES = [['symptom', 'Symptom'], ['diagnosis', 'Diagnosis'], ['surgery', 'The surgery'], ['recovery', 'Recovery'], ['question', 'Question']];
+  /* ---- more offers: website, client CRM, site chat, review cards (hooks lead with the pain, not the tech) ---- */
+  Object.assign(GEN_TOPICS, {
+    website: { name: 'Website',
+      hooks: ['Can people find you?', 'Your website is your front door.', 'Get found. Get booked.'],
+      symptom: "Someone searches for your service on their phone. Your site loads slowly, looks outdated, or isn't there at all.",
+      diagnosis: 'People decide in seconds. A slow or old site tells them to try the next result.',
+      math: '',
+      surgery: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
+      recovery: 'More calls and bookings from people who were already looking for you.',
+      question: 'When did you last look at your own website on your phone? 👇',
+      scenes: ['Phone screen with a slow-loading outdated website, a thumb scrolling in frustration, cinematic', 'Same phone showing a fast modern spa website with a Book Now button, soft glow', 'Calendar filling with bookings on a tablet at a reception desk, premium'] },
+    crm: { name: 'Client CRM',
+      hooks: ['Your leads live in your notes app.', 'Where do your leads actually go?', "Texts, DMs, sticky notes. That's not a system."],
+      symptom: 'Leads come in through calls, DMs, texts and forms, and they end up scattered across five places.',
+      diagnosis: "If nobody knows who to follow up with today, the lead you paid for quietly goes cold.",
+      math: '',
+      surgery: 'One simple dashboard on your phone: every lead, every follow-up, every booked appointment in one place.',
+      recovery: 'Nothing slips through the cracks, and you know exactly who to call today.',
+      question: 'Where do your leads live right now: notes app, DMs, or a real system? 👇',
+      scenes: ['Messy desk with sticky notes and a phone full of unread messages, shallow depth of field', 'Clean dashboard on a phone showing a tidy list of leads, dark UI with blue glow', 'Owner glancing at a phone and smiling, organized and calm'] },
+    chatbot: { name: 'Site chat',
+      hooks: ['Your website has questions. Who answers?', "Who answers 'how much is Botox?' at 9pm?", 'Visitors leave when nobody replies.'],
+      symptom: 'Someone is on your website at 9pm with a question about pricing or downtime, and there is nobody to ask.',
+      diagnosis: "Most visitors won't send an email and wait. They leave and ask whoever answers now.",
+      math: '',
+      surgery: 'A chat on your site answers the common questions instantly and books the consult.',
+      recovery: 'Questions get answered while your team sleeps, and curious visitors become booked clients.',
+      question: 'What question do clients ask you ten times a week? 👇',
+      scenes: ['Woman at night on her phone looking at a spa website with a question, screen glow on her face', 'Chat bubble answering a question on a phone, dark UI with blue glow', 'Booking confirmation on a phone, calm and satisfying'] },
+    plates: { name: 'Review cards',
+      hooks: ['One tap. One more five-star review.', "Reviews shouldn't take eight steps.", 'Your next 50 reviews are one tap away.'],
+      symptom: 'Happy clients mean to leave a review and never do, because it takes too many steps.',
+      diagnosis: 'The fewer taps between the visit and the review page, the more reviews you get.',
+      math: '',
+      surgery: 'A tap card at your front desk opens your Google review page instantly.',
+      recovery: 'Reviews build up every week, and your listing climbs above the competition.',
+      question: 'How many happy clients left without a review last month? 👇',
+      scenes: ['Hand tapping a phone on a sleek card at a med spa front desk, shallow depth of field', 'Phone showing a Google review page with five stars lighting up', 'Front desk with a small tap card stand, warm premium lighting'] },
+  });
+  // plain = the fix without naming the tech; story/tip/save feed the longer face-to-camera scripts
+  const GEN_EXTRA = {
+    missed: { plain: 'A system picks up every call, answers the common questions and books the consult, so nothing goes to voicemail.',
+      story: "Picture it: a woman has been thinking about lip filler for months. Tonight she finally decides to book. She calls your spa at 6:40. Nobody answers. She doesn't leave a message. She calls the next spa on Google.",
+      tip: 'Today, call your own spa line at 7pm and hear what a new client hears. Do it again on Saturday. That is your real front desk.',
+      save: 'Every missed call is ad money and Google ranking you already paid for, wasted at the very last step.' },
+    slow: { plain: 'Every new inquiry gets a reply within a minute, with a link to book, even at 9pm.',
+      story: 'She fills out your form at 7pm. She has also messaged two other spas. One replies in four minutes with a time. You reply the next morning. She has already booked.',
+      tip: 'Check your last five inquiries and write down how long each one waited for a reply. That number is your leak.',
+      save: 'You already paid to get that lead to your form. A slow reply throws the whole cost away.' },
+    quiet: { plain: 'A friendly text goes out to past clients on a schedule, and the ones who reply get booked.',
+      story: 'You have a list of people who came in once, loved it, and never came back. Not because anything went wrong. Life got busy and nobody reminded them.',
+      tip: 'Pull your client list, sort by last visit, and personally text the ten oldest ones this week. See how many reply.',
+      save: 'Bringing back a past client costs a text. Winning a new one costs ad spend.' },
+    reviews: { plain: 'A tap card at the front desk and a text after the visit send happy clients straight to your Google review page.',
+      story: "Your client just had a great visit. She'd happily leave five stars, but she has to open Google, search your name and find the button. She's in her car and gone. No review.",
+      tip: 'Look at your Google rating next to the two closest competitors. Count the reviews from the last 90 days. That is the gap.',
+      save: 'Reviews bring in clients for free, and they work while you sleep.' },
+    noshow: { plain: 'Automatic reminders go out before every appointment with a one-tap reschedule, and open slots go to a waitlist.',
+      story: 'Thursday, 2pm. Your injector is ready. The chair is empty. The client forgot. That is a $300 slot gone, with no one to fill it on an hour of notice.',
+      tip: 'Count your no-shows and late cancels from the last month and multiply by your average treatment. Write that number on a sticky note.',
+      save: 'A reminder text costs almost nothing. An empty chair costs the whole treatment.' },
+    afterhours: { plain: 'Calls and messages after hours are answered and booked on the spot, so the evening and weekend crowd does not bounce.',
+      story: "Sunday night, 9pm. She's scrolling, she's ready, she finds your spa and tries to book. There's no online booking and the phone is off. She books the one that lets her.",
+      tip: 'Try booking your own spa as a stranger on a Sunday night. Count the steps. Every extra step loses someone.',
+      save: 'Your best booking window is when your team is off the clock. You do not need staff for it, you need a system.' },
+    website: { plain: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
+      story: "A woman searches 'med spa near me' on her phone. She taps your listing. The site takes six seconds to load and the text is tiny. She hits back and taps the next one.",
+      tip: 'Open your site on your phone right now, on cellular, not wifi. Time it, and try to book in under thirty seconds.',
+      save: 'Ads and social posts send people to your site. If the site loses them, you pay for traffic that never turns into a booking.' },
+    crm: { plain: 'One simple dashboard on your phone: every lead, every follow-up, every booked appointment in one place.',
+      story: "A lead DMs you on Instagram, another texts, another fills out a form. By Friday you can't remember who asked about what, and one of them already went somewhere else.",
+      tip: 'List every place a lead can reach you. Count them. If it is more than two, people are slipping through the cracks.',
+      save: 'Many CRMs charge per seat and per feature. A simple one built around how you already work costs less, and you will actually use it.' },
+    chatbot: { plain: 'A chat box on your site answers the common questions, like prices, downtime and hours, and books the consult.',
+      story: "It's 9pm. Someone is on your site, wondering how long Botox lasts and what it costs. There's no one to ask and no price on the page. She closes the tab.",
+      tip: 'Write down the five questions your front desk answers most. If those were answered automatically, how many hours would you get back?',
+      save: 'Answering the same ten questions all day is paid time. Let the site handle the repeats.' },
+    plates: { plain: 'A tap card at your front desk opens your Google review page instantly.',
+      story: "She just loved her facial. She says 'I'll review you later.' She never does. Not because she doesn't care. Because later never comes.",
+      tip: 'Check how many reviews you got this month. Then think about how many happy clients walked out that you never asked.',
+      save: 'A one-time card costs far less than the ad spend it takes to earn the same trust.' },
+  };
+  Object.keys(GEN_EXTRA).forEach((k) => Object.assign(GEN_TOPICS[k], GEN_EXTRA[k]));
+  const GEN_STAGES = [['symptom', 'Symptom'], ['diagnosis', 'Diagnosis'], ['save', 'Save money'], ['surgery', 'The fix'], ['recovery', 'Recovery'], ['story', 'Story'], ['question', 'Question']];
+  const plainCta = (s) => s.replace(/ AI audit/g, ' audit');
+  const ctaFor = (plat, plain) => (plain ? plainCta(CTA[plat]) : CTA[plat]);
+  const tagsFor = (plat, plain) => (plain ? TAGSBY[plat].replace(/ ?#aiautomation/, '') : TAGSBY[plat]);
   const genEx = (t) => (t.math ? t.math + ' (Example numbers. Yours will differ.)' : '');
-  function genLines(tid, stage) {
+  const fixOf = (t, plain) => (plain ? t.plain : t.surgery);
+  function genLines(tid, stage, plain) {
     const t = GEN_TOPICS[tid];
     if (stage === 'symptom') return ['Symptom: ' + t.symptom, genEx(t)].filter(Boolean);
     if (stage === 'diagnosis') return ['Diagnosis: ' + t.diagnosis, genEx(t)].filter(Boolean);
-    if (stage === 'surgery') return ['The surgery: ' + t.surgery, t.recovery];
-    if (stage === 'recovery') return ['Before: ' + t.symptom, 'After: ' + t.recovery, 'How: ' + t.surgery];
+    if (stage === 'save') return [t.save, genEx(t)].filter(Boolean);
+    if (stage === 'surgery') return ['The fix: ' + fixOf(t, plain), t.recovery];
+    if (stage === 'recovery') return ['Before: ' + t.symptom, 'After: ' + t.recovery, 'How: ' + fixOf(t, plain)];
+    if (stage === 'story') return [t.story, 'The fix: ' + fixOf(t, plain)];
     return [t.symptom, t.question];
   }
-  function genPost(tid, stage, seed, plat) {
-    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], lines = genLines(tid, stage), cta = CTA[plat], tags = TAGSBY[plat];
+  function genPost(tid, stage, seed, plat, plain) {
+    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], lines = genLines(tid, stage, plain), cta = ctaFor(plat, plain), tags = tagsFor(plat, plain);
     if (plat === 'x') {
-      const parts = [hook].concat(lines);
-      while (parts.length > 1 && (parts.join('\n\n') + '\n\n' + cta).length > 280) parts.pop();
-      return parts.join('\n\n') + '\n\n' + cta;
+      const room = 280 - (hook + '\n\n\n\n' + cta).length;
+      const fit = [];
+      let used = 0;
+      for (const l of lines.slice().sort((a, b) => a.length - b.length)) { if (used + l.length + 2 <= room) { fit.push(l); used += l.length + 2; } }
+      const keep = lines.filter((l) => fit.includes(l));
+      return [hook].concat(keep, [cta]).join('\n\n');
     }
     if (plat === 'yt') return 'Title: ' + (hook.length > 52 ? hook.slice(0, 51) + '…' : hook) + ' #shorts\n\nDescription:\n' + lines.join('\n\n') + '\n\n' + cta + '\n\n' + tags;
     const lead = (plat === 'ig' || plat === 'fb' || plat === 'tt') ? '🩺 ' + hook : hook;
-    const body = plat === 'tt' ? lines.slice(0, 1) : lines;
+    const body = plat === 'tt' ? lines.slice(0, 2) : lines;
     return lead + '\n\n' + body.join('\n\n') + '\n\n' + cta + (tags ? '\n\n' + tags : '');
   }
   const spoken = (s) => s.replace(/ × /g, ' times ').replace(/ = /g, ' equals ').replace(/\$([\d,]+)/g, '$1 dollars').replace(/ 👇/g, '').replace(/(\d+)%/g, '$1 percent');
-  function genVideo(tid, seed) {
+  function genVideo(tid, seed, plain) {
     const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
-    const script = [hook, t.symptom, t.diagnosis, t.math ? 'Say that adds up: ' + t.math + '.' : '', 'Now, same situation. ' + t.surgery, t.recovery, VO_CTA].filter(Boolean).map(spoken).join(' ');
-    const captions = [hook, t.symptom, t.math || t.diagnosis, t.surgery, 'DM "AUDIT" for a free AI audit'];
-    const scenes = t.scenes.map((s, i) => 'Vertical 9:16, cinematic, premium, no text, no logos. ' + s + (i === 0 ? '' : ''));
+    const vo = plain ? plainCta(VO_CTA) : VO_CTA;
+    const script = [hook, t.symptom, t.diagnosis, t.math ? 'Say that adds up: ' + t.math + '.' : '', 'Now, same situation. ' + fixOf(t, plain), t.recovery, vo].filter(Boolean).map(spoken).join(' ');
+    const captions = [hook, t.symptom, t.math || t.diagnosis, fixOf(t, plain), plain ? 'DM "AUDIT" for a free audit' : 'DM "AUDIT" for a free AI audit'];
+    const scenes = t.scenes.map((s) => 'Vertical 9:16, cinematic, premium, no text, no logos. ' + s);
     return { script, captions, scenes };
   }
+  // Longer script to say to the camera: 30 / 60 / 90 seconds, with a cue for each beat
+  function genFace(tid, secs, seed, plain) {
+    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
+    const cta = plain ? 'If you own a med spa, DM me the word AUDIT and I will take a free look at your front desk and show you where bookings are slipping.' : 'If you own a med spa, DM me the word AUDIT and I will run a free AI audit of your front desk and show you where bookings are slipping.';
+    const ex = t.math ? 'Say that adds up: ' + t.math + '. That is an example, your numbers will differ.' : '';
+    const beats = secs === 30 ? [['HOOK', 'Look at the camera, no intro', hook], ['PAIN', 'Slow down, make it a scene', t.symptom], ['THE FIX', 'Lean in', fixOf(t, plain)], ['CTA', 'Point down at the caption', cta]]
+      : secs === 60 ? [['HOOK', 'Look at the camera, no intro', hook], ['STORY', 'Tell it like a story', t.story], ['WHY IT HAPPENS', 'Show the number on screen', [t.diagnosis, ex].filter(Boolean).join(' ')], ['THE FIX', 'Lean in', fixOf(t, plain) + ' ' + t.recovery], ['CTA', 'Point down at the caption', cta]]
+      : [['HOOK', 'Look at the camera, no intro', hook], ['STORY', 'Tell it like a story', t.story], ['WHY IT HAPPENS', 'Show the number on screen', [t.diagnosis, ex].filter(Boolean).join(' ')], ['WHAT IT COSTS', 'Slow down', t.save], ['THE FIX', 'Lean in', fixOf(t, plain) + ' ' + t.recovery], ['DO THIS TODAY (free)', 'Hold up a finger, give them something real', t.tip], ['CTA', 'Point down at the caption', cta]];
+    const words = beats.reduce((n, b) => n + b[2].split(/\s+/).length, 0);
+    return { beats, text: beats.map(([n, cue, line]) => '[' + n + '] (' + cue + ')\n' + line).join('\n\n'), plainText: beats.map((b) => b[2]).join('\n\n'), est: Math.round(words / 2.6) };
+  }
+  // Weekly AI news: what happened, what it means, and the med spa angle. Source: one roundup, so check each item at the original before posting.
+  const NEWS = { week: 'Nov 2 to 8, 2026', source: 'hellogrowth.ai roundup of AI news (Nov 5, 2026). It is one roundup, so open the original announcement for any item before you post it.',
+    items: [
+      { date: 'Nov 4', title: 'ChatGPT agents that keep working between conversations', hook: 'AI just learned to keep working after you close the chat.',
+        fact: 'OpenAI made "Dots", personal agents that keep working on a task between conversations, available in ChatGPT Enterprise, Edu and Healthcare.',
+        meaning: 'Software that follows up and finishes tasks without being told twice is becoming normal.',
+        angle: 'A med spa has the same problem: leads and follow-ups that depend on someone remembering. The goal is the same, nothing waits for a person to remember.' },
+      { date: 'Oct 28', title: 'AI plans now come with spending limits and monthly credit', hook: 'AI bills just got a spending cap.',
+        fact: 'Anthropic added shared team budgets with alerts at 50, 75, 95 and 100 percent, and said its Team plan includes up to $500 a month in pooled API credit. OpenAI said ChatGPT Pro and Business plans include monthly API credit.',
+        meaning: 'AI costs are getting predictable, because you can cap what a team spends.',
+        angle: 'For a small business, AI no longer has to mean an open-ended bill. You set the limit before you start.' },
+      { date: 'Nov 4', title: 'ChatGPT images got faster and more consistent', hook: 'You can now make a week of branded posts in one afternoon.',
+        fact: 'OpenAI released Images 2.6: faster generation, more consistent results across edits, and animated GIFs, on all plans.',
+        meaning: 'Making branded visuals no longer needs a designer for every post.',
+        angle: 'A spa can keep the same look on every post without paying someone each time. Keep real before-and-afters real.' },
+      { date: 'This week', title: 'AI-made content is getting labeled', hook: 'AI-made content is about to get a label. Here is what that means for your business.',
+        fact: 'Anthropic began adding invisible watermarks and C2PA provenance data to Claude output to meet EU AI Act Article 50.',
+        meaning: 'Expect labels on AI-made images and text over time. Honest businesses will be fine.',
+        angle: 'Customers will care more about what is real. Real reviews and real results matter more, not less.' },
+      { date: 'Nov 2', title: 'Microsoft is limiting free Copilot Chat features', hook: 'The free AI inside your software is shrinking.',
+        fact: 'Microsoft started limiting more Copilot Chat features for unlicensed users on Nov 2 for organizations with 2,000 or fewer seats.',
+        meaning: 'Free AI inside tools you already pay for is shrinking, and paid tiers are the push.',
+        angle: 'Before you pay for another AI add-on, check what you already have and what it costs per month.' },
+    ] };
+  const newsPost = (n, plat) => {
+    const body = n.hook + '\n\nWhat happened: ' + n.fact + '\n\nWhat it means: ' + n.meaning + '\n\nFor a med spa: ' + n.angle;
+    if (plat === 'x') { const cta = CTA.x; const s = n.hook + '\n\n' + n.meaning + '\n\n' + n.angle; return (s + '\n\n' + cta).length <= 280 ? s + '\n\n' + cta : n.hook + '\n\n' + n.meaning + '\n\n' + cta; }
+    return body + '\n\n' + CTA[plat] + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : '');
+  };
+  const newsFace = (n) => '[HOOK] (Look at the camera, no intro)\n' + n.hook + '\n\n[WHAT HAPPENED] (Show the headline on screen)\n' + n.fact + '\n\n[WHAT IT MEANS]\n' + n.meaning + '\n\n[FOR A MED SPA] (Lean in)\n' + n.angle + '\n\n[CTA] (Point down at the caption)\nIf you own a med spa and want to know what this means for your front desk, DM me the word AUDIT.';
   const WEEK1 = [
     ['Day 1: Intro', "I'm the Business Surgeon. I find where your business is bleeding money and fix it with AI. Missed calls, slow replies, no reviews. Most owners don't know it's happening. I'll show you how to spot it. 🩺"],
     ['Day 2: Symptom (missed calls)', "Symptom: your phone rings during a treatment and nobody picks up. That caller doesn't leave a voicemail. They call the next spa on Google. An AI receptionist answers in seconds, 24/7, and books them. Do you know how many calls you missed this week?"],
@@ -2614,19 +2748,19 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const copyText = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
   function genSection(dayN, done) {
     const ids = Object.keys(GEN_TOPICS);
-    const G = { topic: ids[(dayN - 1) % ids.length], stage: GEN_STAGES[(dayN - 1) % GEN_STAGES.length][0], seed: dayN, plat: (CPLAT.find(([k]) => !done.has(k)) || CPLAT[0])[0] };
+    const G = { topic: ids[(dayN - 1) % ids.length], stage: GEN_STAGES[(dayN - 1) % GEN_STAGES.length][0], seed: dayN, plat: (CPLAT.find(([k]) => !done.has(k)) || CPLAT[0])[0], plain: true };
     const root = h('section', { class: 'ct-today' });
     const area = h('textarea', { class: 'ct-text', rows: 12 });
     const count = h('small', { class: 'dim' });
     const chips = (items, cur, on) => h('div', { class: 'stagechips' }, items.map(([k, label]) => h('button', { class: 'schip' + (cur === k ? ' on' : ''), onclick: () => on(k) }, label)));
     const vid = h('div', { class: 'gen-vid' });
     const fillText = () => {
-      area.value = genPost(G.topic, G.stage, G.seed, G.plat);
+      area.value = genPost(G.topic, G.stage, G.seed, G.plat, G.plain);
       count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters';
       count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : '';
     };
     const fillVideo = () => {
-      const v = genVideo(G.topic, G.seed);
+      const v = genVideo(G.topic, G.seed, G.plain);
       vid.replaceChildren(
         h('p', { class: 'dim small' }, 'Voice-over script (about 30 seconds). Copy it into the voice step when it is ready, or any voice tool for now.'),
         h('p', { class: 'dv-script' }, v.script), h('button', { class: 'btn', onclick: () => copyText(v.script, 'Script copied') }, 'Copy script'),
@@ -2648,6 +2782,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('p', { class: 'dim small' }, 'Topic'), chips(ids.map((k) => [k, GEN_TOPICS[k].name]), G.topic, (k) => { G.topic = k; draw(); }),
         h('p', { class: 'dim small' }, 'Stage of the series'), chips(GEN_STAGES, G.stage, (k) => { G.stage = k; draw(); }),
         h('p', { class: 'dim small' }, 'Platform'), chips(CPLAT.map(([k, l]) => [k, l + (done.has(k) ? ' ✓' : '')]), G.plat, (k) => { G.plat = k; draw(); }),
+        h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (G.plain === v ? ' on' : ''), onclick: () => { G.plain = v; draw(); } }, l))),
         area, count,
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Copied. Paste it into ' + CPLAT.find(([k]) => k === G.plat)[1]) }, 'Copy post'),
@@ -2658,6 +2793,52 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       area.oninput = () => { count.textContent = G.plat === 'x' ? area.value.length + ' / 280' : area.value.length + ' characters'; count.style.color = G.plat === 'x' && area.value.length > 280 ? 'var(--bad)' : ''; };
     };
     draw();
+    return root;
+  }
+  function faceSection(dayN) {
+    const ids = Object.keys(GEN_TOPICS);
+    const F = { topic: ids[(dayN + 2) % ids.length], secs: 60, seed: dayN, plain: true, plat: 'ig' };
+    const root = h('details', { class: 'card ct-det' });
+    const draw = () => {
+      const f = genFace(F.topic, F.secs, F.seed, F.plain);
+      const cap = genPost(F.topic, 'story', F.seed, F.plat, F.plain);
+      const area = h('textarea', { class: 'ct-text', rows: 14 }); area.value = f.text;
+      const capArea = h('textarea', { class: 'ct-text', rows: 8 }); capArea.value = cap;
+      const open = root.open;
+      root.replaceChildren(
+        h('summary', null, h('b', null, 'Face-to-camera scripts'), h('small', { class: 'dim' }, '30, 60 or 90 seconds, with a cue for every beat')),
+        h('p', { class: 'dim small' }, 'Topic'), h('div', { class: 'stagechips' }, ids.map((k) => h('button', { class: 'schip' + (F.topic === k ? ' on' : ''), onclick: () => { F.topic = k; draw(); } }, GEN_TOPICS[k].name))),
+        h('p', { class: 'dim small' }, 'Length'), h('div', { class: 'stagechips' }, [30, 60, 90].map((n) => h('button', { class: 'schip' + (F.secs === n ? ' on' : ''), onclick: () => { F.secs = n; draw(); } }, n + ' sec'))),
+        h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (F.plain === v ? ' on' : ''), onclick: () => { F.plain = v; draw(); } }, l))),
+        h('p', { class: 'dim small' }, 'About ' + f.est + ' seconds when spoken at a natural pace. The brackets are cues for you, not words to say.'),
+        area,
+        h('div', { class: 'row wrap' },
+          h('button', { class: 'btn primary', onclick: () => copyText(f.text, 'Script with cues copied') }, 'Copy with cues'),
+          h('button', { class: 'btn', onclick: () => copyText(f.plainText, 'Plain script copied (teleprompter)') }, 'Copy plain script'),
+          h('button', { class: 'btn', onclick: () => { F.seed += 1; draw(); } }, 'Shuffle hook')),
+        h('p', { class: 'dim small' }, 'Caption to post with it'),
+        h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => h('button', { class: 'schip' + (F.plat === k ? ' on' : ''), onclick: () => { F.plat = k; draw(); } }, l))),
+        capArea, h('button', { class: 'btn', onclick: () => copyText(capArea.value, 'Caption copied') }, 'Copy caption'));
+      root.open = open;
+    };
+    draw();
+    return root;
+  }
+  function newsSection() {
+    const root = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'AI news: what it means for a business'), h('small', { class: 'dim' }, 'Week of ' + NEWS.week)));
+    root.append(h('p', { class: 'dim small' }, 'Source: ' + NEWS.source));
+    NEWS.items.forEach((n) => {
+      let plat = 'ig';
+      const area = h('textarea', { class: 'ct-text', rows: 9 });
+      const set = () => { area.value = newsPost(n, plat); };
+      const tabs = h('div', { class: 'stagechips' });
+      const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, l]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); set(); } }, l)));
+      drawTabs(); set();
+      root.append(h('div', { class: 'ct-tpl' }, h('b', null, n.date + ': ' + n.title), tabs, area,
+        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Post copied') }, 'Copy post'), h('button', { class: 'btn', onclick: () => copyText(newsFace(n), 'Face script copied') }, 'Copy face script'))));
+    });
+    const tpl = 'Hook: [the news in one line a business owner cares about]\n\nWhat happened: [one sentence, with the date and who announced it]\n\nWhat it means: [plain English, no jargon]\n\nFor a med spa: [what changes for their front desk, bookings or costs]\n\nWhat to do: [one free action they can take today]';
+    root.append(h('div', { class: 'ct-tpl' }, h('b', null, 'Template for any news item'), h('pre', { class: 'gen-pre' }, tpl), h('button', { class: 'btn', onclick: () => copyText(tpl, 'Template copied') }, 'Copy template')));
     return root;
   }
   function weekOneSection() {
@@ -2692,6 +2873,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     shell('content', [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Post today'), h('p', { class: 'sub' }, 'One post a day on every platform. Pick a topic and stage, shuffle until it sounds like you, copy, post. Faceless and phone-only.'))),
       genSection(dayN, done),
+      faceSection(dayN),
+      newsSection(),
       weekOneSection(),
       h('h3', { class: 'trk-h' }, 'Demo videos for today (2 ready)'),
       h('p', { class: 'dim small' }, 'Same call to action on every caption. Download, add the voice-over, post one now and one later.'),
