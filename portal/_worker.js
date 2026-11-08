@@ -138,6 +138,9 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS finder_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, query TEXT, results INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS finder_time ON finder_log(created_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS cal_events (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'event',
+      starts_at TEXT NOT NULL, ends_at TEXT, notes TEXT, lead_id INTEGER, link TEXT, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS cal_time ON cal_events(starts_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS demo_images (id TEXT PRIMARY KEY, user_id INTEGER, mime TEXT NOT NULL, data BLOB NOT NULL, prompt TEXT, created_at TEXT NOT NULL)`),
   ]);
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_heat ON leads(heat)').run();
@@ -2225,6 +2228,54 @@ async function api(request, env, url) {
       sets.push('paid = ?', 'paid_at = ?'); args.push(body.paid ? 1 : 0, body.paid ? (deal.paid_at || now()) : null);
     }
     if (sets.length) await env.DB.prepare(`UPDATE deals SET ${sets.join(', ')} WHERE id = ?`).bind(...args, deal.id).run();
+    return json({ ok: true });
+  }
+
+  /* ---- calendar ---- */
+  const CAL_KINDS = ['event', 'audit', 'demo', 'call', 'training', 'followup'];
+  if (path === '/calendar' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const from = validIso(url.searchParams.get('from')), until = validIso(url.searchParams.get('until'));
+    if (!from || !until) bad('Missing date range');
+    const ev = await env.DB.prepare(`SELECT e.id, e.title, e.kind, e.starts_at, e.ends_at, e.notes, e.lead_id, e.link, e.user_id, u.name AS owner_name, l.business AS lead_name
+      FROM cal_events e LEFT JOIN users u ON u.id = e.user_id LEFT JOIN leads l ON l.id = e.lead_id
+      WHERE e.starts_at >= ? AND e.starts_at < ? ${user.role === 'rep' ? 'AND e.user_id = ?' : ''} ORDER BY e.starts_at ASC LIMIT 500`).bind(...[from, until].concat(user.role === 'rep' ? [user.id] : [])).all();
+    const own = user.role === 'rep' ? 'AND l.assigned_to = ?' : '';
+    const own2 = user.role === 'rep' ? [user.id] : [];
+    const cb = await env.DB.prepare(`SELECT l.id, l.business, l.phone, l.status, l.callback_at AS at FROM leads l WHERE l.status = 'callback' AND l.callback_at >= ? AND l.callback_at < ? ${own} ORDER BY l.callback_at ASC LIMIT 300`).bind(from, until, ...own2).all();
+    const bk = await env.DB.prepare(`SELECT l.id, l.business, l.phone, l.status, l.booked_at AS at FROM leads l WHERE l.status = 'booked' AND l.booked_at >= ? AND l.booked_at < ? ${own} ORDER BY l.booked_at ASC LIMIT 300`).bind(from, until, ...own2).all();
+    return json({ events: ev.results, callbacks: cb.results, booked: bk.results });
+  }
+  if (path === '/calendar' && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const title = str(body.title, 120), starts = validIso(body.starts_at);
+    if (!title) bad('Give it a title');
+    if (!starts) bad('Pick a date and time');
+    const ends = body.ends_at ? validIso(body.ends_at) : null;
+    if (body.ends_at && !ends) bad('That end time is not valid');
+    if (ends && ends < starts) bad('The end is before the start');
+    const kind = CAL_KINDS.includes(body.kind) ? body.kind : 'event';
+    const leadId = body.lead_id ? +body.lead_id : null;
+    if (leadId) await loadLead(env, user, leadId);
+    const link = str(body.link, 300);
+    if (link && !/^https?:\/\//i.test(link)) bad('The link must start with https://');
+    const r = await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, lead_id, link, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .bind(user.id, title, kind, starts, ends, str(body.notes, 1000) || null, leadId, link || null, now()).run();
+    return json({ ok: true, id: r.meta.last_row_id });
+  }
+  if ((m = path.match(/^\/calendar\/(\d+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+    need(user, 'admin', 'rep');
+    const ev = await env.DB.prepare('SELECT * FROM cal_events WHERE id = ?').bind(+m[1]).first();
+    if (!ev || (user.role !== 'admin' && ev.user_id !== user.id)) throw new HttpError(404, 'Event not found');
+    if (method === 'DELETE') { await env.DB.prepare('DELETE FROM cal_events WHERE id = ?').bind(ev.id).run(); return json({ ok: true }); }
+    const sets = [], args = [];
+    if (body.title !== undefined) { const t = str(body.title, 120); if (!t) bad('Give it a title'); sets.push('title = ?'); args.push(t); }
+    if (body.kind !== undefined) { sets.push('kind = ?'); args.push(CAL_KINDS.includes(body.kind) ? body.kind : 'event'); }
+    if (body.starts_at !== undefined) { const v = validIso(body.starts_at); if (!v) bad('Pick a date and time'); sets.push('starts_at = ?'); args.push(v); }
+    if (body.ends_at !== undefined) { const v = body.ends_at ? validIso(body.ends_at) : null; if (body.ends_at && !v) bad('That end time is not valid'); sets.push('ends_at = ?'); args.push(v); }
+    if (body.notes !== undefined) { sets.push('notes = ?'); args.push(str(body.notes, 1000) || null); }
+    if (body.link !== undefined) { const l = str(body.link, 300); if (l && !/^https?:\/\//i.test(l)) bad('The link must start with https://'); sets.push('link = ?'); args.push(l || null); }
+    if (sets.length) await env.DB.prepare(`UPDATE cal_events SET ${sets.join(', ')} WHERE id = ?`).bind(...args, ev.id).run();
     return json({ ok: true });
   }
 

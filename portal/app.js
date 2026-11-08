@@ -58,6 +58,7 @@
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10.5L12 4l8 6.5V20"/><path d="M9.5 20v-5.5h5V20"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
     deals: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M14.8 9.2c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2.1 2.9.9 2.9 2.2-1.2 2.1-2.9 2.1c-1.4 0-2.5-.6-3-1.6M12 6.3v1.5M12 16.2v1.5"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
     script: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7.5L19 8v12.5H7z"/><path d="M14 3.5V8h5M10 12h6M10 15.5h6"/></svg>',
@@ -140,24 +141,63 @@
   // bottom tabs on phones
   function tabsFor(role) {
     if (role === 'admin') return [['home', 'Home'], ['tracker', 'Tracker'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['more', 'More']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [
-      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['rebrief', 'Daily brief'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['deals', 'Deals']]],
+      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['rebrief', 'Daily brief'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['deals', 'Deals']]],
       ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['cards', 'Review cards'], ['script', 'Call script']]],
       ['System', [['settings', 'Settings']]],
     ];
-    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
-  const TAB_ICON = { rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
+  const TAB_ICON = { calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // pages that live under the admin "More" tab on phones
-  const UNDER_MORE = ['recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
+  const UNDER_MORE = ['calendar', 'recordings', 'emailbot', 'batches', 'upload', 'users', 'script', 'account', 'deals', 'integrations', 'demos', 'finder', 'studio'];
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
+
+
+  /* ================= floating orb (look only) ================= */
+  // the orb drifts between the screen edges, so it stays out of the way of text
+  const ORB_SPOTS = [[1, 0.26], [0, 0.56], [1, 0.62], [0, 0.22], [1, 0.42], [0, 0.72], [1, 0.8]];
+  let orbEl = null, orbIdx = 0, orbDrag = null;
+  function orbSpot(i) {
+    const w = window.innerWidth, hgt = window.innerHeight, big = w >= 1000, size = orbEl ? orbEl.offsetWidth : 60;
+    const minX = (big ? 252 : 0) + 10, maxX = w - size - 10, minY = 76, maxY = hgt - size - (big ? 24 : 96);
+    const [fx, fy] = ORB_SPOTS[i % ORB_SPOTS.length];
+    return [Math.round(minX + (maxX - minX) * fx), Math.round(minY + (maxY - minY) * fy)];
+  }
+  function placeOrb(i, instant) {
+    if (!orbEl) return;
+    const [x, y] = orbSpot(i);
+    if (instant) orbEl.style.transition = 'none';
+    orbEl.style.left = x + 'px'; orbEl.style.top = y + 'px';
+    if (instant) { void orbEl.offsetWidth; orbEl.style.transition = ''; }
+  }
+  function ensureOrb() {
+    if (orbEl && document.body.contains(orbEl)) return;
+    orbEl = h('div', { class: 'orb', 'aria-hidden': 'true' }, h('span', { class: 'orb-core' }), h('span', { class: 'orb-shine' }));
+    document.body.append(orbEl);
+    placeOrb(orbIdx, true);
+    orbEl.addEventListener('pointerdown', (e) => {
+      orbDrag = { dx: e.clientX - orbEl.offsetLeft, dy: e.clientY - orbEl.offsetTop };
+      orbEl.setPointerCapture(e.pointerId); orbEl.classList.add('drag'); orbEl.style.transition = 'none';
+    });
+    orbEl.addEventListener('pointermove', (e) => {
+      if (!orbDrag) return;
+      const x = Math.max(4, Math.min(window.innerWidth - orbEl.offsetWidth - 4, e.clientX - orbDrag.dx));
+      const y = Math.max(4, Math.min(window.innerHeight - orbEl.offsetHeight - 4, e.clientY - orbDrag.dy));
+      orbEl.style.left = x + 'px'; orbEl.style.top = y + 'px';
+    });
+    const end = () => { if (!orbDrag) return; orbDrag = null; orbEl.classList.remove('drag'); orbEl.style.transition = ''; };
+    orbEl.addEventListener('pointerup', end); orbEl.addEventListener('pointercancel', end);
+    window.addEventListener('hashchange', () => { orbIdx = (orbIdx + 1) % ORB_SPOTS.length; placeOrb(orbIdx); });
+    window.addEventListener('resize', () => placeOrb(orbIdx, true));
+  }
 
   function shell(active, content) {
     const tabs = tabsFor(S.me.role);
@@ -181,6 +221,7 @@
       h('a', { href: '#/account', class: 'me', title: S.me.name }, initials(S.me.name)));
     const main = h('main', { id: 'view', class: 'enter' }, content);
     $app.replaceChildren(side, h('div', { class: 'frame' }, top, main), nav);
+    ensureOrb();
     if (S.me.role !== 'dev') refreshCallbackBadge();
     window.scrollTo(0, 0);
     return main;
@@ -201,7 +242,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -226,6 +267,7 @@
         case 'leads': return await viewLeads();
         case 'lead': return await viewLead(+arg);
         case 'callbacks': return await viewCallbacks();
+        case 'calendar': return await viewCalendar();
         case 'demos': return await viewDemos();
         case 'demo': return await viewDemoBuilder(+arg);
         case 'batches': return await viewBatches();
@@ -917,6 +959,102 @@
       cbs.length ? cbs.map((l) => row(l, l.callback_at)) : h('div', { class: 'card empty' }, h('b', null, 'All caught up'), 'No callbacks due today.'),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Booked calls today'),
         booked.length ? booked.map((l) => row(l, l.booked_at)) : h('p', { class: 'dim' }, 'No booked calls today.')),
+    ]);
+  }
+
+  /* ================= calendar ================= */
+  const CAL_KIND = { event: 'Event', audit: 'Audit call', demo: 'Demo', call: 'Call', training: 'Training', followup: 'Follow-up' };
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dayKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const CAL = { month: null, sel: null };
+
+  async function viewCalendar() {
+    const today = new Date();
+    if (!CAL.month) CAL.month = new Date(today.getFullYear(), today.getMonth(), 1);
+    if (!CAL.sel) CAL.sel = dayKey(today);
+    const first = new Date(CAL.month.getFullYear(), CAL.month.getMonth(), 1);
+    const gridStart = new Date(first); gridStart.setDate(1 - first.getDay());
+    const gridEnd = new Date(gridStart); gridEnd.setDate(gridStart.getDate() + 42);
+    const r = await api('GET', '/calendar?from=' + encodeURIComponent(gridStart.toISOString()) + '&until=' + encodeURIComponent(gridEnd.toISOString()));
+    // everything becomes one list of items with a local day
+    const items = [];
+    r.events.forEach((e) => items.push({ at: e.starts_at, end: e.ends_at, type: e.kind, title: e.title, sub: [e.lead_name, S.me.role === 'admin' ? e.owner_name : null].filter(Boolean).join(' · '), ev: e }));
+    r.callbacks.forEach((l) => items.push({ at: l.at, type: 'callback', title: 'Call back ' + l.business, sub: 'Callback', lead: l }));
+    r.booked.forEach((l) => items.push({ at: l.at, type: 'booked', title: 'Booked: ' + l.business, sub: 'Booked call', lead: l }));
+    items.sort((a, b) => new Date(a.at) - new Date(b.at));
+    const byDay = {};
+    items.forEach((it) => { (byDay[dayKey(new Date(it.at))] = byDay[dayKey(new Date(it.at))] || []).push(it); });
+
+    const redraw = () => viewCalendar();
+    const go = (delta) => { CAL.month = new Date(CAL.month.getFullYear(), CAL.month.getMonth() + delta, 1); redraw(); };
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
+      const k = dayKey(d), list = byDay[k] || [];
+      cells.push(h('button', { type: 'button', class: 'cal-cell' + (d.getMonth() !== CAL.month.getMonth() ? ' out' : '') + (k === dayKey(today) ? ' today' : '') + (k === CAL.sel ? ' sel' : ''),
+        'aria-label': d.toDateString() + (list.length ? ', ' + list.length + ' items' : ''), onclick: () => { CAL.sel = k; redraw(); } },
+        h('span', { class: 'n' }, String(d.getDate())),
+        h('span', { class: 'dots' }, list.slice(0, 3).map((it) => h('i', { class: 'dot ' + it.type })), list.length > 3 ? h('b', null, '+') : null)));
+    }
+
+    const openEditor = async (ev, presetDay) => {
+      const base = ev ? new Date(ev.starts_at) : (() => { const d = new Date(presetDay + 'T09:00'); return d; })();
+      const done = await sheet((box, close) => {
+        const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Glow Med Spa', value: ev ? ev.title : '' });
+        const kind = h('select', null, Object.entries(CAL_KIND).map(([v, t]) => h('option', { value: v, selected: ev && ev.kind === v ? true : null }, t)));
+        const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
+        const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
+        const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : '' });
+        const notes = h('textarea', { rows: 3, maxlength: 1000, placeholder: 'Notes, what to cover, who is on the call' }, ev && ev.notes ? ev.notes : '');
+        const save = h('button', { class: 'btn primary block', onclick: async () => {
+          save.disabled = true;
+          const payload = { title: title.value, kind: kind.value, starts_at: starts.value ? new Date(starts.value).toISOString() : '', ends_at: ends.value ? new Date(ends.value).toISOString() : null, link: link.value, notes: notes.value };
+          try { await api(ev ? 'PATCH' : 'POST', ev ? '/calendar/' + ev.id : '/calendar', payload); close(true); }
+          catch (e) { fail(e); save.disabled = false; }
+        } }, ev ? 'Save changes' : 'Add to calendar');
+        box.append(h('h2', null, ev ? 'Edit event' : 'New event'),
+          h('label', { class: 'field' }, h('span', null, 'Title'), title),
+          h('div', { class: 'two' }, h('label', { class: 'field' }, h('span', null, 'Type'), kind), h('label', { class: 'field' }, h('span', null, 'Starts'), starts)),
+          h('label', { class: 'field' }, h('span', null, 'Ends (optional)'), ends),
+          h('label', { class: 'field' }, h('span', null, 'Meeting link (optional)'), link),
+          h('label', { class: 'field' }, h('span', null, 'Notes'), notes),
+          save,
+          ev ? h('button', { class: 'btn danger block', style: 'margin-top:10px', onclick: async () => {
+            try { await api('DELETE', '/calendar/' + ev.id); close(true); } catch (e) { fail(e); }
+          } }, 'Delete event') : null);
+      });
+      if (done) { toast(ev ? 'Saved ✓' : 'Added ✓'); redraw(); }
+    };
+
+    const dayItems = byDay[CAL.sel] || [];
+    const selDate = new Date(CAL.sel + 'T12:00');
+    const row = (it) => {
+      const when = new Date(it.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const end = it.end ? ' – ' + new Date(it.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+      const inner = [
+        h('span', { class: 'cal-bar ' + it.type }),
+        h('div', { class: 'body' }, h('div', { class: 'name' }, it.title),
+          h('div', { class: 'meta' }, when + end + (it.sub ? ' · ' + it.sub : ''), it.ev && it.ev.link ? [' · ', h('a', { href: it.ev.link, target: '_blank', rel: 'noopener noreferrer', onclick: (e) => e.stopPropagation() }, 'Join link')] : null),
+          it.ev && it.ev.notes ? h('div', { class: 'meta dim' }, it.ev.notes) : null,
+          h('div', { class: 'tags' }, h('span', { class: 'tag' }, it.ev ? CAL_KIND[it.ev.kind] || 'Event' : it.type === 'booked' ? 'Booked' : 'Callback')))];
+      if (it.lead) return h('a', { class: 'lead cal-row', href: '#/lead/' + it.lead.id }, inner, it.lead.phone ? h('a', { class: 'call-btn', href: telHref(it.lead.phone), onclick: (e) => e.stopPropagation() }, icon('phone')) : null);
+      return h('button', { type: 'button', class: 'lead cal-row', onclick: () => openEditor(it.ev) }, inner);
+    };
+
+    shell('calendar', [
+      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Calendar'), h('p', { class: 'sub' }, 'Audits, demos and calls. Callbacks and booked leads show up on their own.')),
+        h('button', { class: 'btn primary small', onclick: () => openEditor(null, CAL.sel) }, '+ Add')),
+      h('div', { class: 'card cal' },
+        h('div', { class: 'cal-head' },
+          h('button', { class: 'cal-nav', 'aria-label': 'Previous month', onclick: () => go(-1) }, '‹'),
+          h('b', null, CAL.month.toLocaleDateString([], { month: 'long', year: 'numeric' })),
+          h('button', { class: 'cal-nav', 'aria-label': 'Next month', onclick: () => go(1) }, '›'),
+          h('button', { class: 'btn small', onclick: () => { CAL.month = new Date(today.getFullYear(), today.getMonth(), 1); CAL.sel = dayKey(today); redraw(); } }, 'Today')),
+        h('div', { class: 'cal-dow' }, ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => h('span', null, x))),
+        h('div', { class: 'cal-grid' }, cells),
+        h('div', { class: 'cal-legend' }, h('span', null, h('i', { class: 'dot audit' }), 'Audit'), h('span', null, h('i', { class: 'dot demo' }), 'Demo'), h('span', null, h('i', { class: 'dot callback' }), 'Callback'), h('span', null, h('i', { class: 'dot booked' }), 'Booked'), h('span', null, h('i', { class: 'dot event' }), 'Other'))),
+      h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, selDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })),
+        dayItems.length ? dayItems.map(row) : h('div', { class: 'card empty' }, h('b', null, 'Nothing scheduled'), 'Tap + Add to put an audit call or demo on this day.')),
     ]);
   }
 
@@ -3475,6 +3613,7 @@ function api(method, path, body) {
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
       h('div', { class: 'card more-grid' },
         row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
+        row('#/calendar', 'calendar', 'Calendar', 'Audits, demos, callbacks and your schedule'),
         row('#/rebrief', 'chart', 'Daily brief', 'How today went and what is next'),
         row('#/content', 'spark', 'Content', 'Today\'s post for Instagram, X and LinkedIn'),
         row('#/cards', 'deals', 'Review cards', 'Stock, sales and revenue'),
