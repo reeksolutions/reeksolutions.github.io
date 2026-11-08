@@ -2232,7 +2232,7 @@ async function api(request, env, url) {
   }
 
   /* ---- calendar ---- */
-  const CAL_KINDS = ['event', 'audit', 'demo', 'call', 'training', 'followup'];
+  const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup'];
   if (path === '/calendar' && method === 'GET') {
     need(user, 'admin', 'rep');
     const from = validIso(url.searchParams.get('from')), until = validIso(url.searchParams.get('until'));

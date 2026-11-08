@@ -1256,16 +1256,55 @@ html,body{max-width:100%;overflow-x:hidden}
 @media (max-width:420px){.two{grid-template-columns:1fr}}
 .field input[type=datetime-local],.field select{width:100%;min-width:0}
 
-/* ---- floating orb: black glass sphere with a white glow ---- */
-.orb{position:fixed;z-index:17;width:48px;height:48px;border-radius:50%;left:0;top:0;touch-action:none;cursor:grab;
-  transition:left 1.9s cubic-bezier(.22,1,.36,1),top 1.9s cubic-bezier(.22,1,.36,1);animation:orbFloat 7s ease-in-out infinite;will-change:left,top,transform}
-.orb.drag{cursor:grabbing;animation-play-state:paused}
-.orb-core{position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle at 34% 28%,#3a3d48 0%,#12131a 42%,#020204 78%);
-  box-shadow:0 0 0 1px rgba(255,255,255,.42),0 0 18px 2px rgba(255,255,255,.38),0 0 46px 8px rgba(190,210,255,.18),inset -7px -9px 16px rgba(0,0,0,.9),inset 3px 3px 9px rgba(255,255,255,.14);
-  animation:orbPulse 4.2s ease-in-out infinite}
-.orb-shine{position:absolute;left:17%;top:13%;width:30%;height:20%;border-radius:50%;background:radial-gradient(ellipse,rgba(255,255,255,.7),rgba(255,255,255,0) 70%);transform:rotate(-24deg);pointer-events:none}
-@keyframes orbFloat{0%,100%{transform:translate(0,0)}25%{transform:translate(5px,-9px)}50%{transform:translate(-4px,-4px)}75%{transform:translate(-7px,7px)}}
-@keyframes orbPulse{0%,100%{box-shadow:0 0 0 1px rgba(255,255,255,.42),0 0 16px 1px rgba(255,255,255,.3),0 0 40px 6px rgba(190,210,255,.14),inset -7px -9px 16px rgba(0,0,0,.9),inset 3px 3px 9px rgba(255,255,255,.12)}50%{box-shadow:0 0 0 1px rgba(255,255,255,.6),0 0 24px 4px rgba(255,255,255,.5),0 0 60px 12px rgba(190,210,255,.24),inset -7px -9px 16px rgba(0,0,0,.9),inset 3px 3px 9px rgba(255,255,255,.18)}}
-@media (min-width:1000px){.orb{width:60px;height:60px}}
-@media (prefers-reduced-motion:reduce){.orb,.orb-core{animation:none}.orb{transition:none}}
+/* ---- floating orb: a living ball of blue matter in the brand colors ---- */
+.orb{position:fixed;z-index:17;width:52px;height:52px;border-radius:50%;left:0;top:0;pointer-events:none;
+  transition:left 3.2s cubic-bezier(.22,1,.36,1),top 3.2s cubic-bezier(.22,1,.36,1);animation:orbFloat 7s ease-in-out infinite;will-change:left,top,transform}
+.orb.dodge{transition-duration:.85s}
+.orb-core{position:absolute;inset:0;border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 50% 55%,#2c58d6 0%,#1a3a9c 58%,#0d1f5e 100%);
+  box-shadow:0 0 0 1px rgba(169,194,255,.5),0 0 20px 3px rgba(91,140,255,.6),0 0 52px 10px rgba(91,140,255,.28),inset 0 0 14px 2px rgba(169,194,255,.45);
+  animation:orbPulse 4.4s ease-in-out infinite;isolation:isolate}
+.orb-blob{position:absolute;border-radius:50%;filter:blur(6px);mix-blend-mode:screen}
+.orb-blob.b1{width:72%;height:72%;left:-12%;top:-8%;background:radial-gradient(circle,#a9c2ff 0%,rgba(169,194,255,0) 68%);animation:orbA 6.2s ease-in-out infinite}
+.orb-blob.b2{width:66%;height:66%;right:-14%;bottom:-10%;background:radial-gradient(circle,#5b8cff 0%,rgba(91,140,255,0) 68%);animation:orbB 7.6s ease-in-out infinite}
+.orb-blob.b3{width:46%;height:46%;left:28%;top:30%;background:radial-gradient(circle,#ffffff 0%,rgba(255,255,255,0) 68%);opacity:.85;animation:orbC 4.8s ease-in-out infinite}
+.orb-swirl{position:absolute;inset:-20%;border-radius:50%;mix-blend-mode:screen;filter:blur(4px);opacity:.7;
+  background:conic-gradient(from 0deg,rgba(255,255,255,0) 0deg,rgba(169,194,255,.55) 70deg,rgba(255,255,255,0) 140deg,rgba(91,140,255,.5) 220deg,rgba(255,255,255,0) 300deg);animation:orbSpin 9s linear infinite}
+.orb-shine{position:absolute;left:18%;top:12%;width:30%;height:20%;border-radius:50%;background:radial-gradient(ellipse,rgba(255,255,255,.75),rgba(255,255,255,0) 70%);transform:rotate(-24deg)}
+@keyframes orbFloat{0%,100%{transform:translate(0,0)}25%{transform:translate(5px,-8px)}50%{transform:translate(-4px,-3px)}75%{transform:translate(-6px,7px)}}
+@keyframes orbPulse{0%,100%{box-shadow:0 0 0 1px rgba(169,194,255,.45),0 0 16px 2px rgba(91,140,255,.5),0 0 42px 8px rgba(91,140,255,.22),inset 0 0 12px 2px rgba(169,194,255,.35)}50%{box-shadow:0 0 0 1px rgba(169,194,255,.7),0 0 26px 5px rgba(91,140,255,.75),0 0 64px 14px rgba(91,140,255,.34),inset 0 0 18px 3px rgba(169,194,255,.55)}}
+@keyframes orbA{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(28%,18%) scale(1.15)}66%{transform:translate(10%,34%) scale(.9)}}
+@keyframes orbB{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-30%,-22%) scale(1.2)}70%{transform:translate(-8%,-34%) scale(.95)}}
+@keyframes orbC{0%,100%{transform:translate(0,0) scale(1);opacity:.85}50%{transform:translate(-14%,18%) scale(1.3);opacity:.55}}
+@keyframes orbSpin{to{transform:rotate(360deg)}}
+@media (min-width:1000px){.orb{width:62px;height:62px}}
+@media (prefers-reduced-motion:reduce){.orb,.orb-core,.orb-blob,.orb-swirl{animation:none}.orb{transition:none}}
+
+/* ---- calendar v2: views, filters, today strip ---- */
+.cal-strip{display:flex;gap:10px;margin-bottom:12px}
+.cal-strip>div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:3px;min-width:0}
+.cal-strip .grow{flex:1}
+.cal-strip b{font-size:16px;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-strip small{color:var(--muted);font-weight:500;font-size:13px}
+.cal-filters{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;margin:0 -2px;scrollbar-width:none}
+.cal-filters::-webkit-scrollbar{display:none}
+.chip{flex:none;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:var(--card);color:var(--muted);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.chip em{font-style:normal;font-size:11.5px;background:rgba(255,255,255,.1);border-radius:999px;padding:1px 7px;color:var(--ink)}
+.chip.on{background:rgba(91,140,255,.16);border-color:var(--accent);color:var(--ink)}
+.cal-day{margin-bottom:12px}
+.cal-day-h{display:flex;align-items:center;justify-content:space-between;margin:14px 2px 8px;font-size:14px}
+.cal-day.today .cal-day-h b{color:var(--accent-2)}
+.cal-plus{width:30px;height:30px;border-radius:50%;border:1px solid var(--line-2);background:var(--card);color:var(--ink);font-size:18px;line-height:1;cursor:pointer}
+.cal-free{margin:0 2px 4px;font-size:14px}
+.cal-row.past{opacity:.55}
+.cal-week{display:grid;grid-template-columns:1fr;gap:0}
+@media (min-width:1000px){.cal-week{grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}.cal-week .cal-day-h{font-size:12.5px}.cal-week .cal-row .meta{font-size:12px}}
+.dot.closing,.cal-bar.closing{background:#ff7ac6}.dot.meeting,.cal-bar.meeting{background:#4fd6e0}.dot.demo,.cal-bar.demo{background:#c58bff}
+.tag.k-audit{color:var(--accent-2);border-color:rgba(91,140,255,.45)}.tag.k-closing{color:#ff7ac6;border-color:rgba(255,122,198,.45)}.tag.k-demo{color:#c58bff;border-color:rgba(197,139,255,.45)}.tag.k-meeting{color:#4fd6e0;border-color:rgba(79,214,224,.45)}.tag.k-callback,.tag.k-followup{color:var(--warn);border-color:rgba(245,184,75,.4)}.tag.k-booked,.tag.k-call{color:var(--ok);border-color:rgba(61,220,151,.4)}
+.seg.compact{margin-bottom:10px}
+
+.cal.slim{padding:12px 14px}.cal.slim .cal-head{margin-bottom:0}
+.orb-blob{filter:blur(5px)}
+.orb-blob.b3{opacity:1}
+.orb-swirl{opacity:.9}
+.orb-core{background:radial-gradient(circle at 50% 55%,#3466f0 0%,#1a3a9c 55%,#0a1850 100%)}
