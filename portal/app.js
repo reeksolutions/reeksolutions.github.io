@@ -204,7 +204,10 @@
     const [x, y] = pickSpot({ x: t.clientX, y: t.clientY }); moveOrb(x, y, true);
     clearTimeout(orbTimer); orbTimer = setTimeout(wanderOrb, 9000);
   }
+  // the orb is archived for now: flip this to true to bring it back
+  const ORB_ON = false;
   function ensureOrb() {
+    if (!ORB_ON) { document.querySelectorAll('.orb').forEach((o) => o.remove()); return; }
     if (orbEl && document.body.contains(orbEl)) return;
     orbEl = h('div', { class: 'orb', 'aria-hidden': 'true' },
       h('span', { class: 'orb-core' }, h('i', { class: 'orb-blob b1' }), h('i', { class: 'orb-blob b2' }), h('i', { class: 'orb-blob b3' }), h('i', { class: 'orb-swirl' })),
@@ -3685,19 +3688,45 @@ function api(method, path, body) {
   }
 
   function viewMore() {
-    const row = (href, ic, title, sub) => h('a', { class: 'list-row link', href }, h('span', { class: 'ic' }, icon(ic)), h('div', { style: 'flex:1;min-width:0' }, h('b', null, title), h('div', { class: 'sub' }, sub)), icon('chev'));
+    const GROUPS = [
+      ['Sell', [
+        ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
+        ['calendar', 'Calendar', 'Audits, closings, meetings', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
+        ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
+      ['Tools', [
+        ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['content', 'Content', 'Posts and demo videos', 'spark'],
+        ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos'],
+        ['cards', 'Review cards', 'NFC plates stock and sales', 'deals'], ['script', 'Call script', 'What to say', 'script']]],
+      ['Team', [
+        ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
+        ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
+      ['System', [
+        ['integrations', 'Integrations', 'Connections and API keys', 'bolt'], ['settings', 'Settings', 'Targets, theme, checklist', 'account'],
+        ['account', 'Account', 'Password and log out', 'account']]],
+    ];
+    const search = h('input', { type: 'search', placeholder: 'Search pages', 'aria-label': 'Search pages', autocomplete: 'off' });
+    const sections = GROUPS.map(([label, items]) => {
+      const tiles = items.map(([href, title, sub, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href, 'data-q': (title + ' ' + sub).toLowerCase() },
+        h('span', { class: 'hub-ic' }, icon(ic)),
+        badge ? h('span', { class: 'count cb-count', hidden: true }) : null,
+        h('b', null, title), h('small', null, sub)));
+      return h('section', { class: 'hub-sec' }, h('span', { class: 'eyebrow' }, label), h('div', { class: 'hub-grid' }, tiles));
+    });
+    const empty = h('p', { class: 'dim', hidden: true, style: 'text-align:center;margin-top:24px' }, 'No page matches that.');
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase(); let any = false;
+      document.querySelectorAll('.hub-sec').forEach((sec) => {
+        let n = 0;
+        sec.querySelectorAll('.hub-tile').forEach((t) => { const show = !q || t.dataset.q.includes(q); t.hidden = !show; if (show) n++; });
+        sec.hidden = !n; if (n) any = true;
+      });
+      empty.hidden = any;
+    });
     shell('more', [
-      h('div', { class: 'head' }, h('div', null, h('h1', null, 'More'))),
-      h('div', { class: 'card more-grid' },
-        row('#/finder', 'search', 'Lead Finder', 'Find businesses with no website, by hand or every night'),
-        row('#/calendar', 'calendar', 'Calendar', 'Audits, demos, callbacks and your schedule'),
-        row('#/rebrief', 'chart', 'Daily brief', 'How today went and what is next'),
-        row('#/content', 'spark', 'Content', 'Today\'s post for Instagram, X and LinkedIn'),
-        row('#/cards', 'deals', 'Review cards', 'Stock, sales and revenue'),
-        row('#/settings', 'account', 'Settings', 'Targets, connections, theme, checklist'),
-        row('#/deals', 'deals', 'Deals', 'Closes, payouts and commission'),
-        row('#/script', 'script', 'Call script', 'What to say on the phone'),
-        row('#/account', 'account', 'Account', 'Password and log out')),
+      h('a', { class: 'hub-me', href: '#/account' }, h('span', { class: 'avatar big' }, initials(S.me.name)),
+        h('div', { style: 'min-width:0;flex:1' }, h('b', null, S.me.name), h('small', null, ROLE_NAME[S.me.role] || S.me.role)), icon('chev')),
+      h('div', { class: 'hub-search' }, icon('search'), search),
+      sections, empty,
     ]);
   }
 
