@@ -1382,3 +1382,15 @@ html.nonav{--nav:0px}
 .btn.big{min-height:56px;font-size:17px;width:100%}
 .btn.rec{background:var(--bad);border-color:var(--bad);color:#fff}
 .tele{padding:12px 14px;border:1px solid var(--line-2);border-radius:14px;background:var(--card-2);font-size:18px;line-height:1.5}
+
+.an{margin-top:18px}.an-top{margin-bottom:12px}
+.an .card{margin-bottom:12px}
+.an-days{display:flex;gap:4px;align-items:flex-end;height:110px}
+.an-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;min-width:0}
+.an-col{flex:1;width:100%;display:flex;align-items:flex-end;background:rgba(255,255,255,.04);border-radius:6px;overflow:hidden}
+.an-col b{display:block;width:100%;background:var(--accent);border-radius:6px;min-height:2px}
+.an-day small{font-size:9px;white-space:nowrap;min-height:11px;color:var(--dim,#8a93a8)}
+.an-row{display:grid;grid-template-columns:110px 1fr 28px;gap:10px;align-items:center;padding:6px 0;font-size:14px}
+.an-row b{text-align:right}
+.an-bar{display:block;height:8px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden}
+.an-bar b{display:block;height:100%;background:var(--accent);border-radius:6px}

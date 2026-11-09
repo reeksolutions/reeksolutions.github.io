@@ -2475,7 +2475,14 @@ async function api(request, env, url) {
     let streak = 0, cur = days.includes(today) ? today : trkShift(today, -1);
     while (days.includes(cur)) { streak++; cur = trkShift(cur, -1); }
     const weekPosts = (await env.DB.prepare('SELECT COUNT(*) AS n FROM content_posts WHERE day >= ?').bind(from).first()).n;
-    return json({ today, day_n: Math.max(1, dayNum(today)), done_today: wk.done, week, today_posts: todayPosts, recent, streak, week_posts: weekPosts });
+    const q = (sql, ...a) => env.DB.prepare(sql).bind(...a).all().then((x) => x.results);
+    const total = (await env.DB.prepare('SELECT COUNT(*) AS n FROM content_posts').first()).n;
+    const per = await q('SELECT day, COUNT(*) AS n FROM content_posts GROUP BY day');
+    const daily = []; for (let i = 13; i >= 0; i--) { const d = trkShift(today, -i); daily.push({ day: d, n: (per.find((x) => x.day === d) || { n: 0 }).n, label: new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'UTC' }) }); }
+    const analytics = { total, best: Math.max(0, ...per.map((x) => x.n)), per_day: Math.round((total / Math.max(1, dayNum(today))) * 10) / 10, daily,
+      by_platform: await q('SELECT platform, COUNT(*) AS n FROM content_posts GROUP BY platform'), by_format: await q('SELECT format, COUNT(*) AS n FROM content_posts GROUP BY format'),
+      by_topic: await q('SELECT topic, COUNT(*) AS n FROM content_posts WHERE topic IS NOT NULL GROUP BY topic ORDER BY n DESC LIMIT 6') };
+    return json({ today, day_n: Math.max(1, dayNum(today)), done_today: wk.done, week, today_posts: todayPosts, recent, streak, week_posts: weekPosts, analytics });
   }
   const PLAT_NAME = { ig: 'Instagram', fb: 'Facebook', tt: 'TikTok', yt: 'YouTube Shorts', x: 'X', li: 'LinkedIn' };
   const FMT_NAME = { post: 'post', video: 'video', face: 'face video', news: 'news post' };

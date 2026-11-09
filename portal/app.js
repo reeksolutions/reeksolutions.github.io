@@ -162,7 +162,7 @@
       ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
       ['calendar', 'Calendar', 'Audits, closings, posts', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
       ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart'],
-      ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['script', 'Call script', 'What to say', 'script']]],
+      ['script', 'Call script', 'What to say', 'script']]],
     create: ['Create', 'Posts, videos and demos', [
       ['content', 'Content', 'Start posting', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'],
       ['demos', 'Demo queue', 'Demos to build and send', 'demos'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
@@ -172,6 +172,7 @@
   };
   const CAT_OF = { lead: 'sell', rep: 'crew', demo: 'create' };
   Object.entries(CATS).forEach(([k, c]) => c[2].forEach((i) => { CAT_OF[i[0]] = k; }));
+  CAT_OF.finder = 'sell';
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
 
@@ -533,6 +534,7 @@
         h('div', { class: 'lt' }, h('h1', null, isAdmin ? 'Leads' : 'My leads'), countEl),
         h('div', { class: 'row', style: 'gap:8px' }, seg,
           isAdmin ? h('button', { class: 'tbtn hide-sm', onclick: () => exportCsv(F, FKEYS) }, 'Export') : null,
+          isAdmin ? h('a', { class: 'tbtn', href: '#/finder' }, 'Find leads') : null,
           isAdmin ? h('a', { class: 'tbtn primary', href: '#/upload' }, '+ Add') : null)),
       h('div', { class: 'ltools' }, search, filterBtn),
       quick, body,
@@ -3148,10 +3150,10 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const voiceBox = h('div', { class: 'cs-blk' });
     const drawVoice = () => {
       voiceBox.replaceChildren(...[
-        h('p', { class: 'dim small' }, '1. Voice. Use the built-in AI voice, record yourself, upload a file (like an ElevenLabs download), or skip it.'),
+        h('p', { class: 'dim small' }, '1. Voice. Use the AI voice, upload a voice file (like an ElevenLabs download), or skip it.'),
         VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice ready: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }),
           h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remove voice')) : null,
-        h('div', { class: 'row wrap' }, recBtn(), aiVoiceBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
+        h('div', { class: 'row wrap' }, aiVoiceBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
           const f = e.target.files[0]; if (!f) return;
           try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f) }; toast('Voice added'); parent(); } catch { toast('Could not read that audio file', true); }
         } })))].filter(Boolean));
@@ -3344,6 +3346,22 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       : h('div', { class: 'card empty' }, h('b', null, 'Nothing logged yet'), 'Tap Start posting, make a post, and mark it as posted. It shows up here and on your calendar.');
   }
 
+  function contentAnalytics(r) {
+    const A = r.analytics, mx = Math.max(1, ...A.daily.map((d) => d.n)), pmx = Math.max(1, ...A.by_platform.map((p) => p.n)), nm = (k) => PN[k] || k;
+    const bar = (n, m) => h('i', { class: 'an-bar' }, h('b', { style: 'width:' + Math.round((n / m) * 100) + '%' }));
+    return h('section', { class: 'an' },
+      h('h3', { class: 'trk-h' }, 'Analytics'),
+      h('div', { class: 'ct-stats an-top' }, [[A.total, 'total posts'], [A.per_day, 'avg per day'], [A.best, 'best day']].map(([v, l]) => h('div', null, h('b', null, String(v)), h('small', null, l)))),
+      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Last 14 days'),
+        h('div', { class: 'an-days' }, A.daily.map((d) => h('div', { class: 'an-day' }, h('span', { class: 'an-col' }, h('b', { style: 'height:' + Math.round((d.n / mx) * 100) + '%' })), h('small', null, d.n || A.daily.indexOf(d) % 4 === 0 || A.daily.indexOf(d) === 13 ? d.label : ''))))),
+      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'By platform'),
+        CPLAT.map(([k]) => { const n = (A.by_platform.find((p) => p.platform === k) || { n: 0 }).n; return h('div', { class: 'an-row' }, h('span', null, nm(k)), bar(n, pmx), h('b', null, String(n))); })),
+      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'By type'),
+        [['post', 'Text posts'], ['video', 'Voiceover videos'], ['face', 'Face videos'], ['news', 'AI news']].map(([k, l]) => { const n = (A.by_format.find((p) => p.format === k) || { n: 0 }).n; return h('div', { class: 'an-row' }, h('span', null, l), bar(n, Math.max(1, ...A.by_format.map((p) => p.n))), h('b', null, String(n))); })),
+      A.by_topic.length ? h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Top topics'), A.by_topic.slice(0, 5).map((t) => h('div', { class: 'an-row' }, h('span', null, (GEN_TOPICS[t.topic] && GEN_TOPICS[t.topic].name) || t.topic || 'Other'), bar(t.n, A.by_topic[0].n), h('b', null, String(t.n))))) : null,
+      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Views, likes and followers'), h('p', { class: 'dim small' }, 'These numbers live inside each app. When you want them here, connect that account and I will add it. For now this page tracks everything you post.'), h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' }, l + ' · not connected')))),
+      h('a', { class: 'btn', href: '#/content/log', style: 'margin-top:12px;display:inline-block' }, 'See every post you logged'));
+  }
   async function viewContent(arg) {
     const r = await api('GET', '/content');
     const dayN = r.day_n;
@@ -3368,7 +3386,6 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     }
     // home
     const done = new Set(r.today_posts.map((p) => p.platform));
-    const tiles = [['Post ideas', 'Ready-made posts', 'script', '#/content/library'], ['AI news', 'This week, in plain English', 'bolt', '#/content/news'], ['Week one', '7 days of posts', 'calendar', '#/content/week1'], ['Demo videos', 'Rendered clips', 'spark', '#/content/videos'], ['Posted log', 'Everything you posted', 'chart', '#/content/log']];
     shell('content', [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Content'), h('p', { class: 'sub' }, 'Make a post or a video, post it, and it is logged for you.'))),
       h('section', { class: 'ct-hero' },
@@ -3376,7 +3393,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('div', { class: 'stagechips plat-row' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' + (done.has(k) ? ' on' : '') }, l + (done.has(k) ? ' ✓' : '')))),
         h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
         h('p', { class: 'dim small', style: 'text-align:center' }, 'Today is day ' + dayN + '. Every post you mark as posted goes on your calendar.')),
-      h('div', { class: 'hub-grid' }, tiles.map(([t, s, ic, href]) => h('a', { class: 'hub-tile', href }, h('span', { class: 'hub-ic' }, icon(ic)), h('b', null, t), h('small', null, s)))),
+      contentAnalytics(r),
       r.today_posts.length ? h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Posted today'), r.today_posts.slice(0, 4).map((p) => h('div', { class: 'log-row' }, h('div', { style: 'flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, timeOf(p.created_at))))) ) : null,
     ]);
   }
