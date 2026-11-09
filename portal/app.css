@@ -1403,3 +1403,15 @@ html.nonav{--nav:0px}
 .bot-msg.user{align-self:flex-end;background:var(--accent);color:#fff}
 .bot-idea{margin-bottom:12px}.bot-idea .btn.big{width:100%;margin:8px 0}
 .card-prev{border-radius:14px;border:1px solid var(--line-2);align-self:center;background:#05070d;display:block;margin:6px auto}
+.ld{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid var(--line-2);border-radius:16px;background:var(--card-2)}
+.ld[hidden]{display:none}
+.ld-ring{flex:none;width:44px;height:44px;border-radius:50%;background:conic-gradient(from 0deg,var(--accent),rgba(91,140,255,0) 72%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));animation:ldspin .9s linear infinite;filter:drop-shadow(0 0 8px rgba(91,140,255,.7))}
+@keyframes ldspin{to{transform:rotate(360deg)}}
+.ld-t{flex:1;min-width:0}.ld-t b{display:block}.ld-t small{display:block;min-height:1.3em}
+.ld-bar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
+.ld-bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),#a9c2ff,var(--accent));background-size:200% 100%;animation:ldsh 1.2s linear infinite;transition:width .25s}
+.ld-bar.ind i{width:38%;animation:ldsh 1.2s linear infinite,ldind 1.3s ease-in-out infinite}
+@keyframes ldsh{to{background-position:-200% 0}}
+@keyframes ldind{0%{margin-left:-38%}100%{margin-left:100%}}
+.ld-pct{font-variant-numeric:tabular-nums;font-weight:700;min-width:3ch;text-align:right}
+@media (prefers-reduced-motion:reduce){.ld-ring,.ld-bar i{animation-duration:3s}}

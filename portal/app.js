@@ -2811,7 +2811,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
   const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker']];
   const CS = { business: (function () { try { return localStorage.getItem('rs_biz') || 'junk removal'; } catch { return 'junk removal'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
-  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
+  const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
 
@@ -2827,9 +2827,41 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   let VW = 720, VH = 1280, VCAP = VFMT['9x16'];
   const setFmt = (id) => { VCAP = VFMT[id] || VFMT['9x16']; VW = VCAP.w; VH = VCAP.h; };
   const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null, fmt: '9x16', zones: false };
+  /* ---- keep the work when the app is closed or reloads: small state in localStorage, voice and finished video in IndexedDB ---- */
+  const CS_KEY = 'rs_cs_v1';
+  const idb = (function () {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => { const q = indexedDB.open('rs_content', 1); q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }));
+    const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode), r = fn(t.objectStore('kv')); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+    return { put: (k, v) => run('readwrite', (st) => st.put(v, k)).catch(() => {}), get: (k) => run('readonly', (st) => st.get(k)).catch(() => null), del: (k) => run('readwrite', (st) => st.delete(k)).catch(() => {}) };
+  })();
+  const csSave = () => {
+    try {
+      if (CS.step === 'fmt' && !CS.chat.length && !CS.idea) { localStorage.removeItem(CS_KEY); return; }
+      const idea = CS.idea && !CS.idea.byPlat ? JSON.parse(JSON.stringify(CS.idea)) : null;
+      localStorage.setItem(CS_KEY, JSON.stringify({ t: Date.now(), business: CS.business, offers: CS.offers, cardFmt: CS.cardFmt, cardLines: CS.cardLines, step: CS.step, fmt: CS.fmt, topic: CS.topic, plat: CS.plat, secs: CS.secs, edits: CS.edits, posted: CS.posted, ideaN: CS.ideaN, chat: CS.chat.slice(-24), idea, vm: { style: VM.style, fmt: VM.fmt } }));
+    } catch { /* storage can be blocked */ }
+  };
+  (function csLoad() {
+    try {
+      const d = JSON.parse(localStorage.getItem(CS_KEY) || 'null'); if (!d || Date.now() - d.t > 3 * 864e5) return;
+      ['business', 'offers', 'cardFmt', 'cardLines', 'step', 'fmt', 'topic', 'plat', 'secs', 'edits', 'posted', 'ideaN'].forEach((k) => { if (d[k] !== undefined && d[k] !== null) CS[k] = d[k]; });
+      CS.chat = Array.isArray(d.chat) ? d.chat : []; CS.idea = d.idea || null; if (!CS.idea && CS.step === 'edit') CS.step = 'idea';
+      if (d.vm) { VM.style = d.vm.style === 'site' ? 'site' : 'flow'; VM.fmt = VFMT[d.vm.fmt] ? d.vm.fmt : '9x16'; }
+    } catch { /* start fresh */ }
+  })();
+  VM.restore = (async () => {
+    try {
+      if (!CS.idea) return;
+      const v = await idb.get('voice');
+      if (v && v.ab) { const blob = new Blob([v.ab], { type: v.type || 'audio/mpeg' }), buf = await decodeVoice(blob); VM.voice = { blob, buf, dur: buf.duration, parts: v.parts, words: v.words, sig: v.sig, name: v.name, url: URL.createObjectURL(blob) }; }
+      const r = await idb.get('result');
+      if (r && r.ab && VM.voice && VM.voice.sig === r.sig) { const blob = new Blob([r.ab], { type: r.type }); VM.result = { blob, url: URL.createObjectURL(blob), ext: r.ext, type: r.type, secs: r.secs, w: r.w, h: r.h }; }
+    } catch { /* nothing to restore */ }
+  })();
   const patchKey = (tid, seed) => tid + ':' + seed;
   const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
-  const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
+  const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; idb.del('result'); } if (voiceToo) { VM.voice = null; idb.del('voice'); } };
   const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
   const lc = (x) => (x ? x.charAt(0).toLowerCase() + x.slice(1) : x);
   const dot = (x) => String(x || '').replace(/[.\s]+$/, '');
@@ -3278,7 +3310,15 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       if (parts.some((p) => !(p > 0.3))) { parts = null; words = null; }
     }
     VM.voice = { blob, buf, dur: buf.duration, parts, words, sig: plan.sig, name: r.engine === 'eleven' ? 'ElevenLabs voice' : 'AI voice', url: URL.createObjectURL(blob) };
+    blob.arrayBuffer().then((ab) => idb.put('voice', { ab, type: blob.type, parts, words, sig: plan.sig, name: VM.voice.name })).catch(() => {});
     return VM.voice;
+  }
+  // a moving loader: spinning ring, a line that changes every couple of seconds, and a bar (a real percent when known)
+  function loaderEl(title, lines) {
+    const t = h('b', null, title), sub = h('small', { class: 'dim' }, lines[0] || ''), pct = h('span', { class: 'ld-pct' }), fill = h('i'), bar = h('div', { class: 'ld-bar ind' }, fill);
+    const el = h('div', { class: 'ld' }, h('div', { class: 'ld-ring' }), h('div', { class: 'ld-t' }, t, sub, bar), pct);
+    let n = 0, away = 0; const iv = setInterval(() => { if (!el.isConnected) { if (++away > 3) clearInterval(iv); return; } n++; if (lines.length > 1 && !el.dataset.fixed) sub.textContent = lines[n % lines.length]; }, 2200);
+    return { el, set: (ti, su, p) => { if (ti != null) t.textContent = ti; if (su != null) { sub.textContent = su; el.dataset.fixed = su ? '1' : ''; } if (p == null) { bar.classList.add('ind'); fill.style.width = ''; pct.textContent = ''; } else { bar.classList.remove('ind'); fill.style.width = Math.round(p * 100) + '%'; pct.textContent = Math.round(p * 100) + '%'; } } };
   }
   function videoMaker(parent, opts) {
     const idea = CS.idea, beats = idea.beats, title = idea.title;
@@ -3320,18 +3360,18 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const more = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'More options'), h('small', { class: 'dim' }, 'quality, voice speed, your own voice file')),
       h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips,
       VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }), h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remake the voice')) : null, upload);
-    const bar = h('div', { class: 'vm-bar', hidden: true }, h('i'));
-    const status = h('p', { class: 'dim small' });
+    const L = loaderEl('Making your video', ['Keep this screen open and stay on this page', 'Drawing every scene…', 'Syncing the captions to the voice…', 'Mixing the sound effects…']); L.el.hidden = true;
     const genBtn = h('button', { class: 'btn primary big', disabled: CS.busy, onclick: async () => {
       if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true;
       try {
-        if (!VM.voice) { status.textContent = 'Making the voice…'; await makeVoice(plan0); plan = vidPlan(beats, title, VM.voice.dur); }
-        bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open and on this page for about ' + Math.round(plan.total) + ' seconds.';
-        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; }, VM.hd);
+        if (!VM.voice) { L.el.hidden = false; L.set('Making the voice', 'Turning your script into a real voice…', null); await makeVoice(plan0); plan = vidPlan(beats, title, VM.voice.dur); }
+        L.el.hidden = false; L.set('Recording your video', '', 0); L.el.dataset.fixed = '';
+        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { L.set(null, null, p); }, VM.hd);
         if (!r.blob.size) throw new Error('The video came out empty. Try again.');
         VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, secs: Math.round(plan.total), w: VFMT[VM.fmt].w, h: VFMT[VM.fmt].h };
+        r.blob.arrayBuffer().then((ab) => idb.put('result', { ab, type: r.type, ext: r.ext, secs: Math.round(plan.total), w: VFMT[VM.fmt].w, h: VFMT[VM.fmt].h, sig: plan.sig })).catch(() => {});
         toast('Video ready'); VM.busy = false; parent();
-      } catch (e) { VM.busy = false; fail(e); genBtn.disabled = false; bar.hidden = true; status.textContent = ''; }
+      } catch (e) { VM.busy = false; fail(e); genBtn.disabled = false; L.el.hidden = true; }
     } }, VM.result ? 'Generate again' : 'Generate video');
     const res = VM.result ? h('div', { class: 'cs-blk' }, h('video', { class: 'vm-video', src: VM.result.url, controls: true, playsinline: true, loop: true, style: 'aspect-ratio:' + VM.result.w + '/' + VM.result.h + ';width:min(100%,' + (VM.result.w > VM.result.h ? 460 : 300) + 'px)' }),
       h('p', { class: 'dim small' }, VM.result.secs + ' seconds · ' + (VM.result.blob.size / 1048576).toFixed(1) + ' MB · ' + VM.result.ext.toUpperCase()),
@@ -3340,7 +3380,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-video.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, bar, status, res, VM.result ? editBox() : null, more].filter(Boolean));
+    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, L.el, res, VM.result ? editBox() : null, more].filter(Boolean));
     return wrap;
   }
 
@@ -3352,7 +3392,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const field = (rows, gen) => {
       const k = ideaKey(), ta = h('textarea', { class: 'ct-text', rows });
       ta.value = CS.edits[k] != null ? CS.edits[k] : gen;
-      ta.oninput = () => { CS.edits[k] = ta.value; };
+      ta.oninput = () => { CS.edits[k] = ta.value; csSave(); };
       return ta;
     };
     const platChips = () => h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => {
@@ -3425,14 +3465,16 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } };
       const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
       const offerRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'What should it sell? Tap every offer you want in it (or none and the bot picks).'),
-        h('div', { class: 'stagechips' }, [...OFFERS.map(([k, l]) => h('button', { class: 'schip' + (CS.offers.includes(k) ? ' on' : ''), disabled: CS.busy, onclick: () => { CS.offers = CS.offers.includes(k) ? CS.offers.filter((x) => x !== k) : CS.offers.concat(k); draw(); } }, l)),
-          h('button', { class: 'schip', disabled: CS.busy, onclick: () => { CS.offers = CS.offers.length === OFFERS.length ? [] : OFFERS.map((o) => o[0]); draw(); } }, CS.offers.length === OFFERS.length ? 'Clear all' : 'All offers')]));
+        h('div', { class: 'stagechips' }, [...OFFERS.map(([k, l]) => h('button', { class: 'schip' + (CS.offers.includes(k) ? ' on' : ''), disabled: CS.busy, onclick: () => { CS.offers = CS.offers.includes(k) ? CS.offers.filter((x) => x !== k) : CS.offers.concat(k); if (CS.offers.length >= 5 && CS.fmt === 'video') CS.secs = 90; draw(); } }, l)),
+          h('button', { class: 'schip', disabled: CS.busy, onclick: () => { CS.offers = CS.offers.length === OFFERS.length ? [] : OFFERS.map((o) => o[0]); if (CS.offers.length >= 5 && CS.fmt === 'video') CS.secs = 90; draw(); } }, CS.offers.length === OFFERS.length ? 'Clear all' : 'All offers')]),
+        CS.offers.length ? h('button', { class: 'btn primary', style: 'margin-top:8px', disabled: CS.busy, onclick: () => sendToBot('Make a ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' for ' + (CS.business || 'junk removal') + ' owners that covers: ' + CS.offers.map((k) => OFFERS.find((o) => o[0] === k)[1]).join(', ') + '.') }, 'Make it with ' + (CS.offers.length === 1 ? 'this offer' : 'these ' + CS.offers.length + ' offers')) : null,
+        CS.offers.length >= 5 && CS.fmt === 'video' ? h('p', { class: 'dim small' }, 'That is a lot of offers, so the video is set to 90 seconds to give each one a beat.') : null);
       const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
       input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
       const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain that ' + (CS.business || 'small business') + ' owners hate the most' : t) }, t));
       return h('div', null,
         bizRow, offerRow, CS.fmt !== 'post' ? h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'How long?'), h('div', { class: 'stagechips' }, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']].map(([n, l]) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; draw(); } }, l)))) : null, ideaPreview(),
-        h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? h('div', { class: 'bot-msg bot dim' }, 'Thinking…') : null),
+        h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? loaderEl('Writing it now', CS.offers.length ? ['Reading the offers you picked…', 'Finding the pain owners feel most…', 'Writing the hook…', 'Putting every offer in…', 'Almost there…'] : ['Reading your idea…', 'Finding the pain owners feel most…', 'Writing the hook…', 'Building the scenes…', 'Almost there…']).el : null),
         h('div', { class: 'stagechips' }, quick), input,
         h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', disabled: CS.busy, onclick: () => sendToBot('Surprise me with a fresh idea for ' + (CS.business || 'junk removal') + ' owners') }, 'Surprise me now')));
     };
@@ -3448,7 +3490,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const ta = h('textarea', { class: 'ct-text', rows: 5 }); ta.value = cardTextFor(I);
       const linesOf = () => ta.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 6);
       const paint = () => { try { drawCard(cv.getContext('2d'), F.w, F.h, linesOf(), 1); } catch { /* preview only */ } };
-      ta.oninput = () => { CS.cardLines = ta.value; paint(); };
+      ta.oninput = () => { CS.cardLines = ta.value; paint(); csSave(); };
       paint(); try { document.fonts.load('700 40px Kalam').then(paint); document.fonts.load('800 50px "Inter Tight"').then(paint); } catch { /* ignore */ }
       const save = h('button', { class: 'btn primary', onclick: async () => {
         const big = document.createElement('canvas'); big.width = Math.round(F.w * 1.5); big.height = Math.round(F.h * 1.5); drawCard(big.getContext('2d'), F.w, F.h, linesOf(), 1.5);
@@ -3494,9 +3536,11 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         body = chatStep();
       } else { title = CS.fmt === 'face' ? 'Film myself' : FMT_LABEL[CS.fmt]; sub = CS.idea ? (CS.idea.byPlat ? (GEN_TOPICS[CS.topic] || {}).name : CS.business) || '' : ''; body = editStep(); }
       const nav = h('div', { class: 'row wrap cs-nav' }, idx > 0 ? h('button', { class: 'btn small', onclick: () => go(order[idx - 1]) }, 'Back') : null, h('button', { class: 'btn small', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Start over'));
+      csSave();
       root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), sub ? h('p', { class: 'sub' }, sub) : null, body, nav);
     }
     draw();
+    if (VM.restore) VM.restore.then(() => { VM.restore = null; if (CS.step === 'edit' && CS.fmt === 'video') draw(); });
     return root;
   }
 

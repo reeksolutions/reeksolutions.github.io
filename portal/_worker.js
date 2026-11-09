@@ -2712,7 +2712,7 @@ async function api(request, env, url) {
     const kind = ['video', 'post', 'face'].includes(body.kind) ? body.kind : 'post';
     const msgs = Array.isArray(body.messages) ? body.messages.slice(-10).map((m) => ({ role: m && m.role === 'bot' ? 'assistant' : 'user', content: str(m && m.text, 900) })).filter((m) => m.content) : [];
     if (!msgs.length || msgs[msgs.length - 1].role !== 'user') bad('Say something to the bot first');
-    let business = str(body.business, 80) || 'junk removal'; const secs = [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
+    let business = str(body.business, 80) || 'junk removal'; const manyOffers = Array.isArray(body.offers) && body.offers.length >= 5 && body.kind === 'video'; const secs = manyOffers ? 90 : [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = manyOffers ? '15 to 18' : secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
     try {
       const d0 = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: 'Read the message and find the type of business it is about. Answer ONLY JSON: {"business": string or null}. Use 1 to 4 lowercase words, like "junk removal", "dental office", "med spa", "plumbing". Use null if the message does not name a type of business.' }, { role: 'user', content: msgs[msgs.length - 1].content }], max_tokens: 40, temperature: 0 });
       const t0 = typeof (d0 && d0.response) === 'string' ? d0.response : JSON.stringify((d0 && d0.response) || '');
@@ -2721,7 +2721,8 @@ async function api(request, env, url) {
     } catch { /* keep the box value */ }
     const OFFER_LINES = { missed: 'an AI receptionist that answers every call and books the job', slow: 'instant replies to every new inquiry (speed to lead)', quotes: 'automatic quote follow-ups so no estimate is forgotten', quiet: 'win-back texts to past customers', reviews: 'automatic review requests after every job', plates: 'tap-to-review NFC cards', noshow: 'appointment reminders and easy rescheduling', afterhours: 'calls, messages and bookings handled at night and on weekends', website: 'a website that turns visitors into bookings', chatbot: 'an AI chat on the website that answers and books', crm: 'one place that tracks every lead' };
     const offerIds = (Array.isArray(body.offers) ? body.offers : []).map((x) => String(x)).filter((x) => OFFER_LINES[x]).slice(0, 11);
-    const offerNote = offerIds.length ? '\n\nOFFERS TO FEATURE (Marquise picked these, use all of them and nothing else): ' + offerIds.map((x) => OFFER_LINES[x]).join('; ') + '. For a video give every one of them its own fix or step beat, named in plain words and tied to a pain the owner feels. For a post or script work each one in naturally.' : '';
+    const OFFER_RX = { missed: /call|receptionist|phone|answer/i, slow: /repl|respon|inquir|minute|speed/i, quotes: /quote|estimate/i, quiet: /past|former|previous|win.?back|bring.{0,12}back|repeat|come back/i, reviews: /review/i, plates: /tap|nfc|card|plate/i, noshow: /remind|no.?show|cancel|resched/i, afterhours: /night|after.?hours|weekend|24|midnight|evening/i, website: /website|web site|google|online/i, chatbot: /chat/i, crm: /track|one place|every lead|dashboard|list of leads|pipeline/i };
+    const offerNote = offerIds.length ? '\n\nOFFERS TO FEATURE (Marquise picked these, use all of them and nothing else): ' + offerIds.map((x) => OFFER_LINES[x]).join('; ') + '. For a video give every one of them its own fix or step beat, named in plain words and tied to a pain the owner feels. Never cover only one of them. ' + (offerIds.length >= 5 ? 'Because there are many, make it an everything-we-set-up video: a hook, one pain, one cost, then one short step beat for EACH offer (under 14 spoken words each), a result and the cta.' : '') + ' For a post or script work each one in naturally.' : '';
     const TIDS = { missed: 'missed calls', slow: 'slow replies to new inquiries', quiet: 'quiet past customers', reviews: 'getting more reviews', noshow: 'no-shows and cancellations', afterhours: 'bookings and quotes after hours', website: 'website', crm: 'one place for every lead', chatbot: 'chat on the website', plates: 'tap-to-review NFC cards' };
     const tidList = Object.keys(TIDS).join('|') + '|custom';
     const flowShape = '{"title": string, "trigger": string, "pain": [3 strings], "why": string, "lost": string, "fix": string, "steps": [3 strings], "check": string, "before": string, "after": string}';
@@ -2739,11 +2740,12 @@ async function api(request, env, url) {
     let obj = null, result = null;
     const cl = (v, n) => String(v == null ? '' : v).replace(/[\u2014\u2013]/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, n);
     const cl1 = (v, n) => cl(v, n).replace(/\s*\n+\s*/g, ' ');
+    let retryNote = '';
     for (let tryN = 0; tryN < 2; tryN++) {
-      const note = tryN ? '\n\nIMPORTANT: your last answer was about the wrong industry. Write ONLY about ' + business + '. Do not mention med spas, Botox, fillers or any other industry.' : '';
+      const note = tryN ? retryNote : '';
     let text = '';
     try {
-      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys + note }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') }], max_tokens: 3400, temperature: 0.85 }, fmt ? { response_format: { type: 'json_object' } } : {}));
+      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys + note }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') + (offerIds.length ? '\n(Cover ALL of these offers: ' + offerIds.map((x) => OFFER_LINES[x]).join('; ') + ')' : '') }], max_tokens: 3400, temperature: 0.85 }, fmt ? { response_format: { type: 'json_object' } } : {}));
       let r; try { r = await run(true); } catch { r = await run(false); }
       text = typeof (r && r.response) === 'string' ? r.response : JSON.stringify((r && (r.response || r.result)) || '');
     } catch (e) { console.error('cbot', e); bad('The bot is busy. Try again in a minute.'); }
@@ -2767,7 +2769,9 @@ async function api(request, env, url) {
     }
       const blob = result ? JSON.stringify(result).toLowerCase() : '';
       const wrong = business && !/spa|aesthetic|beauty|salon/.test(business) && /med ?spa|botox|filler|aesthetician/.test(blob);
-      if (!wrong) break;
+      const miss = result && offerIds.length ? offerIds.filter((x) => !OFFER_RX[x].test(blob)) : [];
+      if (!wrong && !miss.length) break;
+      retryNote = wrong ? '\n\nIMPORTANT: your last answer was about the wrong industry. Write ONLY about ' + business + '. Do not mention med spas, Botox, fillers or any other industry.' : '\n\nIMPORTANT: your last answer left out: ' + miss.map((x) => OFFER_LINES[x]).join('; ') + '. Cover EVERY offer Marquise picked, each in plain words.';
     }
     if (result && business) result.business = business;
     return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result, business });
