@@ -2686,6 +2686,47 @@ async function api(request, env, url) {
       ORDER BY CASE WHEN l.demo_url IS NULL OR l.demo_url = '' THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END, l.id DESC LIMIT 30`).bind(...args).all();
     return json(results);
   }
+  if (path === '/content/bot' && method === 'POST') {
+    need(user, 'admin');
+    if (!env.AI) bad('The idea bot is not switched on yet');
+    const kind = ['video', 'post', 'face'].includes(body.kind) ? body.kind : 'post';
+    const msgs = Array.isArray(body.messages) ? body.messages.slice(-10).map((m) => ({ role: m && m.role === 'bot' ? 'assistant' : 'user', content: str(m && m.text, 900) })).filter((m) => m.content) : [];
+    if (!msgs.length || msgs[msgs.length - 1].role !== 'user') bad('Say something to the bot first');
+    const TIDS = { missed: 'missed calls', slow: 'slow replies to new inquiries', quiet: 'quiet past clients', reviews: 'getting more reviews', noshow: 'no-shows', afterhours: 'bookings after hours', website: 'website', crm: 'one place for every lead (client CRM)', chatbot: 'chat on the website', plates: 'tap-to-review NFC cards' };
+    const shapes = {
+      video: '{"tid": one of ' + Object.keys(TIDS).join('|') + ' (the pain point), "sol": one of the same ids (the solution, usually the same as tid), "hook": string, "symptom": string, "diagnosis": string, "cost": string, "fix": string, "recovery": string, "cta": string, "flow": {"title": string, "trigger": string, "pain": [3 strings], "why": string, "lost": string, "fix": string, "steps": [3 strings], "check": string, "before": string, "after": string}, "caption": string, "short": string}',
+      post: '{"tid": one of ' + Object.keys(TIDS).join('|') + ', "post": string (the full caption post, 400 to 900 characters, short paragraphs), "short": string (under 260 characters, for X)}',
+      face: '{"tid": one of ' + Object.keys(TIDS).join('|') + ', "script": string (a talk-to-camera script of about 45 seconds, written to be said out loud, with [bracketed] cues for the person on camera), "caption": string, "short": string (under 260 characters)}',
+    };
+    const sys = 'You help Marquise, founder of Reekon Systems in Los Angeles, make social content. Reekon sells to med spa owners: ' + Object.values(TIDS).join('; ') + '. You chat briefly, then write the content. Always answer with ONLY a JSON object: {"reply": string, "result": object or null}. "reply" is one or two friendly sentences to Marquise (ask at most one question). "result" is the finished content with exactly this shape: ' + shapes[kind] + '. Write the result right away from whatever he says, even if the idea is rough; use null only if he has not said anything usable. If he says "surprise me", pick a strong idea yourself. If a CURRENT result is given and he asks for a change, return the full updated result. Rules: write like a person talking, plain words, short sentences under 18 words, no hype words, no em dashes. Lead with the pain a med spa owner feels, not with AI, unless he asks about AI. Never invent statistics, client names, or results; any dollar figure must be clearly an example. For video: "hook" grabs attention in the first two seconds; "symptom" is what the owner sees; "diagnosis" is why it happens; "cost" is what it costs them (say it as an example if you give numbers); "fix" is one line for the solution; "recovery" is the after picture; "cta" invites them to DM the word AUDIT for a free audit. The flow fields are short labels (under 50 characters each) that match the spoken lines. "caption" is a post caption of 2 to 4 short lines. Everything must be plain text.';
+    const upr = (body.current ? 'CURRENT RESULT:\n' + JSON.stringify(body.current).slice(0, 4000) + '\n\n' : '') + 'Continue the chat.';
+    let text = '';
+    try {
+      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content }], max_tokens: 2400, temperature: 0.6 }, fmt ? { response_format: { type: 'json_object' } } : {}));
+      let r; try { r = await run(true); } catch { r = await run(false); }
+      text = typeof (r && r.response) === 'string' ? r.response : JSON.stringify((r && (r.response || r.result)) || '');
+    } catch (e) { console.error('cbot', e); bad('The bot is busy. Try again in a minute.'); }
+    let obj = null;
+    try { const m = text.match(/\{[\s\S]*\}/); obj = m ? JSON.parse(m[0]) : null; } catch { obj = null; }
+    if (!obj || typeof obj !== 'object') bad('The bot lost its train of thought. Say it again.');
+    const cl = (v, n) => String(v == null ? '' : v).replace(/[\u2014\u2013]/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, n);
+    const cl1 = (v, n) => cl(v, n).replace(/\s*\n+\s*/g, ' ');
+    let result = null; const R = obj.result && typeof obj.result === 'object' ? obj.result : null;
+    if (R) {
+      const tid = TIDS[R.tid] ? R.tid : 'missed', sol = TIDS[R.sol] ? R.sol : tid;
+      if (kind === 'post' && cl(R.post, 1400)) result = { tid, post: cl(R.post, 1400), short: cl1(R.short || R.post, 270) };
+      else if (kind === 'face' && cl(R.script, 2200)) result = { tid, script: cl(R.script, 2200), caption: cl(R.caption, 500), short: cl1(R.short || R.caption, 270) };
+      else if (kind === 'video' && cl1(R.hook, 220)) {
+        const f = R.flow && typeof R.flow === 'object' ? R.flow : {}, arr3 = (a) => (Array.isArray(a) && a.length >= 3 ? a.slice(0, 3).map((x) => cl1(x, 60)) : null);
+        const flow = {};
+        for (const k of ['title', 'trigger', 'why', 'lost', 'fix', 'check', 'before', 'after']) if (cl1(f[k], 70)) flow[k] = cl1(f[k], 70);
+        if (arr3(f.pain)) flow.pain = arr3(f.pain); if (arr3(f.steps)) flow.steps = arr3(f.steps);
+        if (flow.fix) flow.fixAI = flow.fix; if (flow.title) flow.titleAI = flow.title;
+        result = { tid, sol, hook: cl1(R.hook, 220), symptom: cl1(R.symptom, 220), diagnosis: cl1(R.diagnosis, 220), cost: cl1(R.cost, 220), fix: cl1(R.fix, 200), recovery: cl1(R.recovery, 200), cta: cl1(R.cta, 200), flow, caption: cl(R.caption, 500), short: cl1(R.short || R.caption, 270) };
+      }
+    }
+    return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result });
+  }
   if (path === '/video/edit' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
     const instruction = str(body.instruction, 500);
@@ -2720,18 +2761,20 @@ async function api(request, env, url) {
   }
   if (path === '/voice/tts' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
-    const text = str(body.text, 1800);
+    const text = str(body.text, 1800), fullText = str(body.text, 4500);
     if (!text) bad('No script to read');
     if (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && body.engine !== 'aura') {
       try {
-        const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_128', {
-          method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-          body: JSON.stringify(Object.assign({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true, speed: Math.min(1.2, Math.max(0.7, +body.speed || 0.88)) } }, body.prev ? { previous_text: str(body.prev, 400) } : {}, body.next ? { next_text: str(body.next, 400) } : {})),
+        const long = fullText || text;
+        const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '/with-timestamps?output_format=mp3_44100_128', {
+          method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: long, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true, speed: Math.min(1.2, Math.max(0.7, +body.speed || 0.95)) } }),
         });
         if (!r.ok) throw new Error('elevenlabs ' + r.status + ' ' + (await r.text()).slice(0, 120));
-        const buf = await r.arrayBuffer();
-        const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
-        return json({ audio: btoa(s), mime: 'audio/mpeg', engine: 'eleven' });
+        const j = await r.json();
+        if (!j.audio_base64) throw new Error('no audio');
+        const al = j.alignment || j.normalized_alignment || null;
+        return json({ audio: j.audio_base64, mime: 'audio/mpeg', engine: 'eleven', starts: al ? al.character_start_times_seconds : null, nchars: al && al.characters ? al.characters.length : 0 });
       } catch (e) { console.error('eleven', e); if (!env.AI) bad('ElevenLabs said no: ' + String((e && e.message) || e).slice(0, 100)); }
     }
     if (!env.AI) bad('The voice engine is not switched on yet');

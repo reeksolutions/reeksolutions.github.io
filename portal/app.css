@@ -1396,3 +1396,9 @@ html.nonav{--nav:0px}
 .an-bar b{display:block;height:100%;background:var(--accent);border-radius:6px}
 
 .mixsel{display:grid;gap:4px;margin:8px 0}.mixsel select{width:100%}
+
+.bot-log{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;margin:10px 0;padding:2px}
+.bot-msg{max-width:88%;padding:10px 13px;border-radius:16px;line-height:1.45;font-size:15px;white-space:pre-wrap}
+.bot-msg.bot{align-self:flex-start;background:var(--bg-2);border:1px solid var(--line-2)}
+.bot-msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+.bot-idea{margin-bottom:12px}.bot-idea .btn.big{width:100%;margin:8px 0}

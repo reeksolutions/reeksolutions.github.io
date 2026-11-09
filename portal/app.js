@@ -2804,20 +2804,19 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const PN = Object.fromEntries(CPLAT);
   const FMT_LABEL = { post: 'Text post', video: 'Voiceover video', face: 'Face video', news: 'AI news post' };
   const CS_FMT = [
+    ['video', 'Voiceover video', 'A story video with a voice', 'spark'],
     ['post', 'Text post', 'A caption for any platform', 'copy'],
-    ['video', 'Voiceover video', 'Script, on-screen text and scene prompts', 'spark'],
-    ['face', 'Face video', 'A script you say to the camera', 'users'],
-    ['news', 'AI news', 'What it means for a business', 'bolt'],
+    ['face', 'Film myself', 'A script you say to the camera', 'users'],
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
-  const CS = { step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {} };
-  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {} }); };
+  const CS = { step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
   const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: true, speed: 0.88, sol: null, solFor: null };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: true, speed: 0.95, sol: null, solFor: null };
   const patchKey = (tid, seed) => tid + ':' + seed;
   const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
@@ -2863,7 +2862,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     }
     const words = scenes.map((s) => Math.max(3, wordCount(s.vo)));
     let durs;
-    const parts = VM.voice && VM.voice.parts && VM.voice.parts.length === scenes.length ? VM.voice.parts : null;
+    const sig = scenes.map((x) => x.vo).join('|'), useV = !!(VM.voice && VM.voice.sig === sig && VM.voice.parts && VM.voice.parts.length === scenes.length), parts = useV ? VM.voice.parts : null;
     if (voiceDur && parts) { durs = parts.slice(); durs[0] += 0.4; durs[durs.length - 1] += 0.9; }
     else if (voiceDur) {
       const tot = words.reduce((a, b) => a + b, 0), body = Math.max(8, voiceDur);
@@ -2871,8 +2870,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => (d * (body / sum)));
       durs[0] += 0.4; durs[durs.length - 1] += 0.9;
     } else durs = words.map((w) => Math.min(8.5, Math.max(3.2, 1.6 + w * 0.42)));
-    let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; });
-    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, recovery: rec, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain, P, sol) : null };
+    let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; if (useV && VM.voice.words) s.words = VM.voice.words[i].map((x) => ({ w: x.w, t: x.t + 0.4 })); });
+    return { scenes, sig, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, recovery: rec, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain, P, sol) : null };
   }
   const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -3047,7 +3046,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     pts.push(pts[0].slice()); return pts;
   }
   function flowGraph(tid, plain, patch, sol) {
-    const t = GEN_TOPICS[tid], f = Object.assign({}, mixFlow(tid, sol || tid), (patch && patch.flow) || {}), m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
+    const t = GEN_TOPICS[tid], f = Object.assign({}, mixFlow(tid, sol || tid), (patch && patch.flow) || {}), m = t.math && t.math.match(/\$([\d,]+) a week/), week = m && !(patch && patch.cost) ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
     const add = (id, o) => { N[id] = Object.assign({ id, x: cx }, o); N[id].paths = [roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id), 1.6), roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id) + 7, 2.4)]; };
     add('trigger', { text: f.trigger, kind: 'warn', y: 80, w: 580, h: 130 });
     add('p1', { text: f.pain[0], kind: 'bad', y: 360, w: 580, h: 130 });
@@ -3163,6 +3162,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   function karaoke(plan) {
     const words = [];
     plan.scenes.forEach((sc, i) => {
+      if (sc.words && sc.words.length) { sc.words.forEach((x) => words.push({ w: x.w, t: x.t })); return; }
       const ws = spoken(sc.vo).split(/\s+/).filter(Boolean), a = sc.start + (i === 0 ? plan.lead + 0.1 : 0.15), b = sc.end - (i === plan.scenes.length - 1 ? 0.7 : 0.25), span = Math.max(0.5, b - a);
       ws.forEach((w, k) => words.push({ w, t: a + span * k / ws.length }));
     });
@@ -3171,24 +3171,28 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     if (cur.length) chunks.push({ t0: cur[0].t, words: cur });
     return { chunks };
   }
+  async function makeVoice(plan) {
+    const lines = plan.scenes.map((x) => spoken(x.vo)), text = lines.join(' ');
+    const r = await api('POST', '/voice/tts', { text, speed: VM.speed });
+    const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+    const blob = new Blob([u], { type: r.mime || 'audio/mpeg' }), buf = await decodeVoice(blob);
+    let parts = null, words = null;
+    if (r.starts && r.nchars === text.length && r.starts.length === text.length) {
+      let off = 0; const startsAt = []; words = lines.map((ln) => { const ws = []; (ln.match(/\S+/g) || []).length; const re = /\S+/g; let m; while ((m = re.exec(ln))) ws.push({ w: m[0], t: r.starts[off + m.index] }); startsAt.push(r.starts[off] || 0); off += ln.length + 1; return ws; });
+      startsAt[0] = 0; parts = startsAt.map((st, i) => (i + 1 < startsAt.length ? startsAt[i + 1] : buf.duration) - st);
+      if (parts.some((p) => !(p > 0.3))) { parts = null; words = null; }
+    }
+    VM.voice = { blob, buf, dur: buf.duration, parts, words, sig: plan.sig, name: r.engine === 'eleven' ? 'ElevenLabs voice' : 'AI voice', url: URL.createObjectURL(blob) };
+    return VM.voice;
+  }
   function videoMaker(tid, seed, plain, parent) {
-    const v = genVideo(tid, seed, plain);
+    const plan0 = vidPlan(tid, seed, plain, 0, VM.style);
+    if (VM.voice && VM.voice.sig && VM.voice.sig !== plan0.sig) VM.voice = null;
+    let plan = VM.voice ? vidPlan(tid, seed, plain, VM.voice.dur, VM.style) : plan0;
     const wrap = h('div', { class: 'vm' });
-    const voiceDur = VM.voice ? VM.voice.dur : 0, plan = vidPlan(tid, seed, plain, voiceDur, VM.style);
     const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH });
     const pv = () => (plan.style === 'flow' ? drawFlow(prev.getContext('2d'), plan, plan.scenes[1].start + 1.4, {}) : drawFrame(prev.getContext('2d'), plan, plan.scenes[0].start + 1.7, {}));
     pv(); try { document.fonts.load('700 40px Kalam').then(pv); } catch { /* ignore */ }
-    const voiceBox = h('div', { class: 'cs-blk' });
-    const drawVoice = () => {
-      voiceBox.replaceChildren(...[
-        h('p', { class: 'dim small' }, 'Voice. Use the AI voice, upload a voice file (like an ElevenLabs download), or skip it.'),
-        VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice ready: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }),
-          h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remove voice')) : null,
-        h('div', { class: 'row wrap' }, aiVoiceBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
-          const f = e.target.files[0]; if (!f) return;
-          try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f) }; toast('Voice added'); parent(); } catch { toast('Could not read that audio file', true); }
-        } })))].filter(Boolean));
-    };
     const editBox = () => {
       const key = patchKey(tid, seed), P = VM.patch[key], ta = h('textarea', { rows: 3, placeholder: 'Tell it what to fix. Example: "make the hook shorter" or "change the cost line to say $800 a week" or "sound more casual"' });
       const msg = h('p', { class: 'dim small' }, P ? 'Your fixes are applied to this video.' : '');
@@ -3206,56 +3210,28 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         } catch (e) { fail(e); } finally { go.disabled = false; go.textContent = 'Fix it'; }
       } }, 'Fix it');
       const undo = P ? h('button', { class: 'btn small', onclick: () => { delete VM.patch[key]; vmClear(true); toast('Back to the original'); parent(); } }, 'Undo all fixes') : null;
-      return h('div', { class: 'cs-blk' }, h('b', null, 'Edit video'), h('p', { class: 'dim small' }, 'Tell it what to fix. It rewrites the words and the board, then you make the video again. If you already have a voice, record or make it again after a fix.'), ta, h('div', { class: 'row wrap' }, go, undo), msg);
+      return h('div', { class: 'cs-blk' }, h('b', null, 'Edit video'), h('p', { class: 'dim small' }, 'Tell it what to fix. It rewrites the words and the board, then tap Generate video again. The voice is remade for you.'), ta, h('div', { class: 'row wrap' }, go, undo), msg);
     };
-    let aiBusy = false; let elevenOn = VM.eleven;
-    if (elevenOn === undefined) api('GET', '/voice/status').then((r) => { VM.eleven = !!r.eleven; if (VM.eleven) drawVoice(); }).catch(() => {});
-    const aiVoiceBtn = () => h('button', { class: 'btn primary', onclick: async (e) => {
-      if (aiBusy) return; aiBusy = true; const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the voice…';
-      try {
-        const lines = plan.scenes.map((x) => spoken(x.vo)), bufs = []; let nm = 'AI voice (female)';
-        for (let i = 0; i < lines.length; i++) {
-          b.textContent = 'Making the voice… ' + (i + 1) + '/' + lines.length;
-          const r = await api('POST', '/voice/tts', { text: lines[i], voice: 'luna', speed: VM.speed, prev: lines[i - 1] || '', next: lines[i + 1] || '' });
-          if (r.engine === 'eleven') nm = 'ElevenLabs voice';
-          const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
-          bufs.push(await decodeVoice(new Blob([u], { type: r.mime || 'audio/mpeg' })));
-        }
-        const j = joinVoice(bufs, 0.5), blob = wavBlob(j.buf);
-        vmClear(true); VM.voice = { blob, buf: j.buf, dur: j.buf.duration, parts: j.parts, name: nm, url: URL.createObjectURL(blob) }; toast('Voice ready'); parent();
-      } catch (err) { fail(err); } finally { aiBusy = false; b.disabled = false; b.textContent = VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)'; }
-    } }, VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)');
-    let rec = null, chunks = [], recStart = 0, timer = null;
-    const recBtn = () => { const b = h('button', { class: 'btn primary', onclick: async () => {
-      if (rec) { rec.stop(); return; }
-      try {
-        const ms = await navigator.mediaDevices.getUserMedia({ audio: true }); chunks = []; rec = new MediaRecorder(ms);
-        rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-        rec.onstop = async () => { clearInterval(timer); ms.getTracks().forEach((t) => t.stop()); const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }); rec = null;
-          try { const buf = await decodeVoice(blob); vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: 'my recording', url: URL.createObjectURL(blob) }; toast('Voice saved'); } catch { toast('Could not read the recording. Try again.', true); }
-          parent(); };
-        rec.start(); recStart = Date.now(); b.textContent = 'Stop recording (0s)'; b.classList.add('rec');
-        timer = setInterval(() => { b.textContent = 'Stop recording (' + Math.round((Date.now() - recStart) / 1000) + 's)'; }, 500);
-        teleprompter.hidden = false;
-      } catch { toast('Allow the microphone to record your voice', true); }
-    } }, VM.voice ? 'Record again' : 'Record my voice'); return b; };
-    const teleprompter = h('div', { class: 'tele', hidden: true }, h('p', { class: 'dim small' }, 'Read this out loud:'), h('p', null, v.script));
-    drawVoice();
-    const sfxChips = h('div', { class: 'stagechips' }, [[true, 'Sound effects on'], [false, 'No sound effects']].map(([val, l]) => h('button', { class: 'schip' + (VM.sfx === val ? ' on' : ''), onclick: () => { VM.sfx = val; parent(); } }, l)));
-    const topicSel = (label, val, onchange) => h('label', { class: 'mixsel' }, h('small', { class: 'dim' }, label), h('select', { onchange: (e) => onchange(e.target.value) }, Object.keys(FLOW).map((k) => h('option', { value: k, selected: k === val }, GEN_TOPICS[k].name))));
-    const mixBox = h('div', { class: 'cs-blk' }, h('b', null, 'Mix your idea'), h('p', { class: 'dim small' }, 'Pick the pain point and the solution separately. Changing either one means remaking the voice.'),
-      topicSel('Pain point', tid, (v) => { CS.topic = v; VM.solFor = v; VM.sol = v; vmClear(true); parent(); }),
-      topicSel('Solution', solOf(tid), (v) => { VM.solFor = tid; VM.sol = v; vmClear(true); parent(); }));
     const chips = (cur, opts, set) => h('div', { class: 'stagechips' }, opts.map(([val, l]) => h('button', { class: 'schip' + (cur === val ? ' on' : ''), onclick: () => set(val) }, l)));
-    const lenChips = chips(VM.len, [['short', 'Short · ~35s'], ['full', 'Full story · ~75s']], (v) => { VM.len = v; vmClear(true); parent(); });
+    const lenChips = chips(VM.len, [['short', 'Short · ~40s'], ['full', 'Long · ~80s']], (v) => { VM.len = v; vmClear(true); parent(); });
     const hdChips = chips(VM.hd, [[true, 'HD 1080p'], [false, 'Fast 720p']], (v) => { VM.hd = v; parent(); });
-    const spChips = chips(VM.speed, [[0.88, 'Natural'], [0.78, 'Slower'], [0.98, 'Quicker']], (v) => { VM.speed = v; parent(); });
-    const styleChips = h('div', { class: 'stagechips' }, [['flow', 'Flow map'], ['pulse', 'Heartbeat']].map(([k, l]) => h('button', { class: 'schip' + (VM.style === k ? ' on' : ''), onclick: () => { VM.style = k; vmClear(false); parent(); } }, l)));
+    const spChips = chips(VM.speed, [[0.95, 'Natural'], [0.85, 'Slower'], [1.05, 'Quicker']], (v) => { VM.speed = v; vmClear(true); parent(); });
+    const styleChips = chips(VM.style, [['flow', 'Flow map'], ['pulse', 'Heartbeat']], (k) => { VM.style = k; vmClear(false); parent(); });
+    const sfxChips = chips(VM.sfx, [[true, 'Sound effects on'], [false, 'No sound effects']], (val) => { VM.sfx = val; parent(); });
+    const upload = h('label', { class: 'btn small' }, VM.voice && VM.voice.manual ? 'Replace voice file' : 'Use my own voice file instead', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f), manual: true }; toast('Voice file added'); parent(); } catch { toast('Could not read that audio file', true); }
+    } }));
+    const more = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'More options'), h('small', { class: 'dim' }, 'look, quality, voice speed, your own voice file')),
+      h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips,
+      VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }), h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remake the voice')) : null, upload);
     const bar = h('div', { class: 'vm-bar', hidden: true }, h('i'));
     const status = h('p', { class: 'dim small' });
     const genBtn = h('button', { class: 'btn primary big', onclick: async () => {
-      if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true; bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open for about ' + Math.round(plan.total) + ' seconds.';
+      if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true;
       try {
+        if (!VM.voice) { status.textContent = 'Making the voice…'; await makeVoice(plan0); plan = vidPlan(tid, seed, plain, VM.voice.dur, VM.style); }
+        bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open for about ' + Math.round(plan.total) + ' seconds.';
         const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; }, VM.hd);
         if (!r.blob.size) throw new Error('The video came out empty. Try again.');
         VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, tid, secs: Math.round(plan.total) };
@@ -3269,18 +3245,17 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-' + tid + '.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[h('p', { class: 'dim small' }, 'Preview. Flow map: a hand-drawn board the camera travels across, with captions that light up word by word.'), prev, voiceBox, teleprompter,
-      mixBox, h('p', { class: 'dim small' }, 'Length'), lenChips, editBox(), h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed (for the AI voice)'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips, h('p', { class: 'dim small' }, 'Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
+    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Length'), lenChips, genBtn, bar, status, res, VM.result ? editBox() : null, more].filter(Boolean));
     return wrap;
   }
 
   function contentStart(r) {
     const root = h('div', { class: 'cs' });
     const tile = (title, sub, ic, fn) => h('button', { class: 'hub-tile', type: 'button', onclick: fn }, ic ? h('span', { class: 'hub-ic' }, icon(ic)) : null, h('b', null, title), sub ? h('small', null, sub) : null);
-    const go = (step) => { CS.step = step; CS.posted = {}; if (step !== 'edit') vmClear(true); draw(); window.scrollTo(0, 0); };
-    const key = () => [CS.fmt, CS.topic, CS.stage, CS.seed, CS.plat, CS.plain, CS.secs, CS.news].join('|');
+    const go = (step) => { CS.step = step; CS.posted = {}; if (step === 'fmt') vmClear(true); draw(); window.scrollTo(0, 0); };
+    const ideaKey = () => ['i', CS.ideaN, CS.fmt, CS.plat].join('|');
     const field = (rows, gen) => {
-      const k = key(), ta = h('textarea', { class: 'ct-text', rows });
+      const k = ideaKey(), ta = h('textarea', { class: 'ct-text', rows });
       ta.value = CS.edits[k] != null ? CS.edits[k] : gen;
       ta.oninput = () => { CS.edits[k] = ta.value; };
       return ta;
@@ -3289,8 +3264,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const n = r.today_posts.filter((p) => p.platform === k).length;
       return h('button', { class: 'schip' + (CS.plat === k ? ' on' : ''), onclick: () => { CS.plat = k; CS.posted = {}; draw(); } }, l + (n ? ' ✓' : ''));
     }));
-    const painChips = () => h('div', { class: 'stagechips' }, [[true, 'Lead with the pain (no AI)'], [false, 'Mention AI']].map(([v, l]) => h('button', { class: 'schip' + (CS.plain === v ? ' on' : ''), onclick: () => { CS.plain = v; draw(); } }, l)));
-    const topicName = () => (CS.fmt === 'news' ? NEWS.items[CS.news].title.slice(0, 40) : GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : '');
+    const topicName = () => (GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : 'custom idea');
+    const captionFor = () => {
+      const I = CS.idea; if (!I) return '';
+      if (I.byPlat) return I.byPlat(CS.plat);
+      if (CS.plat === 'x') return I.short || '';
+      return (I.post || I.caption || '') + '\n\n' + tagsFor(CS.plat, true);
+    };
     const markRow = (getText) => {
       const id = CS.posted[CS.plat];
       const b = h('button', { class: 'btn ok' + (id ? ' on' : ''), onclick: async () => {
@@ -3301,7 +3281,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
             r.today_posts = r.today_posts.filter((p) => p.id !== CS.posted[CS.plat]); delete CS.posted[CS.plat];
             toast('Removed from your calendar and tracker');
           } else {
-            const x = await api('POST', '/content/posted', { platform: CS.plat, format: CS.fmt, topic: topicName(), type: (CS.stage || CS.fmt).slice(0, 20) });
+            const x = await api('POST', '/content/posted', { platform: CS.plat, format: CS.fmt, topic: topicName(), type: CS.fmt });
             CS.posted[CS.plat] = x.id; r.today_posts.unshift({ id: x.id, platform: CS.plat, format: CS.fmt });
             toast('Logged. It is on your calendar and your tracker.');
           }
@@ -3313,66 +3293,85 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const doneBanner = () => (Object.keys(CS.posted).length ? h('div', { class: 'cs-done' }, h('b', null, '✓ Logged'), h('span', null, 'Added to your calendar as "Posted" and counted in your tracker.'),
       h('div', { class: 'row wrap' }, h('a', { class: 'btn small', href: '#/calendar' }, 'See calendar'), h('button', { class: 'btn small primary', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Make another'))) : null);
 
-    const editor = () => {
-      const plain = CS.plain, parts = [];
-      if (CS.fmt === 'post') {
-        const t = genPost(CS.topic, CS.stage, CS.seed, CS.plat, plain), ta = field(12, t);
-        const count = h('small', { class: 'dim' });
+    const applyIdea = (res) => {
+      CS.ideaN += 1; CS.idea = Object.assign({ kind: CS.fmt }, res); CS.topic = res.tid || 'missed'; CS.edits = {}; CS.posted = {};
+      if (CS.fmt === 'video') {
+        const key = patchKey(CS.topic, CS.seed); VM.solFor = CS.topic; VM.sol = res.sol || CS.topic;
+        const P = {}; ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta'].forEach((k) => { if (res[k]) P[k] = res[k]; });
+        if (res.flow && Object.keys(res.flow).length) P.flow = res.flow;
+        if (Object.keys(P).length) VM.patch[key] = P; else delete VM.patch[key];
+        vmClear(true);
+      }
+    };
+    const quickIdea = () => {
+      const ids = Object.keys(FLOW), tid = ids[(r.day_n + CS.seed) % ids.length];
+      let res = { tid, sol: tid, byPlat: (pl) => genPost(tid, 'story', CS.seed, pl, true) };
+      if (CS.fmt === 'face') { const f = genFace(tid, CS.secs, CS.seed, true); res.script = f.text; res.plainScript = f.plainText; }
+      if (CS.fmt === 'post') res.post = genPost(tid, 'story', CS.seed, 'ig', true);
+      applyIdea(res); go('edit');
+    };
+    const sendToBot = async (text) => {
+      if (CS.busy || !text.trim()) return;
+      CS.chat.push({ role: 'user', text: text.trim() }); CS.busy = true; draw();
+      try {
+        const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
+        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur });
+        CS.chat.push({ role: 'bot', text: x.reply });
+        if (x.result) applyIdea(x.result);
+      } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
+    };
+    const ideaPreview = () => {
+      const I = CS.idea; if (!I || I.kind !== CS.fmt) return null;
+      const lines = CS.fmt === 'video' ? [I.hook, I.symptom, I.fix].filter(Boolean) : CS.fmt === 'face' ? [(I.script || '').slice(0, 220) + '…'] : [(I.post || '').slice(0, 220) + '…'];
+      return h('div', { class: 'cs-blk bot-idea' }, h('b', null, 'Your idea is ready'), lines.map((l) => h('p', { class: 'dim small' }, l)),
+        h('button', { class: 'btn primary big', onclick: () => go('edit') }, CS.fmt === 'video' ? 'Make the video' : CS.fmt === 'face' ? 'Get my script' : 'Get my post'),
+        h('p', { class: 'dim small' }, 'Want it different? Keep talking to the bot below.'));
+    };
+    const chatStep = () => {
+      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? Give me a rough idea, something that happened today, or tap Surprise me.' });
+      const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
+      input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
+      const quick = ['Surprise me', 'A pain med spa owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t) }, t));
+      return h('div', null,
+        ideaPreview(),
+        h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? h('div', { class: 'bot-msg bot dim' }, 'Thinking…') : null),
+        h('div', { class: 'stagechips' }, quick), input,
+        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', onclick: quickIdea }, 'Skip the chat')));
+    };
+    const editStep = () => {
+      const I = CS.idea, parts = [];
+      const again = h('button', { class: 'btn small', onclick: () => go('idea') }, 'Change the idea with the bot');
+      if (!I) { parts.push(h('p', { class: 'dim' }, 'Start with an idea first.'), again); }
+      else if (CS.fmt === 'video') {
+        parts.push(videoMaker(CS.topic, CS.seed, true, draw), h('h3', { class: 'trk-h' }, 'Caption'), h('p', { class: 'dim small' }, 'Pick the account you are posting to. Each one gets its own caption.'), platChips(), field(9, captionFor()), markRow(() => (CS.edits[ideaKey()] != null ? CS.edits[ideaKey()] : captionFor())), again);
+      } else if (CS.fmt === 'face') {
+        const plainScript = I.plainScript || (I.script || '').replace(/\[[^\]]*\]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        const script = h('textarea', { class: 'ct-text', rows: 14 }); script.value = I.script || ''; script.readOnly = true;
+        parts.push(h('p', { class: 'dim small' }, 'Say this to the camera. The brackets are cues for you, not words to say.'), script,
+          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(I.script, 'Script with cues copied') }, 'Copy with cues'), h('button', { class: 'btn', onclick: () => copyText(plainScript, 'Plain script copied') }, 'Copy plain script'), again),
+          h('h3', { class: 'trk-h' }, 'Caption'), h('p', { class: 'dim small' }, 'After you film it, pick the account you posted to.'), platChips(), field(8, captionFor()), markRow(() => (CS.edits[ideaKey()] != null ? CS.edits[ideaKey()] : captionFor())));
+      } else {
+        const ta = field(12, captionFor()), count = h('small', { class: 'dim' });
         const upd = () => { count.textContent = CS.plat === 'x' ? ta.value.length + ' / 280' : ta.value.length + ' characters'; count.style.color = CS.plat === 'x' && ta.value.length > 280 ? 'var(--bad)' : ''; };
         const oi = ta.oninput; ta.oninput = () => { oi(); upd(); }; upd();
-        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value),
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset text')),
-          painChips());
-      } else if (CS.fmt === 'video') {
-        const v = genVideo(CS.topic, CS.seed, plain), cap = genPost(CS.topic, CS.stage, CS.seed, CS.plat, plain), ta = field(9, cap);
-        const blk = (title, text, msg) => h('div', { class: 'cs-blk' }, h('p', { class: 'dim small' }, title), h('pre', { class: 'gen-pre' }, text), h('button', { class: 'btn small', onclick: () => copyText(text, msg) }, 'Copy'));
-        parts.push(videoMaker(CS.topic, CS.seed, plain, draw),
-          h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Script, on-screen text and scene prompts'), h('small', { class: 'dim' }, 'for a voice tool or another generator')),
-            blk('Voiceover script (about 30 seconds)', v.script, 'Script copied'),
-            blk('On-screen text, one line per scene', v.captions.map((c, i) => (i + 1) + '. ' + c).join('\n'), 'On-screen text copied'),
-            blk('Scene prompts for an image or video generator', v.scenes.map((c, i) => (i + 1) + '. ' + c).join('\n\n'), 'Scene prompts copied')),
-          h('p', { class: 'dim small' }, '4. Caption. Pick the platform you are posting this video to, then mark it posted.'), platChips(), ta, markRow(() => ta.value),
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; vmClear(true); draw(); } }, 'Shuffle'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset caption')), painChips());
-      } else if (CS.fmt === 'face') {
-        const f = genFace(CS.topic, CS.secs, CS.seed, plain), cap = genPost(CS.topic, 'story', CS.seed, CS.plat, plain);
-        const script = h('textarea', { class: 'ct-text', rows: 14 }); script.value = f.text; script.readOnly = true;
-        const ta = field(8, cap);
-        parts.push(h('p', { class: 'dim small' }, 'Length'), h('div', { class: 'stagechips' }, [30, 60, 90].map((n) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; CS.posted = {}; draw(); } }, n + ' sec'))),
-          h('p', { class: 'dim small' }, 'About ' + f.est + ' seconds when spoken at a natural pace. The brackets are cues for you, not words to say.'), script,
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(f.text, 'Script with cues copied') }, 'Copy with cues'), h('button', { class: 'btn', onclick: () => copyText(f.plainText, 'Plain script copied') }, 'Copy plain script'), h('button', { class: 'btn', onclick: () => { CS.seed += 1; CS.posted = {}; draw(); } }, 'Shuffle hook')),
-          h('p', { class: 'dim small' }, 'After you film it: pick the platform you posted to and add the caption.'), platChips(), ta, markRow(() => ta.value), painChips());
-      } else {
-        const n = NEWS.items[CS.news], ta = field(12, newsPost(n, CS.plat));
-        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, markRow(() => ta.value),
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => copyText(newsFace(n), 'Face script copied') }, 'Copy face script'), h('button', { class: 'btn', onclick: () => { delete CS.edits[key()]; draw(); } }, 'Reset text')),
-          h('p', { class: 'dim small' }, 'Source: ' + NEWS.source));
+        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value), again);
       }
       return h('div', { class: 'cs-edit' }, doneBanner(), parts);
     };
 
     function draw() {
-      const order = CS.fmt === 'news' ? ['fmt', 'news', 'edit'] : CS.fmt === 'face' ? ['fmt', 'topic', 'edit'] : ['fmt', 'topic', 'angle', 'edit'];
-      const idx = Math.max(0, order.indexOf(CS.step)), labels = { fmt: 'Format', topic: 'Topic', angle: 'Angle', news: 'Story', edit: 'Edit' };
+      const order = ['fmt', 'idea', 'edit'], idx = Math.max(0, order.indexOf(CS.step)), labels = { fmt: 'Type', idea: 'Idea', edit: 'Make' };
       const bar = h('div', { class: 'cs-steps' }, order.map((k, i) => h('span', { class: 'cs-step' + (i === idx ? ' on' : i < idx ? ' past' : '') }, h('i', null, String(i + 1)), labels[k])));
       let title, sub, body;
       if (CS.step === 'fmt') {
         title = 'What are you making?'; sub = 'Pick one. You can make another right after.';
-        body = h('div', { class: 'hub-grid' }, CS_FMT.map(([k, t, s, ic]) => tile(t, s, ic, () => { CS.fmt = k; CS.edits = {}; go(k === 'news' ? 'news' : 'topic'); })));
-      } else if (CS.step === 'topic') {
-        title = 'What is it about?'; sub = 'Each one is something you sell or a pain your buyer feels.';
-        body = h('div', { class: 'hub-grid' }, Object.keys(GEN_TOPICS).map((k) => tile(GEN_TOPICS[k].name, GEN_TOPICS[k].hooks[CS.seed % GEN_TOPICS[k].hooks.length], null, () => { CS.topic = k; if (CS.fmt === 'face') go('edit'); else go('angle'); })));
-      } else if (CS.step === 'angle') {
-        title = 'Pick an angle'; sub = 'This is the part of the story the post tells.';
-        body = h('div', null, h('div', { class: 'hub-grid' }, GEN_STAGES.map(([k, l]) => tile(l, STAGE_SUB[k], null, () => { CS.stage = k; go('edit'); }))), h('p', { class: 'dim small', style: 'margin-top:14px' }, 'Tone'), painChips());
-      } else if (CS.step === 'news') {
-        title = 'Which story?'; sub = 'Week of ' + NEWS.week + '. Open the original announcement before you post.';
-        body = h('div', { class: 'hub-grid one' }, NEWS.items.map((n, i) => tile(n.title, n.date + ' · ' + n.hook, null, () => { CS.news = i; go('edit'); })));
-      } else {
-        title = FMT_LABEL[CS.fmt]; sub = CS.fmt === 'news' ? NEWS.items[CS.news].title : GEN_TOPICS[CS.topic].name + (CS.stage ? ' · ' + (GEN_STAGES.find((x) => x[0] === CS.stage) || [0, ''])[1] : '');
-        body = editor();
-      }
+        body = h('div', { class: 'hub-grid one' }, CS_FMT.map(([k, t, s, ic]) => tile(t, s, ic, () => { if (CS.fmt !== k) { CS.chat = []; CS.idea = null; } CS.fmt = k; CS.edits = {}; go('idea'); })));
+      } else if (CS.step === 'idea') {
+        title = 'Let’s come up with the idea'; sub = 'Talk to the bot. It writes the whole thing for you.';
+        body = chatStep();
+      } else { title = CS.fmt === 'face' ? 'Film myself' : FMT_LABEL[CS.fmt]; sub = CS.idea && GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : ''; body = editStep(); }
       const nav = h('div', { class: 'row wrap cs-nav' }, idx > 0 ? h('button', { class: 'btn small', onclick: () => go(order[idx - 1]) }, 'Back') : null, h('button', { class: 'btn small', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Start over'));
-      root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), h('p', { class: 'sub' }, sub), body, nav);
+      root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), sub ? h('p', { class: 'sub' }, sub) : null, body, nav);
     }
     draw();
     return root;
