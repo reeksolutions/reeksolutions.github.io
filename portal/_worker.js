@@ -271,7 +271,7 @@ Does tomorrow morning or tomorrow afternoon work better?
 ];
 
 /* -------- personal tracker -------- */
-const TRK_BLOCKS = ['pray', 'gym', 'reset', 'mind', 'prep', 'c1', 'rep', 'c2', 'lunch', 'c3', 'brk', 'aud', 'cont', 'close'];
+const TRK_BLOCKS = ['pray', 'gym', 'reset', 'mind', 'prep', 'c1', 'rep', 'c2', 'lunch', 'c3', 'brk', 'aud', 'cont', 'fix', 'close'];
 const TRK_WINS = ['pray', 'gym', 'mind'];
 function trkShift(date, n) {
   const [y, m, d] = date.split('-').map(Number);
@@ -309,11 +309,26 @@ async function trkLoad(env, userId, today) {
 // add to today's tracker counters (used when a call outcome is logged in the CRM)
 async function trkBump(env, userId, add) {
   const day = ptParts().date;
-  await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, updated_at) VALUES (?,?,'[]',?,?,?,?)
-    ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, updated_at = excluded.updated_at`)
-    .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, now()).run();
+  await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, texts, dms, updated_at) VALUES (?,?,'[]',?,?,?,?,?,?)
+    ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, texts = COALESCE(texts,0) + excluded.texts, dms = COALESCE(dms,0) + excluded.dms, updated_at = excluded.updated_at`)
+    .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, add.texts || 0, add.dms || 0, now()).run();
 }
-const FOCUS_DEFAULT = 'backyard contractor';
+// One score for the whole day (out of 100). Dials are only 30 of it, so a day of DMs, content and a fix still counts.
+function trkScore(t, goal, postedPlatforms) {
+  const wins = TRK_WINS.filter((w) => t.blocks.includes(w)).length;
+  const msgs = (t.texts || 0) + (t.dms || 0), posts = Math.max(postedPlatforms || 0, t.posts || 0);
+  const parts = [
+    { id: 'dials', label: 'Dials', pts: Math.round(30 * Math.min(1, t.dials / Math.max(1, goal))), max: 30 },
+    { id: 'audits', label: 'Audits', pts: t.demos >= 1 ? 15 : t.talks >= 5 ? 6 : 0, max: 15 },
+    { id: 'outreach', label: 'Texts and DMs', pts: Math.round(20 * Math.min(1, msgs / 15)), max: 20 },
+    { id: 'content', label: 'Content', pts: posts >= 2 ? 15 : posts >= 1 ? 10 : 0, max: 15 },
+    { id: 'wins', label: 'Daily wins', pts: Math.round(10 * wins / 3), max: 10 },
+    { id: 'fix', label: 'One fix', pts: t.blocks.includes('fix') ? 5 : 0, max: 5 },
+    { id: 'refs', label: 'Referral ask', pts: (t.refs || 0) >= 1 ? 5 : 0, max: 5 },
+  ];
+  return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
+}
+const FOCUS_DEFAULT = 'med spa';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
@@ -1799,6 +1814,7 @@ async function api(request, env, url) {
         env.DB.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').bind(toS, t, lead.id),
         env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, outcome, lead.status, toS, t),
       ]);
+      if (user.role === 'admin') await trkBump(env, user.id, { texts: outcome === 'texted' ? 1 : 0, dms: outcome === 'dmed' ? 1 : 0 });
       return json({ ok: true, status: toS });
     }
     const to = nextStatus(lead.status, outcome);
@@ -2547,7 +2563,7 @@ async function api(request, env, url) {
     else if (workDays7.length >= 3 && avg7 >= goal) add('good', `7-day average is ${avg7} dials/day. Volume is on target.`);
     if (dayN >= 4 && demos7 === 0) add('bad', `Zero audits booked in the last 7 days. Dials without bookings means the opener or the list needs work.`);
     else if (dials7 >= 50 && talks7 > 0 && demos7 / talks7 < 0.1) add('warn', `Only ${demos7} audit${demos7 === 1 ? '' : 's'} from ${talks7} conversations (${Math.round(100 * demos7 / talks7)}%). Tighten the first 20 seconds of the call.`);
-    if (dials7 >= 30 && talks7 / dials7 < 0.05) add('warn', `Pick-up rate is ${Math.round(100 * talks7 / dials7)}%. Try calling contractors early (6:30 to 8am) or late afternoon (3:30 to 5pm), when they are between jobs.`);
+    if (dials7 >= 30 && talks7 / dials7 < 0.05) add('warn', `Pick-up rate is ${Math.round(100 * talks7 / dials7)}%. Try the first hour they open and the hour after lunch, when the front desk is not slammed.`);
     if (setupTotal === 0 && dayN >= 7) add('bad', `No revenue yet and you're on day ${dayN} of 30. Every day without a booked audit makes day 30 harder.`);
     if (focusOpen < goal * 2) add('warn', `Only ${focusOpen} fresh ${(await getSetting(env, 'focus_niche')) || FOCUS_DEFAULT} leads left — ${daysOfLeads < 1 ? 'less than a day' : 'about ' + daysOfLeads + ' days'} of dialing. Turn on the lead bot or run the Lead Finder.`);
     if (sent14 >= 20 && replied14 === 0) add('warn', `${sent14} cold emails sent in 14 days and no replies. The email isn't your channel yet — the phone is.`);
@@ -2563,6 +2579,7 @@ async function api(request, env, url) {
       content: { days, posts: series('posts'), posts7, refs: series('refs'), refs7, today_posts: tdy.posts, today_refs: tdy.refs },
       supply: { days, added: supply, open: sum(st, OPENF), focus_open: focusOpen, days_left: daysOfLeads },
       streak: trkStreak(byDay, goal, today), check,
+      score: { ...trkScore(tdy, goal, 0), blocks: tdy.blocks, texts: tdy.texts, dms: tdy.dms, posts: tdy.posts, refs: tdy.refs, dials: tdy.dials, talks: tdy.talks, demos: tdy.demos, sunday: trkDow(today) === 0, best: Math.max(0, ...days.map((d) => trkScore(byDay.get(d) || trkRow(null, d), goal, 0).score)) },
     });
   }
 
@@ -2700,10 +2717,7 @@ async function api(request, env, url) {
     const wins = ['pray', 'gym', 'mind'].filter((w) => t.blocks.includes(w));
     const blocksDone = t.blocks.length, blocksTotal = TRK_BLOCKS.length;
     const posted = postsR.results.map((r) => r.platform);
-    // score out of 100: dials 45, audits 20, wins 15, content 10, schedule 10
-    const sDials = Math.round(45 * Math.min(1, t.dials / goal)), sAud = t.demos >= 1 ? 20 : t.talks >= 10 ? 8 : 0;
-    const sWins = wins.length * 5, sContent = Math.round(10 * Math.min(1, Math.max(posted.length, Math.min(t.posts, 3)) / 3)), sSched = Math.round(10 * Math.min(1, blocksDone / blocksTotal));
-    const score = sDials + sAud + sWins + sContent + sSched;
+    const sc = trkScore(t, goal, posted.length), score = sc.score;
     const sunday = trkDow(day) === 0;
     const verdict = sunday ? ['rest', 'Rest day', 'Sundays are off. Recharge.'] : score >= 80 ? ['great', 'Great day', 'You did the work. Do it again tomorrow.'] : score >= 60 ? ['good', 'Solid day', 'Close. One more push on dials or content next time.'] : score >= 40 ? ['meh', 'Okay day', 'Not your best. Find the one block you skipped and protect it tomorrow.'] : ['bad', 'Rough day', 'Low output. No drama, just reset and win the first block tomorrow.'];
     const done = [], todo = [];
@@ -2720,7 +2734,7 @@ async function api(request, env, url) {
     }
     return json({
       day, today, goal, is_today: day === today, sunday, score, verdict,
-      breakdown: [['Dials', sDials, 45], ['Audits', sAud, 20], ['Daily wins', sWins, 15], ['Content', sContent, 10], ['Schedule', sSched, 10]],
+      breakdown: sc.parts.map((x) => [x.label, x.pts, x.max]),
       stats: { dials: t.dials, talks: t.talks, demos: t.demos, texts: t.texts, dms: t.dms, posts: t.posts, refs: t.refs, notes: notesN.n, wins, blocks_done: blocksDone, blocks_total: blocksTotal, outcomes: oc },
       done, todo, note: t.note || '',
       tomorrow: { callbacks: nextCb.results, booked: upcoming.results, fresh_leads: leftNew.n },
@@ -2736,7 +2750,7 @@ async function api(request, env, url) {
     const crm = await env.DB.prepare("SELECT COUNT(*) AS logged, SUM(CASE WHEN to_status = 'booked' THEN 1 ELSE 0 END) AS booked FROM calls WHERE user_id = ? AND created_at >= ?").bind(user.id, since).first();
     const history = [];
     for (let i = 13; i >= 0; i--) { const d = trkShift(today, -i); history.push({ ...(byDay.get(d) || trkRow(null, d)), kept: trkKept(byDay.get(d), goal), off: trkDow(d) === 0 }); }
-    return json({ today, now_pt: ptParts(), goal, day: byDay.get(today) || trkRow(null, today), history, streak: trkStreak(byDay, goal, today),
+    return json({ focus: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT, today, now_pt: ptParts(), goal, day: byDay.get(today) || trkRow(null, today), history, streak: trkStreak(byDay, goal, today),
       crm: { logged: crm.logged || 0, booked: crm.booked || 0 } });
   }
   if (path === '/tracker' && method === 'PUT') {

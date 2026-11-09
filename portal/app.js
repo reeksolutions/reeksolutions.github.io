@@ -156,7 +156,7 @@
   function navFor(role) {
     if (role === 'admin') return [
       [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['rebrief', 'Daily brief'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['deals', 'Deals']]],
-      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['cards', 'Review cards'], ['script', 'Call script']]],
+      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['lab', 'Demo Lab']]],
       ['System', [['settings', 'Settings']]],
     ];
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
@@ -169,11 +169,9 @@
     sell: ['Sell', 'Leads, calls and deals', [
       ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
       ['calendar', 'Calendar', 'Audits, closings, posts', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
-      ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart'],
-      ['script', 'Call script', 'What to say', 'script']]],
+      ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
     create: ['Create', 'Posts, videos and demos', [
-      ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['content', 'Content', 'Start posting', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'],
-      ['demos', 'Demo queue', 'Demos to build and send', 'demos'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
+      ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['content', 'Content', 'Start posting', 'spark']]],
     crew: ['Team', 'Reps, devs and lead lists', [
       ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
       ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
@@ -182,6 +180,33 @@
   Object.entries(CATS).forEach(([k, c]) => c[2].forEach((i) => { CAT_OF[i[0]] = k; }));
   CAT_OF.finder = 'sell';
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
+
+  /* ---- slot-machine page switch: pages sit on a reel in tab order; going to a later page rolls up, an earlier one rolls down ---- */
+  const SLOT_CATS = ['home', 'sell', 'create', 'crew', 'more'];
+  function slotPos(hash) {
+    const route = String(hash || '').replace(/^#\/?/, '').split('/')[0] || 'home';
+    let cat = CAT_OF[route] || (route === 'home' ? 'home' : SLOT_CATS.includes(route) ? route : 'more');
+    if (route === 'rep' || route === 'users') cat = 'crew';
+    const base = Math.max(0, SLOT_CATS.indexOf(cat)) * 100;
+    if (route === cat) return base;
+    const at = CATS[cat] ? CATS[cat][2].findIndex((i) => i[0] === route) : -1;
+    return base + (at >= 0 ? 1 + at : 60);
+  }
+  function slotDir(fromHash, toHash) {
+    const a = slotPos(fromHash), b = slotPos(toHash);
+    return b >= a ? 'up' : 'down';
+  }
+  function slotGhost(oldMain, dir) {
+    if (!oldMain || !document.body.contains(oldMain)) return;
+    const r = oldMain.getBoundingClientRect();
+    const g = oldMain.cloneNode(true);
+    g.removeAttribute('id'); g.className = 'slot-ghost out-' + dir; g.setAttribute('aria-hidden', 'true');
+    g.style.cssText = 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + Math.min(r.height, window.innerHeight * 1.5) + 'px';
+    document.body.append(g);
+    document.documentElement.classList.add('slotting');
+    setTimeout(() => { g.remove(); document.documentElement.classList.remove('slotting'); }, 560);
+    try { if (navigator.vibrate) navigator.vibrate(8); } catch { /* not on every phone */ }
+  }
 
 
   /* ================= floating orb (look only; it roams and steps aside by itself) ================= */
@@ -272,7 +297,11 @@
     const top = h('header', { class: 'top' },
       h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
       h('a', { href: '#/account', class: 'me', title: S.me.name }, initials(S.me.name)));
-    const main = h('main', { id: 'view', class: 'enter' }, crumb, content);
+    const slide = S.slide && !reduceMotion() ? S.slide : null;
+    S.slide = null;
+    const oldMain = slide ? document.getElementById('view') : null;
+    const main = h('main', { id: 'view', class: slide && oldMain ? 'slot-in in-' + slide : 'enter' }, crumb, content);
+    if (oldMain) slotGhost(oldMain, slide);
     $app.replaceChildren(...[side, h('div', { class: 'frame' }, top, main), isAdmin ? null : nav].filter(Boolean));
     ensureOrb();
     if (S.me.role !== 'dev') refreshCallbackBadge();
@@ -335,7 +364,7 @@
     }
   }
   let lastRoute = location.hash;
-  window.addEventListener('hashchange', () => { S.cameFromList = /^#\/(leads|callbacks)/.test(lastRoute); lastRoute = location.hash; render(); });
+  window.addEventListener('hashchange', () => { S.cameFromList = /^#\/(leads|callbacks)/.test(lastRoute); S.slide = lastRoute === location.hash ? null : slotDir(lastRoute, location.hash); lastRoute = location.hash; render(); });
 
   /* ================= login / setup ================= */
   async function renderAuth() {
@@ -1032,7 +1061,7 @@
         body: [callNow, h('div', { class: 'step-q' }, miss('no_answer', 'No answer'), miss('voicemail', 'Voicemail'), miss('gatekeeper', 'Gatekeeper'), miss('callback', 'Callback'), miss('booked', 'Audit booked', 'primary'), miss('not_interested', 'Not interested'))] },
       { t: 'Message him', sub: messaged ? 'Messaged ✓' : 'Text or DM the missed-call message',
         body: [h('div', { class: 'msgbox' }, noteMsg), h('div', { class: 'step-q' },
-          textBtn('Text it', noteMsg, 'primary'), sBtn('Copy message', () => copyTxt(noteMsg, 'Message copied')), h('a', { class: 'btn', href: dmLink, target: '_blank', rel: 'noopener noreferrer' }, L.instagram ? 'Open his Instagram' : 'Find his Instagram')),
+          textBtn('Text it', noteMsg, 'primary'), sBtn('Copy message', () => copyTxt(noteMsg, 'Message copied')), h('a', { class: 'btn', href: dmLink, target: '_blank', rel: 'noopener noreferrer' }, L.instagram ? 'Open his Instagram' : 'Find his Instagram'), h('a', { class: 'btn', href: 'https://www.facebook.com/search/top?q=' + encodeURIComponent(L.business + ' ' + (L.city || '')), target: '_blank', rel: 'noopener noreferrer' }, 'Find on Facebook')),
           h('div', { class: 'step-q' }, sBtn('I texted him', () => logMsg('texted'), 'ok'), sBtn('I DM\'d him', () => logMsg('dmed'), 'ok'))] },
       { t: 'Send demo', sub: demoSent ? 'Demo sent ✓' : L.demo_url ? 'Demo is ready to send' : 'Build one for him',
         body: L.demo_url
@@ -4173,7 +4202,66 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     clearInterval(S.feedTimer);
     S.feedTimer = setInterval(() => { if (!document.body.contains(feedBox)) { clearInterval(S.feedTimer); return; } if (!document.hidden) loadFeed(); }, 20000);
 
-    shell('home', [head, catLauncher(), reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard, cardsCard), feed]);
+    shell('home', [head, scoreCard(ov.score, ov, startDialing), catLauncher(), reality, kpis, h('div', { class: 'ov-grid' }, callsCard, pipeCard, revCard, smsCard, contentCard, supplyCard), feed]);
+  }
+
+  /* ---- Today's score (Home): one number for the day, every row has a button that moves it ---- */
+  const FIX_QUEUE = [
+    ['Connect Google so Meet links make themselves', '#/integrations'],
+    ['Clear the non-med-spa leads out of the list', '#/finder'],
+    ['Set a dial goal you can actually hit', '#/tracker'],
+    ['Point the demos at med spa treatments', '#/lab'],
+    ['Write tomorrow\'s post before you quit for the day', '#/content'],
+    ['Call every callback that is due', '#/callbacks'],
+    ['Read last week\'s calls and fix the opener', '#/rebrief'],
+  ];
+  function scoreCard(sc, ov, startDialing) {
+    const total = sc.score, part = Object.fromEntries(sc.parts.map((x) => [x.id, x]));
+    const tier = total >= 80 ? ['A', 'great'] : total >= 60 ? ['B', 'good'] : total >= 40 ? ['C', 'meh'] : ['D', 'bad'];
+    const R = 38, C = 2 * Math.PI * R;
+    const ring = h('div', { class: 'sc-ring ' + tier[1] },
+      h('svg', { viewBox: '0 0 100 100', width: 96, height: 96 }, h('circle', { cx: 50, cy: 50, r: R, class: 'sc-bg' }), h('circle', { cx: 50, cy: 50, r: R, class: 'sc-fg', style: 'stroke-dasharray:' + C + ';stroke-dashoffset:' + (C * (1 - total / 100)) })),
+      h('div', { class: 'sc-num' }, h('b', null, total), h('small', null, tier[0])));
+    const put = (body) => async () => { try { await api('PUT', '/tracker', body); toast('Logged'); viewHome(); } catch (e) { fail(e); } };
+    const toggleBlock = (id) => put({ blocks: sc.blocks.includes(id) ? sc.blocks.filter((x) => x !== id) : sc.blocks.concat(id) });
+    const msgs = sc.texts + sc.dms;
+    const gapText = {
+      dials: () => (ov.goal - sc.dials) + ' dials to the goal',
+      audits: () => sc.talks >= 5 ? 'Book one audit from a pick-up' : 'Get 5 pick-ups, then ask for the audit',
+      outreach: () => (15 - Math.min(15, msgs)) + ' more texts or DMs',
+      content: () => (sc.posts ? 'Post once more' : 'Post once'),
+      wins: () => 'Finish your three wins',
+      fix: () => 'Fix one thing',
+      refs: () => 'Ask one person for a referral',
+    };
+    const row = (id, actions) => {
+      const x = part[id], done = x.pts >= x.max;
+      return h('div', { class: 'sc-row' + (done ? ' done' : '') },
+        h('div', { class: 'sc-top' }, h('b', null, x.label), h('span', null, x.pts + ' / ' + x.max)),
+        h('div', { class: 'sc-track' }, h('i', { style: 'width:' + Math.round(100 * x.pts / x.max) + '%' })),
+        h('div', { class: 'sc-act' }, done ? h('small', { class: 'sc-ok' }, 'Done') : h('small', null, gapText[id]()), h('div', { class: 'row' }, ...actions)));
+    };
+    const toPosting = h('a', { class: 'btn small primary', href: '#/content/start', onclick: () => csReset() }, 'Start posting');
+    const dmLeads = h('a', { class: 'btn small primary', href: '#/leads', onclick: () => { Object.assign(S.leadFilters, { status: 'new', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '', site: 'none', lowrev: '' }); } }, 'DM a lead');
+    const winBtns = [['pray', 'Prayer'], ['gym', 'Workout'], ['mind', 'Read']].map(([id, l]) => h('button', { class: 'btn small' + (sc.blocks.includes(id) ? ' ok' : ''), 'aria-pressed': sc.blocks.includes(id), onclick: toggleBlock(id) }, (sc.blocks.includes(id) ? '✓ ' : '') + l));
+    const fixPick = FIX_QUEUE[(ov.day_n || 1) % FIX_QUEUE.length];
+    const rows = [
+      row('dials', [h('button', { class: 'btn small primary', onclick: startDialing }, icon('phone'), 'Dial')]),
+      row('audits', [h('a', { class: 'btn small', href: '#/callbacks' }, 'Callbacks')]),
+      row('outreach', [dmLeads, h('button', { class: 'btn small', onclick: put({ dms: sc.dms + 1 }) }, '+1 DM'), h('button', { class: 'btn small', onclick: put({ texts: sc.texts + 5 }) }, '+5 texts')]),
+      row('content', [toPosting]),
+      row('wins', winBtns),
+      row('fix', [h('a', { class: 'btn small', href: fixPick[1] }, 'Open it'), h('button', { class: 'btn small' + (sc.blocks.includes('fix') ? ' ok' : ''), onclick: toggleBlock('fix') }, sc.blocks.includes('fix') ? '✓ Fixed' : 'Mark fixed')]),
+      row('refs', [h('button', { class: 'btn small', onclick: put({ refs: sc.refs + 1 }) }, '+1 ask')]),
+    ];
+    const open = sc.parts.filter((x) => x.pts < x.max).sort((a, b) => (b.max - b.pts) - (a.max - a.pts))[0];
+    const next = open ? 'Biggest gap: ' + open.label.toLowerCase() + ' (' + (open.max - open.pts) + ' pts left)' : 'Perfect day. Do it again tomorrow.';
+    return h('section', { class: 'panel sc-card' },
+      h('div', { class: 'sc-head' }, ring,
+        h('div', { class: 'sc-info' }, h('small', null, sc.sunday ? "Today's score (day off)" : "Today's score"), h('b', null, total + ' of 100'), h('span', null, next),
+          h('small', { class: 'dim' }, 'Best day so far: ' + sc.best + (ov.streak ? ' · ' + ov.streak + '-day streak' : '')))),
+      h('div', { class: 'sc-fixline' }, h('small', null, "Today's fix"), h('a', { href: fixPick[1] }, fixPick[0])),
+      h('div', { class: 'sc-rows' }, rows));
   }
 
   // phone home: the four categories as big buttons (there is no bottom bar for the admin)
@@ -4714,16 +4802,17 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
     { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
     { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
-    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's backyard contractor list, read the offer, say the opener 10 times" },
-    { id: 'c1', from: '09:00', to: '10:30', title: 'Call block 1: Backyard contractors', quota: 67 },
+    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's {niche} list, read the offer, say the opener 10 times" },
+    { id: 'c1', from: '09:00', to: '10:30', title: 'Call block 1: {niche}s', quota: 67 },
     { id: 'rep', from: '10:30', to: '10:45', title: 'Answer every reply, call every positive reply' },
-    { id: 'c2', from: '10:45', to: '12:15', title: 'Call block 2: Backyard contractors', quota: 67 },
+    { id: 'c2', from: '10:45', to: '12:15', title: 'Call block 2: {niche}s', quota: 67 },
     { id: 'lunch', from: '12:15', to: '13:00', title: 'Lunch' },
-    { id: 'c3', from: '13:00', to: '14:30', title: 'Call block 3: Backyard contractors', quota: 66 },
+    { id: 'c3', from: '13:00', to: '14:30', title: 'Call block 3: {niche}s', quota: 66 },
     { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
     { id: 'aud', from: '14:45', to: '16:15', title: 'Audits and closing calls (write scopes between calls)' },
-    { id: 'cont', from: '16:15', to: '17:00', title: 'Post content (Instagram, X, LinkedIn) and send DMs' },
-    { id: 'close', from: '17:00', to: '18:00', title: "Scorecard, CRM, one referral ask, tomorrow's lists" },
+    { id: 'cont', from: '16:15', to: '17:00', title: 'Post content and send Instagram and Facebook DMs' },
+    { id: 'fix', from: '17:00', to: '17:30', title: 'Fix or ship one thing (CRM, offer, demo)' },
+    { id: 'close', from: '17:30', to: '18:00', title: "Scorecard, CRM, one referral ask, tomorrow's lists" },
   ];
   const trkMin = (t) => { const [a, b] = t.split(':').map(Number); return a * 60 + b; };
   const trk12 = (t) => { const [a, b] = t.split(':').map(Number); return ((a + 11) % 12 + 1) + ':' + String(b).padStart(2, '0') + (a >= 12 ? ' PM' : ' AM'); };
@@ -4799,7 +4888,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const on = day.blocks.includes(b.id), a = trkMin(b.from), z = trkMin(b.to), cur = now >= a && now < z;
         return h('button', { class: 'trk-row' + (on ? ' done' : '') + (cur ? ' now' : '') + (!on && now >= z ? ' late' : ''), onclick: () => toggle(b.id), 'aria-pressed': on },
           h('span', { class: 'trk-box' }, on ? '✓' : ''),
-          h('div', { class: 'trk-what' }, h('b', null, b.title), h('small', null, trk12(b.from) + ' to ' + trk12(b.to) + (b.tag ? ' · ' + b.tag : '') + (b.quota ? ' · ' + quotaOf(b) + ' dials' : ''))),
+          h('div', { class: 'trk-what' }, h('b', null, b.title.replace(/\{niche\}/g, r.focus || 'lead')), h('small', null, trk12(b.from) + ' to ' + trk12(b.to) + (b.tag ? ' · ' + b.tag : '') + (b.quota ? ' · ' + quotaOf(b) + ' dials' : ''))),
           cur ? h('span', { class: 'trk-now' }, 'Now') : null);
       }));
       const bars = h('div', { class: 'trk-hist' }, hist.map((d) => {
@@ -5095,8 +5184,10 @@ function api(method, path, body) {
         ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
       ['Tools', [
         ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['content', 'Content', 'Posts and demo videos', 'spark'],
-        ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos'],
-        ['cards', 'Review cards', 'NFC plates stock and sales', 'deals'], ['script', 'Call script', 'What to say', 'script']]],
+        ['lab', 'Demo Lab', 'One link, every offer live', 'spark']]],
+      ['Parked (not in this month\'s plan)', [
+        ['studio', 'Demo Studio', 'Older demo builder', 'spark'], ['demos', 'Demo queue', 'Older demo queue', 'demos'],
+        ['cards', 'Review cards', 'NFC plates stock and sales', 'deals'], ['script', 'Call script', 'What to say', 'script'], ['emailbot', 'Email bot', 'Cold email robot', 'mail']]],
       ['Team', [
         ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
         ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
