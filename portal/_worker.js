@@ -2679,6 +2679,27 @@ async function api(request, env, url) {
       ORDER BY CASE WHEN l.demo_url IS NULL OR l.demo_url = '' THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END, l.id DESC LIMIT 30`).bind(...args).all();
     return json(results);
   }
+  if (path === '/voice/tts' && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const text = str(body.text, 1800);
+    if (!text) bad('No script to read');
+    if (!env.AI) bad('The voice engine is not switched on yet');
+    const speaker = ['luna', 'asteria', 'athena', 'hera', 'stella'].includes(body.voice) ? body.voice : 'luna';
+    const b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+    try {
+      const r = await env.AI.run('@cf/deepgram/aura-1', { text, speaker, encoding: 'mp3' }, { returnRawResponse: true });
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 2000) throw new Error('empty audio');
+      return json({ audio: b64(buf), mime: 'audio/mpeg', engine: 'aura' });
+    } catch (e1) {
+      console.error('aura', e1);
+      try {
+        const r = await env.AI.run('@cf/myshell-ai/melotts', { prompt: text, lang: 'en' });
+        if (!r || !r.audio) throw new Error('no audio');
+        return json({ audio: r.audio, mime: 'audio/mpeg', engine: 'melo' });
+      } catch (e2) { console.error('melo', e2); bad('The AI voice could not be made right now. Try again in a minute.'); }
+    }
+  }
   if (path === '/studio/chat' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
     const message = str(body.message, 6000);

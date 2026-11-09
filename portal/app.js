@@ -3136,14 +3136,25 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const voiceBox = h('div', { class: 'cs-blk' });
     const drawVoice = () => {
       voiceBox.replaceChildren(...[
-        h('p', { class: 'dim small' }, '1. Voice. Record yourself, upload a file (like an ElevenLabs download), or skip it.'),
+        h('p', { class: 'dim small' }, '1. Voice. Use the built-in AI voice, record yourself, upload a file (like an ElevenLabs download), or skip it.'),
         VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice ready: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }),
           h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remove voice')) : null,
-        h('div', { class: 'row wrap' }, recBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
+        h('div', { class: 'row wrap' }, recBtn(), aiVoiceBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
           const f = e.target.files[0]; if (!f) return;
           try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f) }; toast('Voice added'); parent(); } catch { toast('Could not read that audio file', true); }
         } })))].filter(Boolean));
     };
+    let aiBusy = false;
+    const aiVoiceBtn = () => h('button', { class: 'btn primary', onclick: async (e) => {
+      if (aiBusy) return; aiBusy = true; const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the voice…';
+      try {
+        const text = plan.scenes.map((x) => spoken(x.vo)).join(' ');
+        const r = await api('POST', '/voice/tts', { text, voice: 'luna' });
+        const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const blob = new Blob([u], { type: r.mime || 'audio/mpeg' }), buf = await decodeVoice(blob);
+        vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: 'AI voice (female)', url: URL.createObjectURL(blob) }; toast('AI voice ready'); parent();
+      } catch (err) { fail(err); } finally { aiBusy = false; b.disabled = false; b.textContent = 'Use AI voice (female)'; }
+    } }, 'Use AI voice (female)');
     let rec = null, chunks = [], recStart = 0, timer = null;
     const recBtn = () => { const b = h('button', { class: 'btn primary', onclick: async () => {
       if (rec) { rec.stop(); return; }
