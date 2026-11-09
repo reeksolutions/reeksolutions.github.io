@@ -148,7 +148,7 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['crew', 'Team'], ['more', 'More']];
+    if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['crew', 'Team'], ['more', 'System']];
     if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
@@ -279,11 +279,11 @@
   function shell(active, content, crumbOver) {
     const tabs = tabsFor(S.me.role);
     let tabActive = active;
-    if (S.me.role === 'admin') tabActive = CAT_OF[active] || (active === 'home' ? 'home' : 'more');
+    if (S.me.role === 'admin') tabActive = CAT_OF[active] || (SLOT_CATS.includes(active) ? active : 'more');
     else if (active === 'rep') tabActive = 'more';
     const catKey = S.me.role === 'admin' ? CAT_OF[active] : null;
     const isAdmin = S.me.role === 'admin';
-    document.documentElement.classList.toggle('nonav', isAdmin);
+    document.documentElement.classList.remove('nonav');
     const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label)
       : catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0])
       : isAdmin && !['home', 'sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home')
@@ -308,7 +308,7 @@
     const oldMain = slide ? document.getElementById('view') : null;
     const main = h('main', { id: 'view', class: slide && oldMain ? 'slot-in in-' + slide : 'enter' }, crumb, content);
     if (oldMain) slotGhost(oldMain, slide);
-    $app.replaceChildren(...[side, h('div', { class: 'frame' }, top, main), isAdmin ? null : nav].filter(Boolean));
+    $app.replaceChildren(...[side, h('div', { class: 'frame' }, top, main), nav].filter(Boolean));
     ensureOrb();
     if (S.me.role !== 'dev') refreshCallbackBadge();
     window.scrollTo(0, 0);
