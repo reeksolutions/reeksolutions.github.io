@@ -373,7 +373,7 @@
     return S.options;
   }
 
-  const STAGES = [['new', 'New'], ['called', 'Contacted'], ['callback', 'Callback'], ['booked', 'Audit booked'], ['call2', 'Call 2'], ['won', 'Won'], ['lost', 'Lost']];
+  const STAGES = [['new', 'Not reached out'], ['called', 'Reached out'], ['callback', 'Callback'], ['booked', 'Audit booked'], ['call2', 'Call 2'], ['won', 'Won'], ['lost', 'Lost']];
   const STAGE_OF = (st) => (['new', 'demo_needed', 'demo_ready'].includes(st) ? 'new' : st);
   const STAGE_NAME = Object.fromEntries(STAGES);
   const HEAT_DOT = (k) => h('i', { class: 'hdot ' + (k || 'cold'), title: (HEAT_LABEL[k || 'cold'] || '').replace(/^\S+\s/, '') });
@@ -382,7 +382,7 @@
     const isAdmin = S.me.role === 'admin';
     const opts = await getOptions(true);
     const F = S.leadFilters;
-    const mode = lsGet('rs_leads_mode2', 'list');
+    const mode = lsGet('rs_leads_mode3', 'board');
     const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
     const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
     const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
@@ -398,8 +398,8 @@
     const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '' }, f); viewLeads(); } }, l)));
     const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
     const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
-    const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['list', 'List'], ['board', 'Board'], ['table', 'Table']].map(([k, l]) =>
-      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode2', k); viewLeads(); } }, l)));
+    const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['board', 'Board'], ['list', 'List'], ['table', 'Table']].map(([k, l]) =>
+      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode3', k); viewLeads(); } }, l)));
 
     async function filterSheet() {
       const sel = (id, label, key, first, items) => {
@@ -426,30 +426,22 @@
       let r; try { r = await api('GET', '/leads/board?' + qsFrom({ per: 50 })); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
       const total = r.stages.reduce((a, s) => a + s.count, 0);
       countEl.textContent = total.toLocaleString() + (total === 1 ? ' lead' : ' leads');
-      if (window.matchMedia('(max-width:700px)').matches) {
-        let cur = lsGet('rs_leads_stage', ''); if (!r.stages.some((x) => x.key === cur)) cur = (r.stages.find((x) => x.count) || r.stages[0]).key;
-        const list = h('div', { class: 'mlist' });
-        const chips = h('div', { class: 'stagetabs' });
-        const draw = () => {
-          const st = r.stages.find((x) => x.key === cur);
-          chips.replaceChildren(...r.stages.map((x) => h('button', { class: 'stab' + (x.key === cur ? ' on' : ''), onclick: () => { cur = x.key; lsSet('rs_leads_stage', cur); draw(); } }, x.label, h('i', null, x.count.toLocaleString()))));
-          list.replaceChildren(...(st.leads.length ? st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); return c; }) : [h('div', { class: 'bempty' }, 'No leads in ' + st.label)]),
-            ...(st.count > st.leads.length ? [h('button', { class: 'btn block', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →')] : []));
-          const on = chips.querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ inline: 'center', block: 'nearest' });
-        };
-        draw(); body.replaceChildren(chips, list); return;
-      }
       const board = h('div', { class: 'kanban' }, r.stages.map((st) => {
         const col = h('div', { class: 'bcol', 'data-stage': st.key },
           h('div', { class: 'bhead' }, h('b', null, st.label), h('span', null, st.count.toLocaleString())),
           h('div', { class: 'bcards' }, st.leads.length ? st.leads.map(boardCard) : h('div', { class: 'bempty' }, 'Drop leads here')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('over'); });
         col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
         col.addEventListener('drop', (e) => { e.preventDefault(); col.classList.remove('over'); const id = +e.dataTransfer.getData('text/plain'); if (id) moveLead(id, st.key); });
         return col;
       }));
+      const mover = S.justMoved; S.justMoved = null;
       body.replaceChildren(board);
+      if (mover) {
+        const card = [...board.querySelectorAll('.bcard')].find((c) => c.getAttribute('href') === '#/lead/' + mover);
+        if (card) { card.classList.add('just-moved'); const col = card.closest('.bcol'); setTimeout(() => { if (col && col.scrollIntoView) col.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); if (card.scrollIntoView) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 60); }
+      }
     }
     // ---- list: every stage stacked in sequence ----
     async function loadList() {
@@ -467,7 +459,7 @@
           h('b', null, LBL[st.key] || st.label), h('span', { class: 'lcount' }, st.count.toLocaleString()), h('i', { class: 'chev' }, '▾'));
         const cards = st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); if (mover && mover === l.id) c.classList.add('just-moved'); return c; });
         sec.append(head, h('div', { class: 'lstage-b' }, cards.length ? cards : h('div', { class: 'bempty' }, 'Nobody here yet')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
         return sec;
       });
       body.replaceChildren(h('div', { class: 'lstages' }, secs));
@@ -741,7 +733,7 @@
       try {
         await flushLive();
         const r = await api('POST', '/leads/' + id + '/calls', Object.assign({ outcome }, seller ? { call_notes: live.value } : {}, extra));
-        stopBar();
+        stopBar(); S.justMoved = id;
         toast(OUTCOME_LABEL[outcome] + ' logged → ' + STATUS[r.status]);
         if (outcome === 'dnc' && S.me.role === 'rep') { if (D) closeDrawer(); else location.hash = '#/leads'; return; }
         if (seller && ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'dnc'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
@@ -795,7 +787,7 @@
           if (!when) return;
           body.callback_at = when;
         }
-        await api('PATCH', '/leads/' + id, body);
+        await api('PATCH', '/leads/' + id, body); S.justMoved = id;
         toast('Moved to ' + STATUS[k]);
         reload();
       } catch (x) { fail(x); }

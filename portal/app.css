@@ -1437,3 +1437,6 @@ html.nonav{--nav:0px}
 .stage-div td{padding:14px 10px 6px;font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;border-bottom:2px solid rgba(127,127,127,.35)}
 .stage-div.s-booked td{border-color:#3ddc84}.stage-div.s-called td{border-color:#5aa9ff}.stage-div.s-callback td{border-color:#ff9f43}
 .just-moved-row{animation:jmr 1.6s ease}@keyframes jmr{0%{background:rgba(61,220,132,.35)}100%{background:transparent}}
+
+@media (max-width:700px){.kanban{grid-auto-columns:78%}}
+.bcol[data-stage] .bhead{position:sticky;top:0}
