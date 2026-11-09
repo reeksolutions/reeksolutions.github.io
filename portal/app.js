@@ -3201,7 +3201,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         go.disabled = true; go.textContent = 'Fixing…';
         try {
           const sv = (k) => (plan.scenes.find((x) => x.key === k) || {}), cur = { hook: sv('hook').vo, symptom: sv('symptom').vo, diagnosis: sv('diagnosis').vo, cost: sv('cost').vo, fix: sv('fix').text, recovery: plan.recovery || '', cta: sv('cta').vo, flow: Object.assign({}, mixFlow(tid, solOf(tid)), (P && P.flow) || {}) };
-          const r = await api('POST', '/video/edit', { instruction, current: cur, business: CS.business || 'med spas' });
+          const r = await api('POST', '/video/edit', { instruction, current: cur, business: CS.business });
           const np = Object.assign({}, P || {}), changed = [];
           ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta'].forEach((k) => { if (r.patch[k] && r.patch[k] !== cur[k]) { np[k] = r.patch[k]; changed.push(k); } });
           if (r.patch.flow) { np.flow = Object.assign({}, (P && P.flow) || {}, r.patch.flow); changed.push('board'); }
@@ -3315,9 +3315,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       CS.chat.push({ role: 'user', text: text.trim() }); CS.busy = true; draw();
       try {
         const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
-        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business || 'med spas' });
+        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business });
         CS.chat.push({ role: 'bot', text: x.reply });
-        if (x.result) applyIdea(x.result);
+        if (x.result) { if (x.result.business) { CS.business = x.result.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } } applyIdea(x.result); }
       } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
     };
     const ideaPreview = () => {
@@ -3391,6 +3391,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       : h('div', { class: 'card empty' }, h('b', null, 'Nothing logged yet'), 'Tap Start posting, make a post, and mark it as posted. It shows up here and on your calendar.');
   }
 
+  function botRulesCard() {
+    const ta = h('textarea', { class: 'ct-text', rows: 6, placeholder: 'Example: Always write for junk removal owners. Never use the word "leverage". Keep hooks under 10 words.' });
+    api('GET', '/content/bot-rules').then((x) => { ta.value = x.rules || ''; }).catch(() => {});
+    const save = h('button', { class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('PUT', '/content/bot-rules', { rules: ta.value }); toast('Saved. The bot follows these now.'); } catch (e) { fail(e); } finally { save.disabled = false; } } }, 'Save');
+    return h('details', { class: 'card ct-det', style: 'margin-top:16px' }, h('summary', null, h('b', null, 'Bot instructions'), h('small', { class: 'dim' }, 'your own rules for the idea bot')),
+      h('p', { class: 'dim small' }, 'The bot already has a rulebook. Anything you type here wins over it. Write it like you would tell a person.'), ta, save);
+  }
   function contentAnalytics(r) {
     const A = r.analytics, mx = Math.max(1, ...A.daily.map((d) => d.n)), pmx = Math.max(1, ...A.by_platform.map((p) => p.n)), nm = (k) => PN[k] || k;
     const bar = (n, m) => h('i', { class: 'an-bar' }, h('b', { style: 'width:' + Math.round((n / m) * 100) + '%' }));
@@ -3438,7 +3445,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('div', { class: 'stagechips plat-row' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' + (done.has(k) ? ' on' : '') }, l + (done.has(k) ? ' ✓' : '')))),
         h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
         h('p', { class: 'dim small', style: 'text-align:center' }, 'Today is day ' + dayN + '. Every post you mark as posted goes on your calendar.')),
-      contentAnalytics(r),
+      contentAnalytics(r), botRulesCard(),
       r.today_posts.length ? h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Posted today'), r.today_posts.slice(0, 4).map((p) => h('div', { class: 'log-row' }, h('div', { style: 'flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, timeOf(p.created_at))))) ) : null,
     ]);
   }
