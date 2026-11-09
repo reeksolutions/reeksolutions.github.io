@@ -116,6 +116,14 @@
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
   const genPassword = () => { const c = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const a = crypto.getRandomValues(new Uint32Array(12)); return Array.from(a, (x) => c[x % c.length]).join(''); };
 
+  /* next lead = the next one in the list you opened it from (falls back to the dial queue) */
+  async function nextLeadId(id) {
+    const q = S.queue && S.queue.ids;
+    if (q && q.includes(id)) { const nx = q[q.indexOf(id) + 1]; return nx ? { id: nx, fromList: true } : { id: null, fromList: true }; }
+    const r = await api('GET', '/leads/next?after=' + id).catch(() => null);
+    return { id: r && r.id, fromList: false };
+  }
+
   /* ================= bottom sheet ================= */
   function sheet(build) {
     return new Promise((resolve) => {
@@ -387,6 +395,12 @@
     const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '', site: '', lowrev: '' };
     const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
     const body = h('div', { class: 'leads-body' });
+    body.addEventListener('click', (e) => {
+      const card = e.target.closest('.bcard'), tr = e.target.closest('tr[data-lead]');
+      const idOf = (el) => +String(el.getAttribute('href') || '').split('/').pop();
+      if (card && card.parentElement) S.queue = { ids: [...card.parentElement.querySelectorAll('.bcard')].map(idOf).filter(Boolean) };
+      else if (tr) S.queue = { ids: [...tr.parentElement.querySelectorAll('tr[data-lead]')].map((r) => +r.dataset.lead) };
+    }, true);
     const countEl = h('span', { class: 'count-line' });
 
     // ---- toolbar ----
@@ -521,7 +535,7 @@
           isAdmin ? th('rep', 'Rep', 'hide-sm') : null, th('last_call', 'Last call', 'hide-md'), th('next', 'Next step', 'hide-md'))),
         h('tbody', null, rows.map((l, ri) => {
           const stg = STAGE_OF(l.status), newGroup = sort.key === 'stage' && (ri === 0 || STAGE_OF(rows[ri - 1].status) !== stg);
-          const tr = h('tr', { class: S.justMoved === l.id ? 'just-moved-row' : null, onclick: (e) => { if (!e.target.closest('select,input,a,button')) openLeadDrawer(l.id); } },
+          const tr = h('tr', { 'data-lead': l.id, class: S.justMoved === l.id ? 'just-moved-row' : null, onclick: (e) => { if (!e.target.closest('select,input,a,button')) openLeadDrawer(l.id); } },
             isAdmin ? h('td', { class: 'ck' }, h('input', { type: 'checkbox', 'data-id': l.id, 'aria-label': 'Select ' + l.business, checked: S.selected.has(l.id), onchange: (e) => { e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } })) : null,
             h('td', { class: 'biz' }, h('div', { class: 'bn' }, HEAT_DOT(l.heat), h('a', { href: '#/lead/' + l.id }, l.business)), h('small', null, [l.owner, l.category].filter(Boolean).join(' · '))),
             h('td', { class: 'hide-sm mono' }, l.phone ? h('a', { href: telHref(l.phone) }, l.phone) : l.email ? h('small', null, l.email) : '—'),
@@ -668,7 +682,7 @@
       startBar();
     }
     const goNext = async () => {
-      try { const r = await api('GET', '/leads/next?after=' + id); if (r.id) openLead(r.id); else toast('No more dialable leads right now', true); } catch (x) { fail(x); }
+      try { const r = await nextLeadId(id); if (r.id) openLead(r.id); else toast(r.fromList ? 'End of this list' : 'No more dialable leads right now', true); } catch (x) { fail(x); }
     };
     const smsBody = `Hi ${L.owner ? L.owner.split(' ')[0] : 'there'}, it's ${S.me.name.split(' ')[0]} with Reekon Systems. Here's the free website we built for ${L.business}: ${L.demo_url || ''}`;
     const actions = h('div', { class: 'actions' },
@@ -741,7 +755,7 @@
         toast(OUTCOME_LABEL[outcome] + ' logged → ' + STATUS[r.status]);
         if (outcome === 'dnc' && S.me.role === 'rep') { if (D) closeDrawer(); else location.hash = '#/leads'; return; }
         if (seller && ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'dnc'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
-          const nx = await api('GET', '/leads/next?after=' + id).catch(() => null);
+          const nx = await nextLeadId(id);
           if (nx && nx.id) { if (D) D.dirty = true; openLead(nx.id); return; }
         }
         reload();
@@ -984,7 +998,7 @@
         btns: [sBtn('Re-open as Reached out', () => moveStage('called')), textBtn('Text: check back', 'Hi ' + firstName + ', ' + me1 + ' from Reekon. Checking back in. Still want those missed calls handled?')] };
       return null;
     })();
-    const stagePanel = STAGE_UI && seller ? h('div', { class: 'stage-card ' + STAGE_UI.cls }, STAGE_UI.head, h('div', { class: 'stage-btns' }, STAGE_UI.btns.filter(Boolean))) : null;
+    const stagePanel = STAGE_UI && seller ? h('div', { class: 'stage-card ' + STAGE_UI.cls }, STAGE_UI.head, h('div', { class: 'stage-btns' }, STAGE_UI.btns.filter(Boolean).concat([sBtn('Next lead →', goNext)]))) : null;
     const lateStage = !!STAGE_UI;   // past first contact: hide the cold-call scaffolding
 
     const page = [
