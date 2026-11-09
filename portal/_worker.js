@@ -2440,7 +2440,7 @@ async function api(request, env, url) {
     need(user, 'admin');
     const cfg = await autoConfig(env), st = await autoState(env);
     const added7 = await env.DB.prepare("SELECT COUNT(*) AS n FROM leads l JOIN batches b ON b.id = l.batch_id WHERE b.name LIKE 'Auto lead bot%' AND l.created_at >= ?").bind(new Date(Date.now() - 7 * 864e5).toISOString()).first();
-    return json({ config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env), both: bothKeys(env),
+    return json({ focus: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT, config: cfg, runs: st.runs || [], done_tonight: st.night === ptParts().date ? st.done_tonight : 0, added_week: added7.n, ready: !!finderProvider(env), provider: finderProvider(env), both: bothKeys(env),
       stock: await readyStock(env), expanded: st.expanded || [], caps: await finderCaps(env), usage: await finderUsage(env) });
   }
   if (path === '/finder/auto' && method === 'PUT') {

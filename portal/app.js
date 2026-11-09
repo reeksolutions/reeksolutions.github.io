@@ -1002,7 +1002,10 @@
     const lateStage = !!STAGE_UI;   // past first contact: hide the cold-call scaffolding
 
     /* ---- simple step-by-step flow for sellers ---- */
-    const noteMsg = 'Hey, it\'s ' + me1 + '. I called earlier about a backyard project and nobody picked up. I\'m getting quotes this week and going with whoever responds first. I help contractors stop missing calls like mine. Want me to show you how?';
+    const isMedLead = /med(ical|i)?\s*spa|aesthetic|botox|laser|skin/i.test((L.category || '') + ' ' + L.business);
+    const noteMsg = isMedLead
+      ? 'Hey, it\'s ' + me1 + '. I called earlier to ask about booking a consultation and nobody picked up. I\'m booking this week and going with whoever responds first. I help med spas stop losing calls like mine. Want me to show you how?'
+      : 'Hey, it\'s ' + me1 + '. I called earlier about a backyard project and nobody picked up. I\'m getting quotes this week and going with whoever responds first. I help contractors stop missing calls like mine. Want me to show you how?';
     async function logMsg(kind) {
       await flushLive();
       try {
@@ -2054,27 +2057,34 @@
     const capIn = h('input', { id: 'auto-cap', type: 'number', min: 0, max: 50000, inputmode: 'numeric', value: d.caps.month, oninput: (e) => { cfg.month_cap = +e.target.value || 0; dirty(); } });
     const expandBox = h('input', { id: 'auto-expand', type: 'checkbox', checked: cfg.expand !== false, onchange: (e) => { cfg.expand = e.target.checked; dirty(); } });
     const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
+    const focusName = String(d.focus || 'backyard contractor').toLowerCase(), focusPl = focusName + 's';
     const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
     const stockBar = h('div', { class: 'stockbar' },
-      h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh backyard contractor leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
+      h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh ' + focusName + ' leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
       h('div', { class: 'stk-track' }, h('i', { style: 'width:' + pct + '%' + (pct >= 100 ? ';background:var(--ok)' : '') })),
       h('div', { class: 'sub' }, d.usage.month.toLocaleString() + ' of ' + d.caps.month.toLocaleString() + ' searches used this month' + (d.both ? ' (Google ' + d.usage.google + ', TomTom ' + d.usage.tomtom + ' · auto-switches to TomTom near Google\'s free limit)' : '') + ((d.expanded || []).length ? ' · expanded into ' + d.expanded.length + ' more cities (latest: ' + d.expanded[d.expanded.length - 1] + ')' : '')));
     const cleanBtn = h('button', { class: 'btn block', style: 'margin-top:10px', onclick: async () => {
       try {
         const p = await api('POST', '/leads/cleanup', {});
-        if (!p.count) return toast('Nothing to remove. Every other lead has been worked or is a backyard contractor.');
+        if (!p.count) return toast('Nothing to remove. Every other lead has been worked or is a ' + focusName + '.');
         const go = await sheet((box, close) => box.append(h('h2', null, 'Remove ' + p.count.toLocaleString() + ' old leads?'),
-          h('p', { class: 'sub' }, 'These are not backyard contractors and nobody has called, noted or booked them. Backyard contractor leads and anything you have worked stay' + (p.kept_touched ? ' (' + p.kept_touched + ' worked leads kept)' : '') + '. This cannot be undone.'),
+          h('p', { class: 'sub' }, 'These are not ' + focusPl + ' and nobody has called, noted or booked them. ' + focusPl.charAt(0).toUpperCase() + focusPl.slice(1) + ' and anything you have worked stay' + (p.kept_touched ? ' (' + p.kept_touched + ' worked leads kept)' : '') + '. This cannot be undone.'),
           h('div', { class: 'card', style: 'margin:10px 0' }, p.sample.map((x) => h('div', { class: 'sub' }, x.business + (x.city ? ' · ' + x.city : '')))),
           h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'Remove ' + p.count.toLocaleString()), h('button', { class: 'btn', onclick: () => close(false) }, 'Cancel'))));
         if (!go) return;
         const r = await api('POST', '/leads/cleanup', { confirm: true }); toast(r.removed.toLocaleString() + ' old leads removed'); again();
-      } catch (e) { fail(e); } } }, 'Remove old leads outside this niche');
+      } catch (e) { fail(e); } } }, 'Remove old leads outside ' + focusPl);
     const runs = (d.runs || []).slice(0, 8);
-    const isBack = cfg.niches.some((n) => /backyard|hardscape|paver|turf|landscap|patio/i.test(n)) && cfg.low_review_only && cfg.per_night >= 20;
-    const medBtn = isBack ? null : h('button', { class: 'btn primary block', style: 'margin-bottom:12px', disabled: !d.ready, onclick: async () => {
-      try { await api('PUT', '/finder/auto', { enabled: true, focus: 'backyard contractor', niches: ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'], cities: ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Whittier, CA', 'Irvine, CA', 'Anaheim, CA'], per_night: 20, max_reviews: 30, any_site: false, low_review_only: true, include_social: true });
-        toast('Backyard contractor mode on: owner-operators with 30 or fewer reviews, 20 searches a night across LA. Leads appear in the morning'); again(); } catch (e) { fail(e); } } }, 'Backyard contractor mode: low-review owners, LA, turn on');
+    const LA = ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Beverly Hills, CA', 'West Hollywood, CA', 'Irvine, CA'];
+    const PRESETS = [
+      { key: 'med spa', label: 'Med spa mode', focus: 'med spa', niches: ['med spa', 'medical spa', 'medspa', 'aesthetic clinic', 'botox injector', 'laser hair removal', 'body contouring', 'skin rejuvenation clinic'], max: 40 },
+      { key: 'backyard contractor', label: 'Backyard contractor mode', focus: 'backyard contractor', niches: ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'], max: 30 }];
+    const presetBtns = PRESETS.map((pr) => h('button', { class: 'btn block ' + (focusName === pr.key ? 'ok' : 'primary'), style: 'margin-bottom:10px', disabled: !d.ready, onclick: async () => {
+      try {
+        await api('PUT', '/finder/auto', { enabled: true, focus: pr.focus, niches: pr.niches, cities: LA, per_night: 20, max_reviews: pr.max, any_site: false, low_review_only: true, include_social: true });
+        toast(pr.label + ' on: owner-operators with ' + pr.max + ' or fewer reviews, 20 searches a night across LA. New leads appear in the morning.'); again();
+      } catch (e) { fail(e); } } }, (focusName === pr.key ? '✓ ' : '') + pr.label + (focusName === pr.key ? ' (on)' : ': low-review owners, LA')));
+    const medBtn = h('div', null, presetBtns);
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
       h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
         h('div', { class: 'row', style: 'gap:8px' }, toggle)),
@@ -2093,7 +2103,7 @@
           h('div', { class: 'field' }, h('label', { for: 'auto-target' }, 'Fresh leads to keep ready'), targetIn, h('span', { class: 'hint' }, 'It keeps searching each night until this many uncalled backyard contractor leads are waiting.')),
           h('div', { class: 'field' }, h('label', { for: 'auto-cap' }, 'Searches allowed per month'), capIn, h('span', { class: 'hint' }, d.provider === 'google' ? 'Google gives about 900 free a month. Searches past that cost roughly 3 to 4 cents each.' : 'TomTom gives about 1,100 free a month here. Past that your plan may charge.'))),
         h('label', { class: 'check' }, expandBox, ' Expand to new cities and states on its own when these run dry'),
-        h('label', { class: 'check' }, purgeBox, ' Each night, delete untouched leads that are not backyard contractors'),
+        h('label', { class: 'check' }, purgeBox, ' Each night, delete untouched leads that are not ' + focusPl),
         h('label', { class: 'check' }, lowRev, ' Only owner-operators with few reviews (keeps them whether or not they have a website)'),
         h('label', { class: 'check' }, anySite, ' Include any business with a phone number, any review count'),
         cfg.any_site ? h('p', { class: 'sub', style: 'margin:4px 0 8px' }, 'On: the bot adds any business with a phone number, ignores the review limit, and files them under New instead of Demo needed.') : h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
