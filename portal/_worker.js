@@ -2785,13 +2785,13 @@ async function api(request, env, url) {
       try {
         const long = fullText || text;
         const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '/with-timestamps?output_format=mp3_44100_128', {
-          method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'xi-api-key': String(env.ELEVENLABS_API_KEY).trim().replace(/^["']|["']$/g, ''), 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: long, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true, speed: Math.min(1.2, Math.max(0.7, +body.speed || 0.95)) } }),
         });
         if (!r.ok) {
           const raw = await r.text(); let msg = raw.slice(0, 160);
           try { const jj = JSON.parse(raw); const d = jj.detail; msg = (d && (d.message || d.status)) || (typeof d === 'string' ? d : msg); } catch { /* keep raw */ }
-          const hint = r.status === 401 ? ' (the API key was rejected or lacks Text to Speech permission)' : r.status === 404 ? ' (that voice ID was not found on this account)' : r.status === 402 || r.status === 403 ? ' (your plan or key cannot use this voice)' : r.status === 429 ? ' (out of credits or too many requests)' : '';
+          const hint = r.status === 401 ? ' (ElevenLabs rejected the API key. It is wrong, cut off, or does not have Text to Speech permission. Also check the key and voice ID are not swapped)' : r.status === 404 ? ' (that voice ID was not found on this account)' : r.status === 402 || r.status === 403 ? ' (your plan or key cannot use this voice)' : r.status === 429 ? ' (out of credits or too many requests)' : '';
           const err = new Error('ElevenLabs: ' + String(msg).slice(0, 140) + hint); err.eleven = true; throw err;
         }
         const j = await r.json();
