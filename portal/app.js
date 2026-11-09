@@ -3175,17 +3175,19 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const undo = P ? h('button', { class: 'btn small', onclick: () => { delete VM.patch[key]; vmClear(true); toast('Back to the original'); parent(); } }, 'Undo all fixes') : null;
       return h('div', { class: 'cs-blk' }, h('b', null, 'Edit video'), h('p', { class: 'dim small' }, 'Tell it what to fix. It rewrites the words and the board, then you make the video again. If you already have a voice, record or make it again after a fix.'), ta, h('div', { class: 'row wrap' }, go, undo), msg);
     };
-    let aiBusy = false;
+    let aiBusy = false; let elevenOn = VM.eleven;
+    if (elevenOn === undefined) api('GET', '/voice/status').then((r) => { VM.eleven = !!r.eleven; if (VM.eleven) drawVoice(); }).catch(() => {});
     const aiVoiceBtn = () => h('button', { class: 'btn primary', onclick: async (e) => {
       if (aiBusy) return; aiBusy = true; const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the voice…';
       try {
         const text = plan.scenes.map((x) => spoken(x.vo)).join(' ');
         const r = await api('POST', '/voice/tts', { text, voice: 'luna' });
+        const nm = r.engine === 'eleven' ? 'ElevenLabs voice' : 'AI voice (female)';
         const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
         const blob = new Blob([u], { type: r.mime || 'audio/mpeg' }), buf = await decodeVoice(blob);
-        vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: 'AI voice (female)', url: URL.createObjectURL(blob) }; toast('AI voice ready'); parent();
-      } catch (err) { fail(err); } finally { aiBusy = false; b.disabled = false; b.textContent = 'Use AI voice (female)'; }
-    } }, 'Use AI voice (female)');
+        vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: nm, url: URL.createObjectURL(blob) }; toast('Voice ready'); parent();
+      } catch (err) { fail(err); } finally { aiBusy = false; b.disabled = false; b.textContent = VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)'; }
+    } }, VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)');
     let rec = null, chunks = [], recStart = 0, timer = null;
     const recBtn = () => { const b = h('button', { class: 'btn primary', onclick: async () => {
       if (rec) { rec.stop(); return; }

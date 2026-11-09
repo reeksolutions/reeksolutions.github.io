@@ -2707,10 +2707,26 @@ async function api(request, env, url) {
     }
     return json({ patch });
   }
+  if (path === '/voice/status' && method === 'GET') {
+    need(user, 'admin', 'rep', 'dev');
+    return json({ eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID) });
+  }
   if (path === '/voice/tts' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
     const text = str(body.text, 1800);
     if (!text) bad('No script to read');
+    if (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && body.engine !== 'aura') {
+      try {
+        const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_128', {
+          method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+          body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.25, use_speaker_boost: true } }),
+        });
+        if (!r.ok) throw new Error('elevenlabs ' + r.status + ' ' + (await r.text()).slice(0, 120));
+        const buf = await r.arrayBuffer();
+        const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+        return json({ audio: btoa(s), mime: 'audio/mpeg', engine: 'eleven' });
+      } catch (e) { console.error('eleven', e); if (!env.AI) bad('ElevenLabs said no: ' + String((e && e.message) || e).slice(0, 100)); }
+    }
     if (!env.AI) bad('The voice engine is not switched on yet');
     const speaker = ['luna', 'asteria', 'athena', 'hera', 'stella'].includes(body.voice) ? body.voice : 'luna';
     const b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
