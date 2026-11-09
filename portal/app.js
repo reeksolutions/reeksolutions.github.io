@@ -3099,7 +3099,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   };
   let VW = 720, VH = 1280, VCAP = VFMT['9x16'];
   const setFmt = (id) => { VCAP = VFMT[id] || VFMT['9x16']; VW = VCAP.w; VH = VCAP.h; };
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null, fmt: '9x16', zones: false };
+  const VM = { face: null, voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null, fmt: '9x16', zones: false };
   /* ---- keep the work when the app is closed or reloads: small state in localStorage, voice and finished video in IndexedDB ---- */
   const CS_KEY = 'rs_cs_v1';
   const idb = (function () {
@@ -3291,6 +3291,22 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf; } finally { try { ac.close(); } catch { /* ignore */ } }
   }
   const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+  // your camera video: full screen for the hook, then it shrinks into a circle in a corner while the board plays
+  function drawFaceLayer(c, fv, face, tv) {
+    if (tv < -0.05 || !fv.videoWidth) return;
+    const W = VW, H = VH, intro = Math.min(4, Math.max(2, face.dur * 0.18)), tr = 0.7;
+    let k = tv <= intro ? 0 : tv >= intro + tr ? 1 : (tv - intro) / tr; k = k * k * (3 - 2 * k);
+    const D = Math.round(W * 0.3), m = Math.round(W * 0.05), tx = face.pos === 'bl' ? m : W - m - D, ty = Math.round(H * (face.pos === 'bl' ? 0.56 : 0.14));
+    const lerp = (a, b) => a + (b - a) * k, x = lerp(0, tx), y = lerp(0, ty), w = lerp(W, D), h = lerp(H, D), r = lerp(0, D / 2);
+    c.save();
+    if (k > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 24 * k; }
+    c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+    c.fillStyle = '#000'; c.fill(); c.shadowBlur = 0; c.clip();
+    const sw = fv.videoWidth, sh = fv.videoHeight, sc = Math.max(w / sw, h / sh), dw = sw * sc, dh = sh * sc;
+    c.drawImage(fv, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+    c.restore();
+    if (k > 0.02) { c.save(); c.globalAlpha = k; c.lineWidth = 5; c.strokeStyle = '#fff'; c.beginPath(); c.arc(tx + D / 2, ty + D / 2, D / 2, 0, Math.PI * 2); c.stroke(); c.restore(); }
+  }
   async function recordVideo(plan, voiceBuf, sfxOn, onProgress, hd) {
     try { await Promise.race([Promise.all([document.fonts.load('700 40px Kalam'), document.fonts.load('800 50px "Inter Tight"')]), new Promise((r) => setTimeout(r, 2500))]); } catch { /* fall back to system fonts */ }
     setFmt(VM.fmt); const SC = hd ? 1.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(VW * SC); canvas.height = Math.round(VH * SC); const ctx = canvas.getContext('2d');
@@ -3306,7 +3322,14 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: hd ? 9000000 : 4500000 } : undefined), chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((res) => { rec.onstop = res; });
-    const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); };
+    let fv = null; const face = VM.face;
+    if (face) {
+      fv = document.createElement('video'); fv.src = face.url; fv.muted = true; fv.playsInline = true; fv.setAttribute('playsinline', ''); fv.preload = 'auto';
+      fv.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.02;pointer-events:none'; document.body.append(fv);
+      await new Promise((res) => { fv.onloadeddata = res; fv.onerror = res; setTimeout(res, 4000); });
+    }
+    let faceOn = false;
+    const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); if (fv) { if (!faceOn && t >= plan.lead) { faceOn = true; try { fv.currentTime = 0; fv.play().catch(() => {}); } catch { /* ignore */ } } c.setTransform(SC, 0, 0, SC, 0, 0); drawFaceLayer(c, fv, face, t - plan.lead); } };
     let bg = 0, lastVis = performance.now(), errN = 0;
     const draw0 = VM.style === 'site' ? drawSite : drawFlow; draw(ctx, plan, 0, cache); rec.start(250);
     const start = performance.now() + 250;
@@ -3325,6 +3348,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     });
     if (bg > 2) { rec.stop(); await done; try { ac.close(); } catch { /* ignore */ } try { if (wl) wl.release(); } catch { /* ignore */ } throw new Error('The page went to the background while recording, so the video would freeze. Keep the screen on and stay on this page, then try again.'); }
     rec.stop(); await done; try { ac.close(); } catch { /* ignore */ } try { if (wl) wl.release(); } catch { /* ignore */ } canvas.width = 1; canvas.height = 1;
+    if (fv) { try { fv.pause(); fv.remove(); } catch { /* ignore */ } }
     const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
     return { blob: new Blob(chunks, { type }), type, ext: type.includes('mp4') ? 'mp4' : 'webm' };
   }
@@ -3442,6 +3466,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
   // karaoke captions that always fit the picture: shrink first, then split into two lines, placed where the apps do not cover them
   function drawCaps(ctx, plan, tt) {
+    if (VM.face && !VM.face.caps) return;
     const W = VW, H = VH, cap = plan.caps || (plan.caps = karaoke(plan)), cy = Math.round(H * VCAP.capY), maxW = VCAP.capW - 40;
     let ci = 0; for (let i = 0; i < cap.chunks.length; i++) if (tt >= cap.chunks[i].t0) ci = i;
     const ch = cap.chunks[ci];
@@ -3630,6 +3655,22 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const f = e.target.files[0]; if (!f) return;
       try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f), manual: true }; toast('Voice file added'); parent(); } catch { toast('Could not read that audio file', true); }
     } }));
+    const faceIn = h('input', { type: 'file', accept: 'video/*', hidden: true, onchange: async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        const buf = await decodeVoice(f), url = URL.createObjectURL(f);
+        const keep = VM.face; vmClear(true);
+        VM.voice = { blob: f, buf, dur: buf.duration, name: 'Audio from your video', url, manual: true };
+        VM.face = { blob: f, url, dur: buf.duration, pos: keep ? keep.pos : 'tr', caps: keep ? keep.caps : false };
+        toast('Video added. It will start full screen, then shrink to the corner.'); parent();
+      } catch (x) { toast('Could not read that video. Try recording it again on your phone.', true); }
+    } });
+    const faceBox = h('div', { class: 'cs-blk' }, h('b', null, 'Your camera video'),
+      h('p', { class: 'dim small' }, VM.face ? 'Added (' + VM.face.dur.toFixed(1) + ' sec). You start full screen for the first few seconds, then shrink to a circle in the corner while the board plays. Your own voice is used.' : 'Record yourself on your phone reading the script, then add it here. You start full screen, then shrink to the corner while the board plays.'),
+      h('div', { class: 'row wrap' }, h('label', { class: 'btn small primary' }, VM.face ? 'Replace my video' : 'Add my camera video', faceIn),
+        VM.face ? h('button', { class: 'btn small', onclick: () => { VM.face = null; vmClear(true); toast('Removed'); parent(); } }, 'Remove') : null),
+      VM.face ? [h('p', { class: 'dim small' }, 'Where to put you'), chips(VM.face.pos, [['tr', 'Top right'], ['bl', 'Lower left']], (v) => { VM.face.pos = v; parent(); }),
+        h('p', { class: 'dim small' }, 'Captions'), chips(VM.face.caps, [[false, 'Off (safe if you ad-lib)'], [true, 'Script captions (only if you read it word for word)']], (v) => { VM.face.caps = v; parent(); })] : null);
     const more = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'More options'), h('small', { class: 'dim' }, 'quality, voice speed, your own voice file')),
       h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips,
       VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }), h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remake the voice')) : null, upload);
@@ -3653,7 +3694,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-video.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, L.el, res, VM.result ? editBox() : null, more].filter(Boolean));
+    wrap.append(...[prev, faceBox, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, L.el, res, VM.result ? editBox() : null, more].filter(Boolean));
     return wrap;
   }
 
