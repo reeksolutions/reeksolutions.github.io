@@ -13,6 +13,9 @@ window.SITE = {
   // Paste a free form link (formspree.io) to get requests by email automatically.
   // Leave "" and the form opens the visitor's email app with everything filled in.
   formEndpoint: "",
+  // Your CRM address (no slash at the end). Turns on: sign-ups into your Leads tab,
+  // Discord alerts, and visit counting. Example: "https://your-portal.workers.dev"
+  portal: "",
   // Your audit video: upload a file next to this page (e.g. "audit.mp4") or leave as the demo.
   video: "missed-calls.mp4"
 };
@@ -161,6 +164,7 @@ footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);
     <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
     <input name="biz" placeholder="Business name" autocomplete="organization" required aria-label="Business name">
     <input name="phone" type="tel" placeholder="Best phone number" autocomplete="tel" required aria-label="Best phone number">
+    <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
     <textarea name="msg" rows="3" placeholder="What’s your biggest headache right now? (optional)" aria-label="Biggest headache"></textarea>
     <button class="btn" type="submit">Book my free audit</button>
     <p class="fine" id="fs" role="status" style="margin:0">We reply the same day.</p>
@@ -196,11 +200,17 @@ const S=window.SITE,$=id=>document.getElementById(id);
 $("yr").textContent=new Date().getFullYear();$("city").textContent=S.city;
 $("ig").href=S.instagram;$("ig").textContent=S.handle;$("em").href="mailto:"+S.email;$("em").textContent=S.email;
 if(S.video)$("v").src=S.video;else $("v").parentElement.style.display="none";
+let SRC="";try{SRC=(new URLSearchParams(location.search).get("src")||sessionStorage.getItem("src")||"").slice(0,40);if(SRC)sessionStorage.setItem("src",SRC)}catch(_){}
+const ping=k=>{if(!S.portal)return;try{fetch(S.portal+"/site/hit",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({k,src:SRC,ref:document.referrer||""}),keepalive:true}).catch(()=>{})}catch(_){}};
+ping("view");
+document.querySelectorAll('a[href="#audit"]').forEach(a=>a.addEventListener("click",()=>ping("cta")));
 $("f").addEventListener("submit",async e=>{e.preventDefault();
  const f=e.target,d=Object.fromEntries(new FormData(f)),st=$("fs");
  if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your name, business and phone.";st.style.color="var(--bad)";return}
  st.style.color="";
  const body=`Name: ${d.name}\nBusiness: ${d.biz}\nPhone: ${d.phone}\n\n${d.msg||""}`;
+ if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({...d,src:SRC})});const j=await r.json().catch(()=>({}));if(r.ok){f.reset();st.textContent="Got it. We’ll reach out today to set up your audit.";return}
+  if(j&&j.error&&r.status<500){st.textContent=j.error;st.style.color="var(--bad)";return}}catch(_){}}
  if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(d)});if(r.ok){f.reset();st.textContent="Got it. We’ll reach out today to set up your audit.";return}}catch(_){}
   st.textContent="Couldn’t send. Please email "+S.email;return}
  location.href="mailto:"+S.email+"?subject="+encodeURIComponent("Free AI audit request: "+d.biz)+"&body="+encodeURIComponent(body);

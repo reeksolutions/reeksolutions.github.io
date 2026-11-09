@@ -3352,6 +3352,17 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       : h('div', { class: 'card empty' }, h('b', null, 'Nothing logged yet'), 'Tap Start posting, make a post, and mark it as posted. It shows up here and on your calendar.');
   }
 
+  function siteAlertsCard() {
+    const stats = h('div', { class: 'ct-stats an-top' }), msg = h('p', { class: 'dim small' }, 'Checking...');
+    const test = h('button', { class: 'btn primary', onclick: async () => { test.disabled = true; try { await api('POST', '/notify/test'); toast('Sent. Check your Discord.'); } catch (e) { fail(e); } finally { test.disabled = false; } } }, 'Send a test alert');
+    api('GET', '/notify/status').then((x) => {
+      [[x.visitors, 'visitors, 7 days'], [x.taps, 'tapped the audit button'], [x.requests, 'audit requests']].forEach(([v, l]) => stats.append(h('div', null, h('b', null, String(v)), h('small', null, l))));
+      msg.textContent = x.discord ? 'Discord alerts are on. You get a message the moment someone asks for an audit, and a summary every morning.'
+        : x.set ? 'The Discord link looks wrong. In Cloudflare, re-paste the DISCORD_WEBHOOK secret (it starts with https://discord.com/api/webhooks/).'
+        : 'Discord alerts are off. In Discord make a webhook for a private channel, then add its link in Cloudflare as a secret named DISCORD_WEBHOOK.';
+    }).catch(() => { msg.textContent = 'Could not load the alert status.'; });
+    return h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Website and alerts'), stats, msg, test);
+  }
   function botRulesCard() {
     const ta = h('textarea', { class: 'ct-text', rows: 6, placeholder: 'Example: Always write for junk removal owners. Never use the word "leverage". Keep hooks under 10 words.' });
     api('GET', '/content/bot-rules').then((x) => { ta.value = x.rules || ''; }).catch(() => {});
@@ -3406,7 +3417,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('div', { class: 'stagechips plat-row' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' + (done.has(k) ? ' on' : '') }, l + (done.has(k) ? ' ✓' : '')))),
         h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
         h('p', { class: 'dim small', style: 'text-align:center' }, 'Today is day ' + dayN + '. Every post you mark as posted goes on your calendar.')),
-      contentAnalytics(r), botRulesCard(),
+      contentAnalytics(r), siteAlertsCard(), botRulesCard(),
       r.today_posts.length ? h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Posted today'), r.today_posts.slice(0, 4).map((p) => h('div', { class: 'log-row' }, h('div', { style: 'flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, timeOf(p.created_at))))) ) : null,
     ]);
   }

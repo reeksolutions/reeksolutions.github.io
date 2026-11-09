@@ -133,6 +133,8 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS ingest_key_time ON ingest_log(key_id, created_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS saved_views (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, filters TEXT NOT NULL, created_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_next ON leads(next_action_at)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS site_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, vid TEXT, src TEXT, ref TEXT, day TEXT NOT NULL, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS site_events_day ON site_events(day, kind)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS studio_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, lead_id INTEGER, theme TEXT, data TEXT NOT NULL DEFAULT '{}',
       messages TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
@@ -2686,6 +2688,19 @@ async function api(request, env, url) {
       ORDER BY CASE WHEN l.demo_url IS NULL OR l.demo_url = '' THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END, l.id DESC LIMIT 30`).bind(...args).all();
     return json(results);
   }
+  if (path === '/notify/status' && method === 'GET') {
+    need(user, 'admin');
+    const since = ptParts(new Date(Date.now() - 6 * 864e5)).date;
+    const rows = (await env.DB.prepare('SELECT kind, COUNT(*) AS n, COUNT(DISTINCT vid) AS u FROM site_events WHERE day >= ? GROUP BY kind').bind(since).all()).results;
+    const g = (k) => rows.find((r) => r.kind === k) || { n: 0, u: 0 };
+    return json({ discord: !!discordHook(env), set: !!String(env.DISCORD_WEBHOOK || '').trim(), visitors: g('view').u, views: g('view').n, taps: g('cta').u, requests: g('lead').n });
+  }
+  if (path === '/notify/test' && method === 'POST') {
+    need(user, 'admin');
+    const r = await discordNotify(env, '✅ **Reekon alerts are connected.** You will get a message here when someone asks for an audit, plus a summary every morning.');
+    if (!r.ok) bad(r.error);
+    return json({ ok: true });
+  }
   if (path === '/content/bot-rules') {
     need(user, 'admin');
     if (method === 'GET') return json({ rules: (await getSetting(env, 'bot_rules')) || '' });
@@ -4305,6 +4320,116 @@ ${book ? `<div class="sticky-call"><a class="btn main" href="${esc(book)}"${d.bo
 
 
 /* ---------------- entry ---------------- */
+/* =====================================================================
+   Landing page: public sign-up form + visit counter + Discord alerts.
+   The page lives on GitHub Pages, so these routes allow that origin.
+   Needs (optional): secret DISCORD_WEBHOOK  (Discord > channel > Integrations > Webhooks)
+   ===================================================================== */
+const SITE_ORIGIN_OK = /^https:\/\/reeksolutions\.github\.io$/;
+function siteCors(request, env) {
+  const o = request.headers.get('Origin') || '';
+  const extra = String(env.SITE_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const ok = SITE_ORIGIN_OK.test(o) || extra.includes(o);
+  return { ok: !o || ok, headers: { 'Access-Control-Allow-Origin': ok ? o : 'null', Vary: 'Origin', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' } };
+}
+function discordHook(env) {
+  const h = String(env.DISCORD_WEBHOOK || '').trim().replace(/^["']|["']$/g, '');
+  return /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+(?:\?[\w=&-]*)?$/.test(h) ? h : '';
+}
+async function discordNotify(env, content) {
+  const raw = String(env.DISCORD_WEBHOOK || '').trim();
+  const hook = discordHook(env);
+  if (!hook) return { ok: false, error: raw ? 'The Discord link looks wrong. It should start with https://discord.com/api/webhooks/' : 'No Discord link added yet' };
+  try {
+    const r = await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'Reekon Alerts', content: String(content).slice(0, 1900), allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return { ok: false, error: r.status === 404 ? 'Discord says that webhook was deleted. Make a new one.' : 'Discord rejected the message (' + r.status + ')' };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: 'Could not reach Discord' }; }
+}
+const oneLine = (v, n) => str(v, n).replace(/[\r\n\t]+/g, ' ').replace(/[`*_~|>]/g, '');
+const BOT_UA = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|curl|wget|python|node-fetch|monitor|lighthouse/i;
+
+async function visitorId(request, env, day) {
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const ua = request.headers.get('User-Agent') || '';
+  return (await sha256Hex(ip + '|' + ua + '|' + day + '|' + (env.SETUP_CODE || 'x'))).slice(0, 16);
+}
+
+async function handleSite(request, env, url) {
+  const cors = siteCors(request, env);
+  const out = (data, status = 200) => json(data, status, cors.headers);
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors.headers });
+  if (request.method !== 'POST') return out({ error: 'POST only' }, 405);
+  if (!cors.ok) return out({ error: 'Not allowed' }, 403);
+  const ua = request.headers.get('User-Agent') || '';
+  let body;
+  try { body = JSON.parse((await request.text()).slice(0, 6000)); } catch { return out({ error: 'Bad request' }, 400); }
+  if (!body || typeof body !== 'object') return out({ error: 'Bad request' }, 400);
+  const day = ptParts().date, t = now();
+  const src = oneLine(body.src, 40).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+  if (url.pathname === '/site/hit') {
+    if (BOT_UA.test(ua)) return out({ ok: true });
+    const k = body.k === 'cta' ? 'cta' : 'view';
+    const vid = await visitorId(request, env, day);
+    const seen = await env.DB.prepare('SELECT COUNT(*) AS n FROM site_events WHERE day = ? AND vid = ? AND kind = ?').bind(day, vid, k).first();
+    if (seen.n >= (k === 'view' ? 6 : 3)) return out({ ok: true });
+    let ref = '';
+    try { ref = new URL(str(body.ref, 300)).hostname.replace(/^www\./, '').slice(0, 60); } catch { /* none */ }
+    if (ref === 'reeksolutions.github.io') ref = '';
+    await env.DB.prepare('INSERT INTO site_events (kind, vid, src, ref, day, created_at) VALUES (?,?,?,?,?,?)').bind(k, vid, src, ref, day, t).run();
+    return out({ ok: true });
+  }
+
+  if (url.pathname === '/site/inquiry') {
+    if (str(body.hp, 100)) return out({ ok: true });           // hidden field: only bots fill it
+    const name = oneLine(body.name, 80), biz = oneLine(body.biz, 100), phone = oneLine(body.phone, 30), msg = oneLine(body.msg, 600);
+    if (!name || !biz) return out({ error: 'Please fill in your name and business.' }, 400);
+    const pn = normPhone(phone);
+    if (pn.length < 10 || pn.length > 15) return out({ error: 'Please enter a phone number we can call.' }, 400);
+    const vid = await visitorId(request, env, day);
+    const mine = await env.DB.prepare("SELECT COUNT(*) AS n FROM site_events WHERE day = ? AND vid = ? AND kind = 'lead'").bind(day, vid).first();
+    const all = await env.DB.prepare("SELECT COUNT(*) AS n FROM site_events WHERE day = ? AND kind = 'lead'").bind(day).first();
+    if (mine.n >= 3 || all.n >= 60) return out({ error: 'We already have your request. We will call you today.' }, 429);
+    const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
+    const action = 'Asked for a free audit on your website. Call them back today.';
+    const have = await env.DB.prepare('SELECT id FROM leads WHERE phone_norm = ? LIMIT 1').bind(pn).first();
+    let leadId;
+    if (have) {
+      leadId = have.id;
+      await env.DB.prepare("UPDATE leads SET heat = 'hot', next_action = ?, next_action_at = ?, updated_at = ?, call_notes = CASE WHEN COALESCE(call_notes,'') = '' THEN ? ELSE call_notes END WHERE id = ?").bind(action, t, t, msg || null, leadId).run();
+    } else {
+      let batch = await env.DB.prepare("SELECT id FROM batches WHERE name = 'Website sign-ups' ORDER BY id DESC LIMIT 1").first();
+      if (!batch) { const b = await env.DB.prepare("INSERT INTO batches (name, created_by, created_at) VALUES ('Website sign-ups', ?, ?)").bind(admin ? admin.id : null, t).run(); batch = { id: b.meta.last_row_id }; }
+      const r = await env.DB.prepare(`INSERT INTO leads (batch_id, business, owner, phone, phone_norm, category, status, assigned_to, created_at, updated_at, heat, source, call_notes, next_action, next_action_at)
+        VALUES (?,?,?,?,?,?,'new',?,?,?,'hot',?,?,?,?)`).bind(batch.id, biz, name, phone, pn, 'Website request', admin ? admin.id : null, t, t, src ? 'landing:' + src : 'landing', msg || null, action, t).run();
+      leadId = r.meta.last_row_id;
+    }
+    await env.DB.prepare("INSERT INTO site_events (kind, vid, src, ref, day, created_at) VALUES ('lead',?,?,'',?,?)").bind(vid, src, day, t).run();
+    const sent = await discordNotify(env, `🔥 **New audit request from your website**\n**Name:** ${name}\n**Business:** ${biz}\n**Phone:** ${phone}${msg ? '\n**Message:** ' + msg : ''}${src ? '\n**Came from:** ' + src : ''}\n${have ? '(They were already in your CRM, now marked hot.)\n' : ''}Call them back today. It is in your Leads tab.`);
+    if (!sent.ok) console.error('discord', sent.error);
+    return out({ ok: true });
+  }
+  return out({ error: 'Not found' }, 404);
+}
+
+// Morning summary of yesterday's site activity, posted to Discord
+async function sendDigest(env) {
+  if (!discordHook(env)) return;
+  const day = ptParts(new Date(Date.now() - 864e5)).date;
+  if ((await getSetting(env, 'digest_last')) === day) return;
+  const rows = (await env.DB.prepare('SELECT kind, COUNT(*) AS n, COUNT(DISTINCT vid) AS u FROM site_events WHERE day = ? GROUP BY kind').bind(day).all()).results;
+  const g = (k) => rows.find((r) => r.kind === k) || { n: 0, u: 0 };
+  const top = (await env.DB.prepare("SELECT COALESCE(NULLIF(src,''), NULLIF(ref,''), 'direct') AS s, COUNT(DISTINCT vid) AS n FROM site_events WHERE day = ? AND kind = 'view' GROUP BY s ORDER BY n DESC LIMIT 4").bind(day).all()).results;
+  const hot = await env.DB.prepare("SELECT COUNT(*) AS n FROM leads WHERE COALESCE(heat,'cold') = 'hot' AND status IN ('new','called','callback')").first();
+  const v = g('view'), c = g('cta'), l = g('lead');
+  const lines = [`☀️ **Your site yesterday**`, v.u ? `**${v.u}** visitors (${v.n} views), **${c.u}** tapped the audit button, **${l.n}** asked for an audit.` : 'No visitors yet. Put your link in your Facebook bio and send it once someone replies to your DM.'];
+  if (top.length && v.u) lines.push('Where they came from: ' + top.map((x) => `${x.s} (${x.n})`).join(', '));
+  if (hot && hot.n) lines.push(`🔥 ${hot.n} hot lead${hot.n === 1 ? '' : 's'} waiting for a call in the CRM.`);
+  const r = await discordNotify(env, lines.join('\n'));
+  if (r.ok) await setSetting(env, 'digest_last', day);
+}
+
 const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Frame-Options': 'DENY',
@@ -4322,6 +4447,10 @@ function withHeaders(res) {
 export default {
   // Cloudflare runs this on the schedule in wrangler.jsonc (every 20 min, midnight to 6 AM LA time)
   async scheduled(event, env, ctx) {
+    if (event.cron === '5 15 * * *') {
+      try { await ensureSchema(env); await sendDigest(env); } catch (e) { console.error('digest', e); }
+      return;
+    }
     try {
       await ensureSchema(env);
       const cfg = await autoConfig(env);
@@ -4372,6 +4501,13 @@ export default {
         r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
         return r;
       } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
+    }
+    if (url.pathname.startsWith('/site/')) {
+      try {
+        if (!env.DB) throw new Error('no db');
+        await ensureSchema(env);
+        return await handleSite(request, env, url);
+      } catch (e) { console.error(e); return json({ error: 'Something went wrong. Please try again.' }, 500, siteCors(request, env).headers); }
     }
     if (url.pathname.startsWith('/voice/')) {
       try { await ensureSchema(env); return await handleVoice(request, env, url); }
