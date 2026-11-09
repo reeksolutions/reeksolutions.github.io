@@ -2817,43 +2817,62 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
   const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {} };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: true, speed: 0.88, sol: null, solFor: null };
   const patchKey = (tid, seed) => tid + ':' + seed;
   const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
   const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
+  const lc = (x) => (x ? x.charAt(0).toLowerCase() + x.slice(1) : x);
+  const dot = (x) => String(x || '').replace(/[.\s]+$/, '');
+  const solOf = (tid) => (VM.solFor === tid && VM.sol && GEN_TOPICS[VM.sol] ? VM.sol : tid);
+  const mixFlow = (tid, sol) => { const A = FLOW[tid], B = FLOW[sol]; return Object.assign({}, A, tid === sol ? {} : { fix: B.fix, fixAI: B.fixAI, steps: B.steps, check: B.check, before: B.before, after: B.after }); };
   function vidPlan(tid, seed, plain, voiceDur, style) {
-    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], fix = fixOf(t, plain);
+    const t = GEN_TOPICS[tid], sol = solOf(tid), S = GEN_TOPICS[sol], P = VM.patch[patchKey(tid, seed)] || {}, full = VM.len === 'full';
+    const F = Object.assign({}, mixFlow(tid, sol), P.flow || {});
+    const hook = P.hook || t.hooks[seed % t.hooks.length], fix = P.fix || fixOf(S, plain), rec = P.recovery || S.recovery;
+    const symptom = P.symptom || t.symptom, diag = P.diagnosis || t.diagnosis, cta = P.cta || (plain ? plainCta(VO_CTA) : VO_CTA);
     const m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0;
-    const scenes = [
-      { kind: 'text', label: 'THE BUSINESS SURGEON', text: hook, big: true, vo: hook },
-      { kind: 'text', label: 'SYMPTOM', text: t.symptom, vo: t.symptom },
-      { kind: 'text', label: 'DIAGNOSIS', text: t.diagnosis, vo: t.diagnosis },
-      week ? { kind: 'cost', label: 'WHAT IT COSTS', week, sub: 'Example numbers. Yours will differ.', vo: 'Say that adds up: ' + t.math + '.' }
-        : { kind: 'text', label: 'WHAT IT COSTS', text: t.save, vo: t.save },
-      { kind: 'text', label: 'THE FIX', text: fix, sub: t.recovery, vo: fix + ' ' + t.recovery },
-      { kind: 'cta', label: 'NEXT STEP', text: plain ? 'for a free audit' : 'for a free AI audit', vo: plain ? plainCta(VO_CTA) : VO_CTA },
-    ];
-    const P = VM.patch[patchKey(tid, seed)] || null;
-    if (P) {
-      if (P.hook) { scenes[0].text = P.hook; scenes[0].vo = P.hook; }
-      if (P.symptom) { scenes[1].text = P.symptom; scenes[1].vo = P.symptom; }
-      if (P.diagnosis) { scenes[2].text = P.diagnosis; scenes[2].vo = P.diagnosis; }
-      if (P.cost) { scenes[3] = { kind: 'text', label: 'WHAT IT COSTS', text: P.cost, vo: P.cost }; }
-      if (P.fix) { scenes[4].text = P.fix; scenes[4].vo = P.fix + ' ' + (P.recovery || t.recovery); }
-      if (P.recovery) { scenes[4].sub = P.recovery; scenes[4].vo = (P.fix || fix) + ' ' + P.recovery; }
-      if (P.cta) scenes[5].vo = P.cta;
+    const costScene = P.cost ? { key: 'cost', kind: 'text', label: 'WHAT IT COSTS', text: P.cost, vo: P.cost, focus: ['cost'] }
+      : week ? { key: 'cost', kind: 'cost', label: 'WHAT IT COSTS', week, sub: 'Example numbers. Yours will differ.', vo: 'Say that adds up: ' + t.math + '.', focus: ['cost'] }
+        : { key: 'cost', kind: 'text', label: 'WHAT IT COSTS', text: t.save, vo: t.save, focus: ['cost'] };
+    const ctaScene = { key: 'cta', kind: 'cta', label: 'NEXT STEP', text: plain ? 'for a free audit' : 'for a free AI audit', vo: cta, focus: ['cta'] };
+    const st = F.steps || [];
+    let scenes;
+    if (!full) {
+      scenes = [
+        { key: 'hook', kind: 'text', label: 'THE BUSINESS SURGEON', text: hook, big: true, vo: hook, focus: ['_overview'] },
+        { key: 'symptom', kind: 'text', label: 'SYMPTOM', text: symptom, vo: symptom, focus: ['trigger', 'p1', 'p2', 'p3'] },
+        { key: 'diagnosis', kind: 'text', label: 'DIAGNOSIS', text: diag, vo: diag, focus: ['why'] },
+        costScene,
+        { key: 'fix', kind: 'text', label: 'THE FIX', text: fix, sub: rec, vo: fix + ' ' + rec, focus: ['fix', 'row', 'check', 'result'] },
+        ctaScene,
+      ];
+    } else {
+      const pains = (F.pain || []).map(dot);
+      scenes = [
+        { key: 'hook', kind: 'text', label: 'THE BUSINESS SURGEON', text: hook, big: true, vo: hook, focus: ['_overview'] },
+        { key: 'story', kind: 'text', label: 'THE STORY', text: dot(F.trigger), vo: 'Picture this. ' + dot(F.trigger) + '. ' + pains.join('. ') + '.', focus: ['trigger', 'p1', 'p2', 'p3'] },
+        { key: 'symptom', kind: 'text', label: 'SYMPTOM', text: symptom, vo: symptom, focus: ['p3'] },
+        { key: 'diagnosis', kind: 'text', label: 'DIAGNOSIS', text: diag, vo: diag, focus: ['why'] },
+        costScene,
+        { key: 'fix', kind: 'text', label: 'THE FIX', text: fix, vo: fix + '.', focus: ['fix'] },
+        { key: 'how', kind: 'text', label: 'HOW IT WORKS', text: st.map(dot).join(' · '), vo: 'Here is how it works. First, ' + lc(dot(st[0])) + '. Then, ' + lc(dot(st[1])) + '. And finally, ' + lc(dot(st[2])) + '.', focus: ['s1', 's2', 's3'] },
+        { key: 'result', kind: 'text', label: 'THE RESULT', text: dot(F.after), sub: rec, vo: dot(F.check) + '. Before, ' + lc(dot(F.before)) + '. After, ' + lc(dot(F.after)) + '. ' + rec, focus: ['check', 'result'] },
+        ctaScene,
+      ];
     }
     const words = scenes.map((s) => Math.max(3, wordCount(s.vo)));
     let durs;
-    if (voiceDur) {
+    const parts = VM.voice && VM.voice.parts && VM.voice.parts.length === scenes.length ? VM.voice.parts : null;
+    if (voiceDur && parts) { durs = parts.slice(); durs[0] += 0.4; durs[durs.length - 1] += 0.9; }
+    else if (voiceDur) {
       const tot = words.reduce((a, b) => a + b, 0), body = Math.max(8, voiceDur);
       durs = words.map((w) => Math.max(2.2, (w / tot) * body));
       const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => (d * (body / sum)));
       durs[0] += 0.4; durs[durs.length - 1] += 0.9;
-    } else durs = words.map((w) => Math.min(5.8, Math.max(3, 1.3 + w * 0.27)));
+    } else durs = words.map((w) => Math.min(8.5, Math.max(3.2, 1.6 + w * 0.42)));
     let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; });
-    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain, P) : null };
+    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, recovery: rec, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain, P, sol) : null };
   }
   const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -2961,14 +2980,27 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     [110, 164.81, 220].forEach((f) => { const o = ac.createOscillator(), lp = ac.createBiquadFilter(), gn = ac.createGain(); o.type = 'sine'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 500;
       gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(0.045, t0 + 1.5); gn.gain.setValueAtTime(0.045, t0 + plan.total - 1.5); gn.gain.linearRampToValueAtTime(0.0001, t0 + plan.total); o.connect(lp); lp.connect(gn); gn.connect(out); o.start(t0); o.stop(t0 + plan.total + 0.1); });
   }
+  function joinVoice(bufs, gap) {
+    const sr = bufs[0].sampleRate, g = Math.round(gap * sr), lens = bufs.map((x) => x.length + g), total = lens.reduce((a, b) => a + b, 0);
+    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), out = ac.createBuffer(1, total, sr); try { ac.close(); } catch { /* ignore */ }
+    const d = out.getChannelData(0); let at = 0;
+    bufs.forEach((x, i) => { const c0 = x.getChannelData(0), c1 = x.numberOfChannels > 1 ? x.getChannelData(1) : null; for (let k = 0; k < x.length; k++) d[at + k] = c1 ? (c0[k] + c1[k]) / 2 : c0[k]; at += lens[i]; });
+    return { buf: out, parts: lens.map((l) => l / sr) };
+  }
+  function wavBlob(buf) {
+    const d = buf.getChannelData(0), n = d.length, sr = buf.sampleRate, ab = new ArrayBuffer(44 + n * 2), v = new DataView(ab), w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const x = Math.max(-1, Math.min(1, d[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+    return new Blob([ab], { type: 'audio/wav' });
+  }
   async function decodeVoice(blob) {
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
     try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf; } finally { try { ac.close(); } catch { /* ignore */ } }
   }
   const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
-  async function recordVideo(plan, voiceBuf, sfxOn, onProgress) {
+  async function recordVideo(plan, voiceBuf, sfxOn, onProgress, hd) {
     try { await Promise.race([Promise.all([document.fonts.load('700 40px Kalam'), document.fonts.load('800 50px "Inter Tight"')]), new Promise((r) => setTimeout(r, 2500))]); } catch { /* fall back to system fonts */ }
-    const canvas = document.createElement('canvas'); canvas.width = VW; canvas.height = VH; const ctx = canvas.getContext('2d');
+    const SC = hd ? 1.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(VW * SC); canvas.height = Math.round(VH * SC); const ctx = canvas.getContext('2d');
     if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
     const dest = ac.createMediaStreamDestination(), out = ac.createGain(); out.gain.value = 1; out.connect(dest);
@@ -2976,10 +3008,10 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     if (voiceBuf) { const src = ac.createBufferSource(); src.buffer = voiceBuf; const vg = ac.createGain(); vg.gain.value = 1.0; src.connect(vg); vg.connect(out); src.start(t0 + plan.lead); }
     if (sfxOn) { const sg = ac.createGain(); sg.gain.value = voiceBuf ? 0.45 : 0.8; sg.connect(out); sfxSchedule(ac, sg, plan, t0); }
     const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
-    const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3500000 } : undefined), chunks = [];
+    const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: hd ? 9000000 : 4500000 } : undefined), chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((res) => { rec.onstop = res; });
-    const cache = {}, draw = plan.style === 'flow' ? drawFlow : drawFrame; draw(ctx, plan, 0, cache); rec.start(250);
+    const cache = {}, draw0 = plan.style === 'flow' ? drawFlow : drawFrame, draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); }; draw(ctx, plan, 0, cache); rec.start(250);
     const start = performance.now() + 250;
     await new Promise((resolve) => {
       const tick = () => { const t = Math.max(0, (performance.now() - start) / 1000); draw(ctx, plan, t, cache); onProgress(clamp01(t / plan.total)); if (t >= plan.total + 0.2) resolve(); else requestAnimationFrame(tick); };
@@ -3014,8 +3046,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     seg(x + w - r, y + h, x + r, y + h); arc(x + r, y + h - r, Math.PI / 2); seg(x, y + h - r, x, y + r); arc(x + r, y + r, Math.PI);
     pts.push(pts[0].slice()); return pts;
   }
-  function flowGraph(tid, plain, patch) {
-    const t = GEN_TOPICS[tid], f = Object.assign({}, FLOW[tid], (patch && patch.flow) || {}), m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
+  function flowGraph(tid, plain, patch, sol) {
+    const t = GEN_TOPICS[tid], f = Object.assign({}, mixFlow(tid, sol || tid), (patch && patch.flow) || {}), m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
     const add = (id, o) => { N[id] = Object.assign({ id, x: cx }, o); N[id].paths = [roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id), 1.6), roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id) + 7, 2.4)]; };
     add('trigger', { text: f.trigger, kind: 'warn', y: 80, w: 580, h: 130 });
     add('p1', { text: f.pain[0], kind: 'bad', y: 360, w: 580, h: 130 });
@@ -3036,14 +3068,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
   function flowFocus(plan) {
     // for each scene, the board stops the camera visits (id list); step row is framed together
-    const per = [['_overview'], ['trigger', 'p1', 'p2', 'p3'], ['why'], ['cost'], ['fix', 's2', 'check', 'result'], ['cta']];
     const G = plan.graph, W = VW, H = VH, key = [];
     plan.scenes.forEach((sc, si) => {
-      const ids = per[si] || ['cta'], slice = sc.dur / ids.length;
+      const ids = sc.focus || ['cta'], slice = sc.dur / ids.length;
       ids.forEach((id, k) => {
         let cx, cy, s;
         if (id === '_overview') { s = (H * 0.5) / G.WH; cx = 450; cy = G.WH * 0.5 - (H * 0.14) / s; }
-        else if (id === 's2') { cx = 450; cy = G.N.s2.y + G.N.s2.h / 2; s = (W * 0.94) / 900; }
+        else if (id === 'row') { cx = 450; cy = G.N.s2.y + G.N.s2.h / 2; s = (W * 0.94) / 900; }
         else { const n = G.N[id]; cx = n.x; cy = n.y + n.h / 2; s = Math.min(1.3, (W * 0.86) / n.w); }
         key.push({ t: sc.start + k * slice, cx, cy, s, id, scene: si });
       });
@@ -3063,7 +3094,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const cur = key[ki], prev = key[Math.max(0, ki - 1)], p = ki === 0 ? 1 : easeIO((tt - cur.t) / 1.0);
     const s = Math.exp(lerp(Math.log(prev.s), Math.log(cur.s), p)), cx = lerp(prev.cx, cur.cx, p) + Math.sin(tt * 0.7) * 5, cy = lerp(prev.cy, cur.cy, p) + Math.cos(tt * 0.6) * 5;
     let si = plan.scenes.findIndex((x) => tt < x.end); if (si < 0) si = plan.scenes.length - 1;
-    const sc = plan.scenes[si], lt = tt - sc.start;
+    const sc = plan.scenes[si], lt = tt - sc.start, costI = plan.scenes.findIndex((x) => x.key === 'cost');
     // background: near-black with a faint blue glow and dot grid
     ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
     const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, 700); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
@@ -3082,7 +3113,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     // boxes
     const focusId = cur.id;
     Object.values(G.N).forEach((n) => {
-      const [stroke, fill] = FK[n.kind], on = n.id === focusId || (focusId === 's2' && /^s\d$/.test(n.id)), pulse = on ? 0.6 + 0.4 * Math.sin(tt * 4) : 0;
+      const [stroke, fill] = FK[n.kind], on = n.id === focusId || (focusId === 'row' && /^s\d$/.test(n.id)), pulse = on ? 0.6 + 0.4 * Math.sin(tt * 4) : 0;
       ctx.save(); if (on) { ctx.shadowColor = stroke; ctx.shadowBlur = 28 + 14 * pulse; }
       drawPath(ctx, n.paths[0]); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = lw * (on ? 1.5 : 1.1); ctx.stroke(); ctx.restore();
       ctx.globalAlpha = 0.55; drawPath(ctx, n.paths[1]); ctx.strokeStyle = stroke; ctx.lineWidth = lw * 0.7; ctx.stroke(); ctx.globalAlpha = 1;
@@ -3091,7 +3122,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       if (n.cta) {
         ctx.font = '700 64px ' + HAND; ctx.fillText('DM me', n.x, n.y + 78); ctx.fillStyle = '#5b8cff'; ctx.shadowColor = 'rgba(91,140,255,.8)'; ctx.shadowBlur = 24; ctx.font = '800 112px "Inter Tight", ' + VFONT; ctx.fillText('AUDIT', n.x, n.y + 188); ctx.shadowBlur = 0;
       } else if (n.big) {
-        const val = n.week ? Math.round(n.week * easeOut((si === 3 ? lt : (si > 3 ? 9 : 0)) / 1.8)) : 0;
+        const val = n.week ? Math.round(n.week * easeOut((si === costI ? lt : (si > costI ? 9 : 0)) / 1.8)) : 0;
         ctx.font = (n.week ? '800 84px ' : '700 38px ') + (n.week ? '"Inter Tight", ' + VFONT : HAND); ctx.fillStyle = '#ff9a9a';
         if (n.week) { ctx.fillText('$' + val.toLocaleString('en-US') + ' a week', n.x, n.y + 92); ctx.font = '600 28px ' + HAND; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText(n.sub, n.x, n.y + 170); }
         else { ctx.font = '700 40px ' + HAND; wrapLines(ctx, n.text, n.w - 50).forEach((l, i, arr) => ctx.fillText(l, n.x, n.y + n.h / 2 + (i - (arr.length - 1) / 2) * 50)); }
@@ -3150,7 +3181,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const voiceBox = h('div', { class: 'cs-blk' });
     const drawVoice = () => {
       voiceBox.replaceChildren(...[
-        h('p', { class: 'dim small' }, '1. Voice. Use the AI voice, upload a voice file (like an ElevenLabs download), or skip it.'),
+        h('p', { class: 'dim small' }, 'Voice. Use the AI voice, upload a voice file (like an ElevenLabs download), or skip it.'),
         VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice ready: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }),
           h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remove voice')) : null,
         h('div', { class: 'row wrap' }, aiVoiceBtn(), h('label', { class: 'btn' }, 'Upload voice file', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
@@ -3165,7 +3196,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const instruction = ta.value.trim(); if (!instruction) return toast('Type what to fix first', true);
         go.disabled = true; go.textContent = 'Fixing…';
         try {
-          const cur = { hook: plan.scenes[0].vo, symptom: plan.scenes[1].vo, diagnosis: plan.scenes[2].vo, cost: plan.scenes[3].vo, fix: plan.scenes[4].text, recovery: plan.scenes[4].sub || '', cta: plan.scenes[5].vo, flow: Object.assign({}, FLOW[tid], (P && P.flow) || {}) };
+          const sv = (k) => (plan.scenes.find((x) => x.key === k) || {}), cur = { hook: sv('hook').vo, symptom: sv('symptom').vo, diagnosis: sv('diagnosis').vo, cost: sv('cost').vo, fix: sv('fix').text, recovery: plan.recovery || '', cta: sv('cta').vo, flow: Object.assign({}, mixFlow(tid, solOf(tid)), (P && P.flow) || {}) };
           const r = await api('POST', '/video/edit', { instruction, current: cur });
           const np = Object.assign({}, P || {}), changed = [];
           ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta'].forEach((k) => { if (r.patch[k] && r.patch[k] !== cur[k]) { np[k] = r.patch[k]; changed.push(k); } });
@@ -3182,12 +3213,16 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const aiVoiceBtn = () => h('button', { class: 'btn primary', onclick: async (e) => {
       if (aiBusy) return; aiBusy = true; const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the voice…';
       try {
-        const text = plan.scenes.map((x) => spoken(x.vo)).join(' ');
-        const r = await api('POST', '/voice/tts', { text, voice: 'luna' });
-        const nm = r.engine === 'eleven' ? 'ElevenLabs voice' : 'AI voice (female)';
-        const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-        const blob = new Blob([u], { type: r.mime || 'audio/mpeg' }), buf = await decodeVoice(blob);
-        vmClear(true); VM.voice = { blob, buf, dur: buf.duration, name: nm, url: URL.createObjectURL(blob) }; toast('Voice ready'); parent();
+        const lines = plan.scenes.map((x) => spoken(x.vo)), bufs = []; let nm = 'AI voice (female)';
+        for (let i = 0; i < lines.length; i++) {
+          b.textContent = 'Making the voice… ' + (i + 1) + '/' + lines.length;
+          const r = await api('POST', '/voice/tts', { text: lines[i], voice: 'luna', speed: VM.speed, prev: lines[i - 1] || '', next: lines[i + 1] || '' });
+          if (r.engine === 'eleven') nm = 'ElevenLabs voice';
+          const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+          bufs.push(await decodeVoice(new Blob([u], { type: r.mime || 'audio/mpeg' })));
+        }
+        const j = joinVoice(bufs, 0.5), blob = wavBlob(j.buf);
+        vmClear(true); VM.voice = { blob, buf: j.buf, dur: j.buf.duration, parts: j.parts, name: nm, url: URL.createObjectURL(blob) }; toast('Voice ready'); parent();
       } catch (err) { fail(err); } finally { aiBusy = false; b.disabled = false; b.textContent = VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)'; }
     } }, VM.eleven ? 'Use my ElevenLabs voice' : 'Use AI voice (female)');
     let rec = null, chunks = [], recStart = 0, timer = null;
@@ -3207,13 +3242,21 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const teleprompter = h('div', { class: 'tele', hidden: true }, h('p', { class: 'dim small' }, 'Read this out loud:'), h('p', null, v.script));
     drawVoice();
     const sfxChips = h('div', { class: 'stagechips' }, [[true, 'Sound effects on'], [false, 'No sound effects']].map(([val, l]) => h('button', { class: 'schip' + (VM.sfx === val ? ' on' : ''), onclick: () => { VM.sfx = val; parent(); } }, l)));
+    const topicSel = (label, val, onchange) => h('label', { class: 'mixsel' }, h('small', { class: 'dim' }, label), h('select', { onchange: (e) => onchange(e.target.value) }, Object.keys(FLOW).map((k) => h('option', { value: k, selected: k === val }, GEN_TOPICS[k].name))));
+    const mixBox = h('div', { class: 'cs-blk' }, h('b', null, 'Mix your idea'), h('p', { class: 'dim small' }, 'Pick the pain point and the solution separately. Changing either one means remaking the voice.'),
+      topicSel('Pain point', tid, (v) => { CS.topic = v; VM.solFor = v; VM.sol = v; vmClear(true); parent(); }),
+      topicSel('Solution', solOf(tid), (v) => { VM.solFor = tid; VM.sol = v; vmClear(true); parent(); }));
+    const chips = (cur, opts, set) => h('div', { class: 'stagechips' }, opts.map(([val, l]) => h('button', { class: 'schip' + (cur === val ? ' on' : ''), onclick: () => set(val) }, l)));
+    const lenChips = chips(VM.len, [['short', 'Short · ~35s'], ['full', 'Full story · ~75s']], (v) => { VM.len = v; vmClear(true); parent(); });
+    const hdChips = chips(VM.hd, [[true, 'HD 1080p'], [false, 'Fast 720p']], (v) => { VM.hd = v; parent(); });
+    const spChips = chips(VM.speed, [[0.88, 'Natural'], [0.78, 'Slower'], [0.98, 'Quicker']], (v) => { VM.speed = v; parent(); });
     const styleChips = h('div', { class: 'stagechips' }, [['flow', 'Flow map'], ['pulse', 'Heartbeat']].map(([k, l]) => h('button', { class: 'schip' + (VM.style === k ? ' on' : ''), onclick: () => { VM.style = k; vmClear(false); parent(); } }, l)));
     const bar = h('div', { class: 'vm-bar', hidden: true }, h('i'));
     const status = h('p', { class: 'dim small' });
     const genBtn = h('button', { class: 'btn primary big', onclick: async () => {
       if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true; bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open for about ' + Math.round(plan.total) + ' seconds.';
       try {
-        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; });
+        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; }, VM.hd);
         if (!r.blob.size) throw new Error('The video came out empty. Try again.');
         VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, tid, secs: Math.round(plan.total) };
         toast('Video ready'); VM.busy = false; parent();
@@ -3227,7 +3270,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-' + tid + '.' + VM.result.ext }, 'Download'))) : null;
     wrap.append(...[h('p', { class: 'dim small' }, 'Preview. Flow map: a hand-drawn board the camera travels across, with captions that light up word by word.'), prev, voiceBox, teleprompter,
-      editBox(), h('p', { class: 'dim small' }, '2. Look'), styleChips, h('p', { class: 'dim small' }, '3. Sound'), sfxChips, h('p', { class: 'dim small' }, '4. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
+      mixBox, h('p', { class: 'dim small' }, 'Length'), lenChips, editBox(), h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed (for the AI voice)'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips, h('p', { class: 'dim small' }, 'Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
     return wrap;
   }
 

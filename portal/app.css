@@ -1394,3 +1394,5 @@ html.nonav{--nav:0px}
 .an-row b{text-align:right}
 .an-bar{display:block;height:8px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden}
 .an-bar b{display:block;height:100%;background:var(--accent);border-radius:6px}
+
+.mixsel{display:grid;gap:4px;margin:8px 0}.mixsel select{width:100%}

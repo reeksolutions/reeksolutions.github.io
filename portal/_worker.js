@@ -2726,7 +2726,7 @@ async function api(request, env, url) {
       try {
         const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_128', {
           method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-          body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.25, use_speaker_boost: true } }),
+          body: JSON.stringify(Object.assign({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true, speed: Math.min(1.2, Math.max(0.7, +body.speed || 0.88)) } }, body.prev ? { previous_text: str(body.prev, 400) } : {}, body.next ? { next_text: str(body.next, 400) } : {})),
         });
         if (!r.ok) throw new Error('elevenlabs ' + r.status + ' ' + (await r.text()).slice(0, 120));
         const buf = await r.arrayBuffer();
