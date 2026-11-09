@@ -2809,7 +2809,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     ['face', 'Film myself', 'A script you say to the camera', 'users'],
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
-  const CS = { step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const CS = { business: (function () { try { return localStorage.getItem('rs_biz') || ''; } catch { return ''; } })(), step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
   const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
@@ -3201,7 +3201,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         go.disabled = true; go.textContent = 'Fixing…';
         try {
           const sv = (k) => (plan.scenes.find((x) => x.key === k) || {}), cur = { hook: sv('hook').vo, symptom: sv('symptom').vo, diagnosis: sv('diagnosis').vo, cost: sv('cost').vo, fix: sv('fix').text, recovery: plan.recovery || '', cta: sv('cta').vo, flow: Object.assign({}, mixFlow(tid, solOf(tid)), (P && P.flow) || {}) };
-          const r = await api('POST', '/video/edit', { instruction, current: cur });
+          const r = await api('POST', '/video/edit', { instruction, current: cur, business: CS.business || 'med spas' });
           const np = Object.assign({}, P || {}), changed = [];
           ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta'].forEach((k) => { if (r.patch[k] && r.patch[k] !== cur[k]) { np[k] = r.patch[k]; changed.push(k); } });
           if (r.patch.flow) { np.flow = Object.assign({}, (P && P.flow) || {}, r.patch.flow); changed.push('board'); }
@@ -3264,12 +3264,12 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const n = r.today_posts.filter((p) => p.platform === k).length;
       return h('button', { class: 'schip' + (CS.plat === k ? ' on' : ''), onclick: () => { CS.plat = k; CS.posted = {}; draw(); } }, l + (n ? ' ✓' : ''));
     }));
-    const topicName = () => (GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : 'custom idea');
+    const topicName = () => (CS.idea && CS.idea.byPlat ? (GEN_TOPICS[CS.topic] || {}).name : CS.business) || 'custom idea';
     const captionFor = () => {
       const I = CS.idea; if (!I) return '';
       if (I.byPlat) return I.byPlat(CS.plat);
       if (CS.plat === 'x') return I.short || '';
-      return (I.post || I.caption || '') + '\n\n' + tagsFor(CS.plat, true);
+      return (I.post || I.caption || '') + '\n\n' + (I.tags || tagsFor(CS.plat, true));
     };
     const markRow = (getText) => {
       const id = CS.posted[CS.plat];
@@ -3315,7 +3315,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       CS.chat.push({ role: 'user', text: text.trim() }); CS.busy = true; draw();
       try {
         const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
-        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur });
+        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business || 'med spas' });
         CS.chat.push({ role: 'bot', text: x.reply });
         if (x.result) applyIdea(x.result);
       } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
@@ -3328,12 +3328,15 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('p', { class: 'dim small' }, 'Want it different? Keep talking to the bot below.'));
     };
     const chatStep = () => {
-      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? Give me a rough idea, something that happened today, or tap Surprise me.' });
+      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? Type the kind of business above first (junk removal, med spa, anything), then give me a rough idea or tap Surprise me.' });
+      const biz = h('input', { class: 'ct-text', type: 'text', placeholder: 'Type of business, like junk removal', value: CS.business, style: 'min-height:0;padding:10px 12px' });
+      biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } };
+      const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
       const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
       input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
-      const quick = ['Surprise me', 'A pain med spa owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t) }, t));
+      const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain these business owners hate the most' : t) }, t));
       return h('div', null,
-        ideaPreview(),
+        bizRow, ideaPreview(),
         h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? h('div', { class: 'bot-msg bot dim' }, 'Thinking…') : null),
         h('div', { class: 'stagechips' }, quick), input,
         h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', onclick: quickIdea }, 'Skip the chat')));
@@ -3369,7 +3372,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       } else if (CS.step === 'idea') {
         title = 'Let’s come up with the idea'; sub = 'Talk to the bot. It writes the whole thing for you.';
         body = chatStep();
-      } else { title = CS.fmt === 'face' ? 'Film myself' : FMT_LABEL[CS.fmt]; sub = CS.idea && GEN_TOPICS[CS.topic] ? GEN_TOPICS[CS.topic].name : ''; body = editStep(); }
+      } else { title = CS.fmt === 'face' ? 'Film myself' : FMT_LABEL[CS.fmt]; sub = CS.idea ? (CS.idea.byPlat ? (GEN_TOPICS[CS.topic] || {}).name : CS.business) || '' : ''; body = editStep(); }
       const nav = h('div', { class: 'row wrap cs-nav' }, idx > 0 ? h('button', { class: 'btn small', onclick: () => go(order[idx - 1]) }, 'Back') : null, h('button', { class: 'btn small', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Start over'));
       root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), sub ? h('p', { class: 'sub' }, sub) : null, body, nav);
     }
