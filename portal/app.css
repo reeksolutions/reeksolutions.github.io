@@ -1428,3 +1428,8 @@ html.nonav{--nav:0px}
 .lstage-b{display:flex;flex-direction:column;gap:8px;padding-top:10px}.lstage.shut .lstage-b,.lstage.shut .bmore{display:none}
 .lstage.s-booked .lstage-h{border-color:#3ddc84}.lstage.s-won .lstage-h{border-color:#ffd24d}.lstage.s-called .lstage-h{border-color:#5aa9ff}.lstage.s-callback .lstage-h{border-color:#ff9f43}
 .bcard.just-moved{animation:jm 1.6s ease}@keyframes jm{0%{box-shadow:0 0 0 3px #3ddc84;transform:scale(1.02)}100%{box-shadow:0 0 0 0 transparent;transform:none}}
+
+.stage-card{border:1px solid var(--line,rgba(255,255,255,.14));border-left:4px solid #5aa9ff;border-radius:14px;padding:14px;margin:12px 0;background:rgba(127,127,127,.06)}
+.stage-card.s-callback{border-left-color:#ff9f43}.stage-card.s-booked{border-left-color:#3ddc84}.stage-card.s-call2{border-left-color:#b48cff}.stage-card.s-won{border-left-color:#ffd24d}.stage-card.s-lost{border-left-color:#888}
+.stage-sub{margin:4px 0 0;font-size:17px;font-weight:600}
+.stage-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.stage-btns .btn{flex:1 1 44%;text-align:center}

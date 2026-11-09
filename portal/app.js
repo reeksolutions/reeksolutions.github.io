@@ -627,7 +627,7 @@
     const D = opts && opts.drawer;
     const openLead = (x) => { if (D) openLeadDrawer(x); else location.hash = '#/lead/' + x; };
     const isAdmin = S.me.role === 'admin';
-    const [{ lead: L, calls, notes, deals = [], demo = null, dials = [] }, script, dialer] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript(), S.me.role === 'dev' ? null : getDialer()]);
+    const [{ lead: L, calls, notes, deals = [], demo = null, dials = [], event = null }, script, dialer] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript(), S.me.role === 'dev' ? null : getDialer()]);
     const reload = () => { if (D) D.dirty = true; return viewLead(id, opts); };
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
@@ -947,23 +947,66 @@
       adminPanel = h('details', { class: 'admin' }, h('summary', null, 'Admin: edit, assign, close', h('span', { class: 'dim' }, '▾')), h('div', { class: 'card' }, form));
     }
 
+
+    /* ---- stage-aware next steps: the page changes with where the lead is ---- */
+    const firstName = L.owner ? L.owner.split(' ')[0] : 'there';
+    const me1 = S.me.name.split(' ')[0];
+    const smsTo = (body) => 'sms:' + String(L.phone || '').replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(body);
+    const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const lastCall = calls[0];
+    const sBtn = (label, fn, cls) => h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: fn }, label);
+    const sLink = (label, href, cls) => h('a', { class: 'btn ' + (cls || ''), href }, label);
+    const callNow = L.phone && seller ? (dialer && dialer.ready ? sBtn('Call ' + L.phone, () => startCall(L, () => reload()), 'ok') : sLink('Call ' + L.phone, telHref(L.phone), 'ok')) : null;
+    const textBtn = (label, body, cls) => L.phone && seller ? sLink(label, smsTo(body), cls) : null;
+    const STAGE_UI = (() => {
+      const st = L.status;
+      if (['new', 'demo_needed', 'demo_ready'].includes(st)) return null;   // fresh lead: the normal calling screen
+      const eyebrow = (t, sub) => [h('span', { class: 'eyebrow' }, t), sub ? h('p', { class: 'stage-sub' }, sub) : null];
+      if (st === 'called') return { cls: 's-called', head: eyebrow('Reached out', lastCall ? 'Last: ' + (OUTCOME_LABEL[lastCall.outcome] || lastCall.outcome) + ' · ' + ago(lastCall.created_at) : 'You have contacted them.'),
+        btns: [callNow, textBtn('Text: follow up', 'Hi ' + firstName + ', it\'s ' + me1 + ' with Reekon Systems. Tried you earlier. I built a quick demo for ' + L.business + (L.demo_url ? ': ' + L.demo_url : '') + ' Got a minute to look?'),
+          sBtn('Set callback', () => moveStage('callback')), sBtn('Audit booked', () => logCall('booked'), 'primary'), sBtn('Not interested', () => moveStage('lost'))] };
+      if (st === 'callback') return { cls: 's-callback', head: eyebrow('Callback', L.callback_at ? 'Call them ' + fmt(L.callback_at) : 'No time set yet'),
+        btns: [callNow, sBtn('Reschedule', () => logCall('callback')), sBtn('Audit booked', () => logCall('booked'), 'primary'), sBtn('Not interested', () => moveStage('lost'))] };
+      if (st === 'booked') {
+        const when = L.booked_at ? dayWord(L.booked_at) : null, link = event && event.link;
+        return { cls: 's-booked', head: eyebrow('Audit booked', when ? when + (link ? ' · Meet link ready' : ' · no Meet link yet') : 'No time set. Add one.'),
+          btns: [sBtn(link ? 'Edit in calendar' : 'Calendar + Meet', () => { CAL.preset = { title: 'Free AI audit: ' + L.business, start: L.booked_at || new Date(Date.now() + 864e5).toISOString(), lead_id: L.id, link: link || '', notes: 'Phone: ' + (L.phone || '') }; location.hash = '#/calendar'; }, 'primary'),
+            textBtn('Text: confirm', 'Hi ' + firstName + ', it\'s ' + me1 + ' with Reekon Systems. Confirming your free 30 min AI audit' + (when ? ' on ' + when : '') + '.' + (link ? ' Join here: ' + link : ' What email should I send the video link to?')),
+            textBtn('Text: reminder', 'Hi ' + firstName + ', quick reminder about our audit' + (when ? ' ' + when : '') + '.' + (link ? ' Link: ' + link : '') + ' See you then!'),
+            textBtn('Text: reschedule', 'Hey ' + firstName + ', missed you on our audit. Want to pick a new time this week?'),
+            callNow, sBtn('Audit done → Call 2', () => moveStage('call2'), 'ok'), sBtn('Lost', () => moveStage('lost'))] };
+      }
+      if (st === 'call2') return { cls: 's-call2', head: eyebrow('Call 2: closing', 'Show the demo, give the price, ask for the deal.'),
+        btns: [callNow, S.me.role === 'admin' ? sLink('Open Demo Lab', '#/lab/' + L.id, 'primary') : null,
+          textBtn('Text: follow up', 'Hi ' + firstName + ', great talking today. Want me to get ' + L.business + ' set up this week?'),
+          isAdmin ? sBtn('Won: close deal', () => moveStage('won'), 'ok') : null, sBtn('Lost', () => moveStage('lost'))] };
+      if (st === 'won') return { cls: 's-won', head: eyebrow('Won 💰', deals.length ? 'Deal closed · ' + money(deals[0].amount_cents) : 'Deal closed'),
+        btns: [textBtn('Text: welcome', 'Hi ' + firstName + ', welcome to Reekon! Excited to get ' + L.business + ' set up. I\'ll send next steps shortly.'), callNow] };
+      if (st === 'lost') return { cls: 's-lost', head: eyebrow('Lost', 'Not now. You can revisit later.'),
+        btns: [sBtn('Re-open as Reached out', () => moveStage('called')), textBtn('Text: check back', 'Hi ' + firstName + ', ' + me1 + ' from Reekon. Checking back in. Still want those missed calls handled?')] };
+      return null;
+    })();
+    const stagePanel = STAGE_UI && seller ? h('div', { class: 'stage-card ' + STAGE_UI.cls }, STAGE_UI.head, h('div', { class: 'stage-btns' }, STAGE_UI.btns.filter(Boolean))) : null;
+    const lateStage = !!STAGE_UI;   // past first contact: hide the cold-call scaffolding
+
     const page = [
       D ? null : h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
       h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
         L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
         h('h1', null, L.business), h('div', { class: 'detail-meta' }, repQuick, tagRow)),
-      profileRow,
-      actions,
+      stagePanel,
+      lateStage ? null : profileRow,
+      lateStage ? h('details', { class: 'more-info section' }, h('summary', null, 'All actions'), actions) : actions,
       liveBox,
       stageRow,
       heatSeg,
       nextBox,
       emailCue,
-      scriptPanel,
+      lateStage ? null : scriptPanel,
       h('div', { class: 'card section' }, info, botRow),
       dials.length ? h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Call recordings'), h('div', { class: 'card' }, dials.map(dialRow))) : null,
       dealBox,
-      h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Log this call'), outcomes, closeBtn),
+      lateStage && ['booked', 'call2', 'won', 'lost'].includes(L.status) ? null : h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Log this call'), outcomes, closeBtn),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Notes'), noteBox, saveNote),
       h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'History'), h('div', { class: 'card' }, timeline)),
       adminPanel,

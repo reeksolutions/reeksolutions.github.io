@@ -1690,7 +1690,8 @@ async function api(request, env, url) {
     const dials = (await env.DB.prepare(`SELECT d.id, d.status, d.duration, d.recording_seconds, (d.recording_sid IS NOT NULL) AS has_recording, d.created_at, u.name AS rep_name
       FROM dial_calls d LEFT JOIN users u ON u.id = d.user_id WHERE d.lead_id = ? ${user.role === 'rep' ? 'AND d.user_id = ?' : ''} ORDER BY d.id DESC LIMIT 30`)
       .bind(...(user.role === 'rep' ? [lead.id, user.id] : [lead.id])).all()).results;
-    return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls, notes, deals, demo: demo || null, dials });
+    const event = await env.DB.prepare('SELECT id, title, starts_at, link FROM cal_events WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
+    return json({ lead: { ...lead, tags: tagsFromDb(lead.tags) }, calls, notes, deals, demo: demo || null, dials, event: event || null });
   }
 
   if ((m = path.match(/^\/leads\/(\d+)$/)) && method === 'PATCH') {
