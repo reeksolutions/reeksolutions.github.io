@@ -21,8 +21,8 @@ const LOCK_MINUTES = 15;
 const STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'call2', 'won', 'lost', 'dnc'];
 const BOARD_STAGES = [['new', 'New', ['new', 'demo_needed', 'demo_ready']], ['called', 'Contacted', ['called']], ['callback', 'Callback', ['callback']], ['booked', 'Audit booked', ['booked']], ['call2', 'Call 2', ['call2']], ['won', 'Won', ['won']], ['lost', 'Lost', ['lost']]];
 const OPEN_STATUSES = ['new', 'demo_needed', 'demo_ready', 'called', 'callback', 'booked', 'call2'];
-const OUTCOMES = ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'callback', 'demo_sent', 'booked', 'dnc', 'emailed'];
-const DIAL_OUTCOMES = OUTCOMES.filter((o) => o !== 'emailed');
+const OUTCOMES = ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'callback', 'demo_sent', 'booked', 'dnc', 'emailed', 'texted', 'dmed'];
+const DIAL_OUTCOMES = OUTCOMES.filter((o) => !['emailed', 'texted', 'dmed'].includes(o));
 const HEATS = ['hot', 'warm', 'cold', 'dead'];
 const NOT_A_SITE = /^https?:\/\/([a-z0-9-]+\.)*(facebook|fb|instagram|linktr|linktree|yelp|booksy|vagaro|styleseat|square|squareup|tiktok|twitter|x|google|goo|business\.site|g\.page|maps\.app|fresha|glossgenius|beacons|taplink|carrd)\.[a-z.]+(\/|$)/i;
 const ROLES = ['admin', 'rep', 'dev'];
@@ -1792,6 +1792,14 @@ async function api(request, env, url) {
         env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, 'emailed', lead.status, lead.status, t),
       ]);
       return json({ ok: true, status: lead.status });
+    }
+    if (outcome === 'texted' || outcome === 'dmed') {
+      const toS = ['new', 'demo_needed', 'demo_ready'].includes(lead.status) ? 'called' : lead.status;
+      await env.DB.batch([
+        env.DB.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').bind(toS, t, lead.id),
+        env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, outcome, lead.status, toS, t),
+      ]);
+      return json({ ok: true, status: toS });
     }
     const to = nextStatus(lead.status, outcome);
     const sets = ['status = ?', 'attempts = attempts + 1', 'last_call_at = ?', 'updated_at = ?'];

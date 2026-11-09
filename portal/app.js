@@ -17,7 +17,7 @@
   ];
   const HEAT = [['hot', 'Hot', '🔥'], ['warm', 'Warm', '☀️'], ['cold', 'Cold', '🧊'], ['dead', 'Dead', '💀']];
   const HEAT_LABEL = Object.fromEntries(HEAT.map(([k, l, e]) => [k, e + ' ' + l]));
-  const OUTCOME_LABEL = Object.fromEntries(OUTCOMES.concat([['emailed', 'Emailed'], ['status_change', 'Status changed'], ['demo_ready', 'Demo marked ready'], ['closed_won', 'Deal closed']]));
+  const OUTCOME_LABEL = Object.fromEntries(OUTCOMES.concat([['emailed', 'Emailed'], ['texted', 'Texted'], ['dmed', 'DM sent'], ['status_change', 'Status changed'], ['demo_ready', 'Demo marked ready'], ['closed_won', 'Deal closed']]));
 
   // tiny element builder — everything goes through textContent, so lead data can't inject HTML
   function h(tag, attrs, ...kids) {
@@ -690,7 +690,7 @@
       L.phone && seller ? (dialer && dialer.ready ? h('button', { class: 'btn small', onclick: gvCall }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
       S.me.role === 'admin' ? h('a', { class: 'btn primary', href: '#/lab/' + L.id }, icon('spark'), 'Demo Lab') : null,
-      h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
+      S.me.role !== 'admin' ? h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio') : null,
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
       L.demo_url ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(L.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', L.demo_url); } } }, icon('copy'), 'Copy link') : null,
       L.demo_url ? h('a', { class: 'btn', href: L.demo_url, target: '_blank', rel: 'noopener' }, icon('demos'), 'Open demo') : null,
@@ -754,7 +754,7 @@
         stopBar(); S.justMoved = id;
         toast(OUTCOME_LABEL[outcome] + ' logged → ' + STATUS[r.status]);
         if (outcome === 'dnc' && S.me.role === 'rep') { if (D) closeDrawer(); else location.hash = '#/leads'; return; }
-        if (seller && ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'dnc'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
+        if (seller && ['not_interested', 'dnc', 'texted', 'dmed'].includes(outcome) && lsGet('rs_autonext', '1') === '1') {
           const nx = await nextLeadId(id);
           if (nx && nx.id) { if (D) D.dirty = true; openLead(nx.id); return; }
         }
@@ -842,7 +842,7 @@
       live,
       earlier.length ? h('div', { class: 'earlier' }, earlier.map((n) => h('div', null, h('small', null, fmt(n.created_at, { month: 'short', day: 'numeric' }) + ' · '), n.body.length > 160 ? n.body.slice(0, 160) + '…' : n.body))) : null,
       h('label', { class: 'autonext' }, h('input', { type: 'checkbox', checked: lsGet('rs_autonext', '1') === '1', onchange: (e) => lsSet('rs_autonext', e.target.checked ? '1' : '0') }),
-        'After a miss (no answer, voicemail, gatekeeper, not interested) jump to the next lead')) : null;
+        'After you message a lead (or close it) jump to the next lead')) : null;
 
     const noteBox = h('textarea', { placeholder: 'Notes from this call…' });
     const saveNote = h('button', { class: 'btn primary block', style: 'margin-top:8px', onclick: async () => {
@@ -1001,7 +1001,79 @@
     const stagePanel = STAGE_UI && seller ? h('div', { class: 'stage-card ' + STAGE_UI.cls }, STAGE_UI.head, h('div', { class: 'stage-btns' }, STAGE_UI.btns.filter(Boolean).concat([sBtn('Next lead →', goNext)]))) : null;
     const lateStage = !!STAGE_UI;   // past first contact: hide the cold-call scaffolding
 
-    const page = [
+    /* ---- simple step-by-step flow for sellers ---- */
+    const noteMsg = 'Hey, it\'s ' + me1 + '. I called earlier about a backyard project and nobody picked up. I\'m getting quotes this week and going with whoever responds first. I help contractors stop missing calls like mine. Want me to show you how?';
+    async function logMsg(kind) {
+      await flushLive();
+      try {
+        await api('POST', '/leads/' + id + '/calls', { outcome: kind });
+        if (kind === 'dmed') { try { const t = await api('GET', '/tracker'); await api('PUT', '/tracker', { dms: t.day.dms + 1 }); } catch { /* tracker optional */ } }
+        S.justMoved = id; toast(kind === 'dmed' ? 'DM logged ✓' : 'Text logged ✓');
+        if (lsGet('rs_autonext', '1') === '1') { const nx = await nextLeadId(id); if (nx && nx.id) { if (D) D.dirty = true; openLead(nx.id); return; } }
+        reload();
+      } catch (x) { fail(x); }
+    }
+    const copyTxt = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
+    const dmLink = L.instagram || ('https://www.google.com/search?q=' + encodeURIComponent('site:instagram.com ' + L.business + ' ' + (L.city || '')));
+    const dialed = L.attempts > 0 || ['callback', 'booked', 'call2', 'won'].includes(L.status);
+    const outSet = new Set(calls.map((c) => c.outcome));
+    const messaged = outSet.has('texted') || outSet.has('dmed') || outSet.has('emailed');
+    const demoSent = !!L.demo_sent || outSet.has('demo_sent');
+    const DONE = [dialed, messaged, demoSent, ['booked', 'call2', 'won'].includes(L.status), ['call2', 'won'].includes(L.status), L.status === 'won'];
+    const curStep = DONE.findIndex((d) => !d);
+    const lastDial = calls.find((c) => ['no_answer', 'voicemail', 'gatekeeper', 'callback', 'booked', 'not_interested'].includes(c.outcome));
+    const mtg = L.booked_at ? dayWord(L.booked_at) : null, mlink = event && event.link;
+    const miss = (k, label, cls) => h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: () => logCall(k) }, label);
+    const STEPS = [
+      { t: 'Call', sub: dialed ? (lastDial ? (OUTCOME_LABEL[lastDial.outcome] || lastDial.outcome) + ' · ' + ago(lastDial.created_at) : 'Called') : 'Not called yet',
+        body: [callNow, h('div', { class: 'step-q' }, miss('no_answer', 'No answer'), miss('voicemail', 'Voicemail'), miss('gatekeeper', 'Gatekeeper'), miss('callback', 'Callback'), miss('booked', 'Audit booked', 'primary'), miss('not_interested', 'Not interested'))] },
+      { t: 'Message him', sub: messaged ? 'Messaged ✓' : 'Text or DM the missed-call message',
+        body: [h('div', { class: 'msgbox' }, noteMsg), h('div', { class: 'step-q' },
+          textBtn('Text it', noteMsg, 'primary'), sBtn('Copy message', () => copyTxt(noteMsg, 'Message copied')), h('a', { class: 'btn', href: dmLink, target: '_blank', rel: 'noopener noreferrer' }, L.instagram ? 'Open his Instagram' : 'Find his Instagram')),
+          h('div', { class: 'step-q' }, sBtn('I texted him', () => logMsg('texted'), 'ok'), sBtn('I DM\'d him', () => logMsg('dmed'), 'ok'))] },
+      { t: 'Send demo', sub: demoSent ? 'Demo sent ✓' : L.demo_url ? 'Demo is ready to send' : 'Build one for him',
+        body: L.demo_url
+          ? [h('div', { class: 'step-q' }, textBtn('Text the demo', 'Hi ' + firstName + ', it\'s ' + me1 + '. Here\'s a sample built for ' + L.business + ': ' + L.demo_url, 'primary'), sBtn('Copy link', () => copyTxt(L.demo_url, 'Demo link copied')), h('a', { class: 'btn', href: L.demo_url, target: '_blank', rel: 'noopener' }, 'Open it')),
+            h('div', { class: 'step-q' }, sBtn('I sent the demo', () => logCall('demo_sent'), 'ok'))]
+          : [h('div', { class: 'step-q' }, isAdmin ? sLink('Build demo', '#/lab/' + L.id, 'primary') : sLink('Build demo', '#/studio/' + L.id, 'primary'))] },
+      { t: 'Audit booked', sub: DONE[3] ? (mtg ? mtg + (mlink ? ' · Meet link ready' : ' · no Meet link yet') : 'Booked ✓') : 'Pick a time for the free audit',
+        body: DONE[3]
+          ? [h('div', { class: 'step-q' }, sBtn(mlink ? 'Edit in calendar' : 'Calendar + Meet', () => { CAL.preset = { title: 'Free AI audit: ' + L.business, start: L.booked_at || new Date(Date.now() + 864e5).toISOString(), lead_id: L.id, link: mlink || '', notes: 'Phone: ' + (L.phone || '') }; location.hash = '#/calendar'; }, 'primary'),
+            textBtn('Text: confirm', 'Hi ' + firstName + ', it\'s ' + me1 + ' with Reekon Systems. Confirming your free 30 min audit' + (mtg ? ' on ' + mtg : '') + '.' + (mlink ? ' Join here: ' + mlink : ' What email should I send the video link to?')),
+            textBtn('Text: reminder', 'Hi ' + firstName + ', quick reminder about our audit' + (mtg ? ' ' + mtg : '') + '.' + (mlink ? ' Link: ' + mlink : '') + ' See you then!'))]
+          : [h('div', { class: 'step-q' }, miss('booked', 'Audit booked', 'primary'), miss('callback', 'Callback'))] },
+      { t: 'Audit done', sub: DONE[4] ? 'On Call 2 ✓' : 'Held the audit? Move to the closing call',
+        body: [h('div', { class: 'step-q' }, sBtn('Audit done → Call 2', () => moveStage('call2'), 'ok'), textBtn('Text: reschedule', 'Hey ' + firstName + ', missed you on our audit. Want to pick a new time this week?'))] },
+      { t: 'Close the deal', sub: DONE[5] ? 'Won 💰' : 'Ask for the deal',
+        body: [h('div', { class: 'step-q' }, isAdmin ? sBtn('Won: close deal', () => moveStage('won'), 'ok') : null, sBtn('Lost', () => moveStage('lost')))] },
+    ];
+    const stepsCard = seller ? h('div', { class: 'steps-flow' },
+      ['lost', 'dnc'].includes(L.status) ? h('div', { class: 'steps-banner' }, h('b', null, L.status === 'dnc' ? 'Do Not Call' : 'Closed as lost'), L.status === 'lost' ? sBtn('Re-open', () => moveStage('called')) : null) : null,
+      L.status === 'callback' && L.callback_at ? h('div', { class: 'steps-banner cb' }, h('b', null, 'Callback ' + fmt(L.callback_at))) : null,
+      STEPS.map((st, i) => {
+        const state = DONE[i] ? 'done' : i === curStep ? 'now' : 'todo';
+        const card = h('div', { class: 'step-card ' + state + (i === curStep ? ' open' : '') });
+        const head = h('button', { type: 'button', class: 'step-head', 'aria-expanded': String(i === curStep), onclick: () => { card.classList.toggle('open'); head.setAttribute('aria-expanded', String(card.classList.contains('open'))); } },
+          h('span', { class: 'step-dot' }, DONE[i] ? '✓' : String(i + 1)), h('span', { class: 'step-t' }, h('b', null, st.t), h('small', null, st.sub)), h('i', { class: 'chev' }, '▾'));
+        card.append(head, h('div', { class: 'step-body' }, st.body.filter(Boolean)));
+        return card;
+      })) : null;
+
+    const page = seller ? [
+      D ? null : h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
+      h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),
+        h('h1', null, L.business), h('div', { class: 'detail-meta' }, [L.owner, L.phone, L.city].filter(Boolean).join(' · '))),
+      h('div', { class: 'row wrap simple-links', style: 'gap:8px;margin:8px 0' }, h('a', { class: 'btn small', href: profileUrl, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), 'Google profile'), L.website ? h('a', { class: 'btn small', href: /^https?:/i.test(L.website) ? L.website : 'https://' + L.website, target: '_blank', rel: 'noopener noreferrer' }, 'Website') : h('span', { class: 'tag good' }, 'No website'), h('button', { class: 'btn small', onclick: goNext }, 'Next lead →')),
+      stepsCard,
+      liveBox,
+      h('details', { class: 'more-info section' }, h('summary', null, 'More: stage, notes, history, details'),
+        stageRow, heatSeg, nextBox, h('div', { class: 'card section' }, info, botRow), actions,
+        h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Notes'), noteBox, saveNote),
+        h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'History'), h('div', { class: 'card' }, timeline)),
+        dials.length ? h('div', { class: 'section' }, h('span', { class: 'eyebrow' }, 'Call recordings'), h('div', { class: 'card' }, dials.map(dialRow))) : null, dealBox),
+      adminPanel,
+      gvBar,
+    ] : [
       D ? null : h('a', { class: 'back', href: '#/leads', onclick: (e) => { if (S.cameFromList) { e.preventDefault(); window.history.back(); } } }, icon('back'), 'Back'),
       h('div', { class: 'detail-head' }, h('div', { class: 'row wrap', style: 'gap:8px;margin-bottom:8px' }, pill(L.status), L.demo_sent ? h('span', { class: 'tag good' }, 'Demo sent') : null,
         L.demo_views ? h('span', { class: 'tag hot' }, '👀 viewed ' + L.demo_views + 'x') : null),

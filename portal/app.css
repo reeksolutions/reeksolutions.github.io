@@ -1442,3 +1442,16 @@ html.nonav{--nav:0px}
 .bcol[data-stage] .bhead{position:sticky;top:0}
 
 .bc-foot .nosite{color:#3ddc84;font-weight:700}
+
+.steps-flow{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.step-card{border:1px solid var(--line,rgba(255,255,255,.14));border-radius:14px;background:rgba(127,127,127,.05);overflow:hidden}
+.step-card.now{border-color:#5aa9ff;background:rgba(90,169,255,.08)}.step-card.done{opacity:.8;border-color:rgba(61,220,132,.5)}.step-card.todo{opacity:.65}
+.step-head{display:flex;align-items:center;gap:12px;width:100%;padding:12px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.step-dot{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:rgba(127,127,127,.25)}
+.step-card.now .step-dot{background:#5aa9ff;color:#04121f}.step-card.done .step-dot{background:#3ddc84;color:#04170d}
+.step-t{flex:1;min-width:0}.step-t b,.step-t small{display:block}.step-t small{opacity:.7;margin-top:2px}
+.step-head .chev{font-style:normal;transition:transform .2s}.step-card.open .chev{transform:rotate(180deg)}
+.step-body{display:none;padding:0 12px 12px;flex-direction:column;gap:10px}.step-card.open .step-body{display:flex}
+.step-q{display:flex;flex-wrap:wrap;gap:8px}.step-q .btn{flex:1 1 44%;text-align:center}
+.msgbox{white-space:pre-wrap;padding:10px 12px;border-radius:12px;background:rgba(127,127,127,.12);font-size:15px}
+.steps-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(255,159,67,.14)}
