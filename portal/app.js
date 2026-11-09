@@ -154,11 +154,7 @@
   }
   // sidebar on desktop: grouped
   function navFor(role) {
-    if (role === 'admin') return [
-      [null, [['home', 'Home'], ['tracker', 'Daily tracker'], ['rebrief', 'Daily brief'], ['leads', 'Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['deals', 'Deals']]],
-      ['Tools', [['finder', 'Lead Finder'], ['content', 'Content'], ['lab', 'Demo Lab']]],
-      ['System', [['settings', 'Settings']]],
-    ];
+    if (role === 'admin') return [[null, [['home', 'Home']]]].concat(['sell', 'create', 'crew', 'more'].flatMap((k) => CATS[k][2].map(([label, items]) => [CATS[k][0] + ' · ' + label, items.map((i) => [i[0], i[1]])])));
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
