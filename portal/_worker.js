@@ -2697,7 +2697,13 @@ async function api(request, env, url) {
     const kind = ['video', 'post', 'face'].includes(body.kind) ? body.kind : 'post';
     const msgs = Array.isArray(body.messages) ? body.messages.slice(-10).map((m) => ({ role: m && m.role === 'bot' ? 'assistant' : 'user', content: str(m && m.text, 900) })).filter((m) => m.content) : [];
     if (!msgs.length || msgs[msgs.length - 1].role !== 'user') bad('Say something to the bot first');
-    const business = str(body.business, 80), secs = [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
+    let business = str(body.business, 80); const secs = [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
+    try {
+      const d0 = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: 'Read the message and find the type of business it is about. Answer ONLY JSON: {"business": string or null}. Use 1 to 4 lowercase words, like "junk removal", "dental office", "med spa", "plumbing". Use null if the message does not name a type of business.' }, { role: 'user', content: msgs[msgs.length - 1].content }], max_tokens: 40, temperature: 0 });
+      const t0 = typeof (d0 && d0.response) === 'string' ? d0.response : JSON.stringify((d0 && d0.response) || '');
+      const m0 = t0.match(/\{[\s\S]*\}/), named = m0 ? JSON.parse(m0[0]).business : null;
+      if (typeof named === 'string' && named.trim() && named.trim().length <= 40 && !/^(null|none|small business|business|local business)$/i.test(named.trim())) business = named.trim().toLowerCase();
+    } catch { /* keep the box value */ }
     const TIDS = { missed: 'missed calls', slow: 'slow replies to new inquiries', quiet: 'quiet past customers', reviews: 'getting more reviews', noshow: 'no-shows and cancellations', afterhours: 'bookings and quotes after hours', website: 'website', crm: 'one place for every lead', chatbot: 'chat on the website', plates: 'tap-to-review NFC cards' };
     const tidList = Object.keys(TIDS).join('|') + '|custom';
     const flowShape = '{"title": string, "trigger": string, "pain": [3 strings], "why": string, "lost": string, "fix": string, "steps": [3 strings], "check": string, "before": string, "after": string}';
@@ -2712,18 +2718,20 @@ async function api(request, env, url) {
     const extra = ((await getSetting(env, 'bot_rules')) || '').slice(0, 3000);
     const sys = 'You are the content bot inside Marquise\'s CRM. Always answer with ONLY a JSON object: {"reply": string, "result": object or null}. "reply" is one or two friendly sentences to Marquise. "result" is the finished content with exactly this shape: ' + shapes[kind] + '. Use null for result only when you must ask which business it is for. VIDEO RULES: the video is about ' + secs + ' seconds when read aloud, so all the "say" lines together must be about ' + words + ' words (' + nBeats + ' beats). Every video must feel different: choose a fresh structure each time, such as a day in the life of the owner, a myth vs the truth, three mistakes, one customer story (made up, no name, no fake stats), a countdown through the day, or a before and after. Do not reuse a stock skeleton. Be specific to the business: real situations, real objects, real numbers as examples. Beat kinds: hook (first beat, grabs attention in two seconds), setup (the scene), pain (a problem the owner feels), why (why it happens), cost (what it costs; include an example dollar figure at least once), fix (the solution, named plainly), step (how it works, one action per beat), proof (what you see when it works), result (before and after), cta (last beat; invite them to DM the word AUDIT for a free audit). Include at least one cost, one fix, two steps and one result. The "text" of each beat is a short punchy label for the on-screen board. If a CURRENT result is given and he asks for a change, return the full updated result. Everything must be plain text.\n\nINSTRUCTIONS FROM THE RULEBOOK (follow them):\n' + rules + (extra ? '\n\nEXTRA RULES FROM MARQUISE (these win over everything above):\n' + extra : '') + '\n\nBUSINESS BOX: ' + (business || 'empty') + (business ? '. This is the business Marquise is making content for. Write for it unless his latest message clearly names a different one. Never pick a different industry yourself, even for Surprise me or a general request.' : '.');
     const upr = (body.current ? 'CURRENT RESULT:\n' + JSON.stringify(body.current).slice(0, 4000) + '\n\n' : '') + 'Continue the chat.';
+    let obj = null, result = null;
+    const cl = (v, n) => String(v == null ? '' : v).replace(/[\u2014\u2013]/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, n);
+    const cl1 = (v, n) => cl(v, n).replace(/\s*\n+\s*/g, ' ');
+    for (let tryN = 0; tryN < 2; tryN++) {
+      const note = tryN ? '\n\nIMPORTANT: your last answer was about the wrong industry. Write ONLY about ' + business + '. Do not mention med spas, Botox, fillers or any other industry.' : '';
     let text = '';
     try {
-      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') }], max_tokens: 3400, temperature: 0.85 }, fmt ? { response_format: { type: 'json_object' } } : {}));
+      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys + note }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') }], max_tokens: 3400, temperature: 0.85 }, fmt ? { response_format: { type: 'json_object' } } : {}));
       let r; try { r = await run(true); } catch { r = await run(false); }
       text = typeof (r && r.response) === 'string' ? r.response : JSON.stringify((r && (r.response || r.result)) || '');
     } catch (e) { console.error('cbot', e); bad('The bot is busy. Try again in a minute.'); }
-    let obj = null;
     try { const m = text.match(/\{[\s\S]*\}/); obj = m ? JSON.parse(m[0]) : null; } catch { obj = null; }
     if (!obj || typeof obj !== 'object') bad('The bot lost its train of thought. Say it again.');
-    const cl = (v, n) => String(v == null ? '' : v).replace(/[\u2014\u2013]/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, n);
-    const cl1 = (v, n) => cl(v, n).replace(/\s*\n+\s*/g, ' ');
-    let result = null; const R = obj.result && typeof obj.result === 'object' ? obj.result : null;
+    result = null; const R = obj.result && typeof obj.result === 'object' ? obj.result : null;
     if (R) {
       const biz = cl1(R.business, 40).toLowerCase(), tid = TIDS[R.tid] ? R.tid : 'missed', sol = TIDS[R.sol] ? R.sol : tid, tags = cl1(R.hashtags, 160).split(/[\s,]+/).filter(Boolean).map((x) => (x[0] === '#' ? x : '#' + x)).slice(0, 8).join(' ');
       if (kind === 'post' && cl(R.post, 1400)) result = { business: biz, tid, tags, post: cl(R.post, 1400), short: cl1(R.short || R.post, 270) };
@@ -2739,7 +2747,12 @@ async function api(request, env, url) {
         }
       }
     }
-    return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result });
+      const blob = result ? JSON.stringify(result).toLowerCase() : '';
+      const wrong = business && !/spa|aesthetic|beauty|salon/.test(business) && /med ?spa|botox|filler|aesthetician/.test(blob);
+      if (!wrong) break;
+    }
+    if (result && business) result.business = business;
+    return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result, business });
   }
   if (path === '/video/edit' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');

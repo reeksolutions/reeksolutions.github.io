@@ -3276,6 +3276,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
         const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business, secs: CS.secs });
         CS.chat.push({ role: 'bot', text: x.reply });
+        if (x.business) { CS.business = x.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } }
         if (x.result && CS.step === 'edit') toast('Rewritten. Tap Generate video again.');
         if (x.result) { if (x.result.business) { CS.business = x.result.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } } applyIdea(x.result); }
       } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
