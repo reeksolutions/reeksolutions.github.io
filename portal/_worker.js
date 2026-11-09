@@ -1257,6 +1257,9 @@ function leadFilter(p, user) {
   if (user.role === 'admin' && p.get('batch')) { where.push('l.batch_id = ?'); args.push(+p.get('batch')); }
   if (p.get('city')) { where.push('l.city = ?'); args.push(p.get('city')); }
   if (p.get('heat') && HEATS.includes(p.get('heat'))) { where.push("COALESCE(l.heat,'cold') = ?"); args.push(p.get('heat')); }
+  if (p.get('site') === 'none') where.push(NOSITE_SQL);
+  if (p.get('site') === 'has') where.push(`NOT (${NOSITE_SQL})`);
+  if (p.get('lowrev') === '1') where.push(LOWREV_SQL);
   if (p.get('contact') === 'email') where.push("l.email IS NOT NULL AND l.email != ''");
   if (p.get('contact') === 'phone') where.push("l.phone_norm IS NOT NULL AND l.phone_norm != ''");
   if (p.get('contact') === 'unemailed') where.push("l.email IS NOT NULL AND l.email != '' AND l.emailed_at IS NULL");
@@ -1330,6 +1333,11 @@ async function googleCallback(request, env, url) {
   try { const u = await (await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: 'Bearer ' + j.access_token } })).json(); await setSetting(env, 'google_email', u.email || ''); } catch { /* optional */ }
   return back('ok');
 }
+
+// best leads first: no website + low reviews, then no website, then low reviews, then the rest
+const NOSITE_SQL = "COALESCE(TRIM(l.website),'') = ''";
+const LOWREV_SQL = 'COALESCE(l.reviews, 9999) <= 30';
+const LEAD_PRIO = `CASE WHEN ${NOSITE_SQL} AND ${LOWREV_SQL} THEN 0 WHEN ${NOSITE_SQL} THEN 1 WHEN ${LOWREV_SQL} THEN 2 ELSE 3 END`;
 
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
@@ -1533,7 +1541,7 @@ async function api(request, env, url) {
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
     const SORTS = { business: 'l.business COLLATE NOCASE', city: 'l.city COLLATE NOCASE', status: 'l.status', stage: "CASE l.status WHEN 'new' THEN 0 WHEN 'demo_needed' THEN 0 WHEN 'demo_ready' THEN 0 WHEN 'called' THEN 1 WHEN 'callback' THEN 2 WHEN 'booked' THEN 3 WHEN 'call2' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE 7 END", last_call: 'l.last_call_at', next: 'l.next_action_at', added: 'l.id', rep: 'u.name' };
     const sortKey = SORTS[p.get('sort')], dir = p.get('dir') === 'desc' ? 'DESC' : 'ASC';
-    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, CASE WHEN l.status IN ('callback','booked') THEN COALESCE(l.callback_at, l.updated_at) END ASC, l.id DESC`;
+    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY ${LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, CASE WHEN l.status IN ('callback','booked') THEN COALESCE(l.callback_at, l.updated_at) END ASC, l.id DESC`;
     const orderArgs = sortKey ? [] : fx.args;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
@@ -1559,9 +1567,9 @@ async function api(request, env, url) {
       const [rows, cnt] = await Promise.all([
         env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at, l.attempts, l.last_call_at, l.demo_url,
             l.assigned_to, u.name AS rep_name, l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.next_action_at, l.next_action, l.updated_at,
-            l.rating, l.reviews, l.link, l.place_id, l.address, (${fx.sql}) AS focus
+            l.rating, l.reviews, l.link, l.place_id, l.address, l.website, (${fx.sql}) AS focus
           FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${base} ${inList}
-          ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
+          ORDER BY ${key === 'callback' || key === 'booked' ? '(0+0)' : LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
           .bind(...fx.args, ...args, ...list, ...fx.args, per).all(),
         env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${base} ${inList}`).bind(...args, ...list).first(),
       ]);
@@ -2465,7 +2473,7 @@ async function api(request, env, url) {
       `SELECT l.id FROM leads l WHERE l.id != ? AND l.phone_norm IS NOT NULL AND l.phone_norm != ''
          AND l.status IN ('new','demo_needed','demo_ready','called','callback') AND (l.status != 'callback' OR l.callback_at <= ?)
          AND (l.last_call_at IS NULL OR l.last_call_at < ?) ${who}
-       ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
+       ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, ${LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
          CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, l.attempts ASC, l.id ASC LIMIT 1`
     ).bind(cur, t, recent, ...(user.role === 'rep' ? [user.id] : []), ...fx.args).first();
     return json({ id: row ? row.id : null });

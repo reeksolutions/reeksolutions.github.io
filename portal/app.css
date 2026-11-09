@@ -1440,3 +1440,5 @@ html.nonav{--nav:0px}
 
 @media (max-width:700px){.kanban{grid-auto-columns:78%}}
 .bcol[data-stage] .bhead{position:sticky;top:0}
+
+.bc-foot .nosite{color:#3ddc84;font-weight:700}

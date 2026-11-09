@@ -383,8 +383,8 @@
     const opts = await getOptions(true);
     const F = S.leadFilters;
     const mode = lsGet('rs_leads_mode3', 'board');
-    const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
-    const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
+    const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source', 'site', 'lowrev'];
+    const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '', site: '', lowrev: '' };
     const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
     const body = h('div', { class: 'leads-body' });
     const countEl = h('span', { class: 'count-line' });
@@ -393,10 +393,10 @@
     let tmr;
     const search = h('label', { class: 'tsearch' }, icon('search'),
       h('input', { id: 'lead-search', type: 'search', placeholder: 'Search leads', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
-    const QUICK = [['All', {}], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['Not emailed', { contact: 'unemailed' }]];
-    const sameQ = (f) => ['heat', 'due', 'contact'].every((k) => String(F[k] || '') === String(f[k] || ''));
-    const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '' }, f); viewLeads(); } }, l)));
-    const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
+    const QUICK = [['All', {}], ['No website', { site: 'none' }], ['Low reviews', { lowrev: '1' }], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['Not emailed', { contact: 'unemailed' }]];
+    const sameQ = (f) => ['heat', 'due', 'contact', 'site', 'lowrev'].every((k) => String(F[k] || '') === String(f[k] || ''));
+    const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '', site: '', lowrev: '' }, f); viewLeads(); } }, l)));
+    const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact', 'site', 'lowrev'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
     const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
     const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['board', 'Board'], ['list', 'List'], ['table', 'Table']].map(([k, l]) =>
       h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode3', k); viewLeads(); } }, l)));
@@ -409,6 +409,8 @@
       };
       const done = await sheet((box, close) => box.append(h('h2', null, 'Filters'),
         mode === 'table' ? sel('f-status', 'Stage', 'status', [['open', 'All open'], ['', 'Everything']], STAGES.map(([k, l]) => [k === 'new' ? 'new,demo_needed,demo_ready' : k, l]).concat(isAdmin ? [['dnc', 'Do Not Call']] : [])) : null,
+        sel('f-site', 'Website', 'site', [['', 'Any']], [['none', 'No website'], ['has', 'Has a website']]),
+        sel('f-lowrev', 'Reviews', 'lowrev', [['', 'Any']], [['1', 'Low (30 or fewer)']]),
         sel('f-heat', 'Heat', 'heat', [['', 'Any']], HEAT.map(([k, l]) => [k, l])),
         isAdmin ? sel('f-rep', 'Rep', 'rep', [['', 'All reps'], ['none', 'Unassigned']], opts.reps.map((r) => [String(r.id), r.name + (r.active ? '' : ' (off)')])) : null,
         sel('f-city', 'City', 'city', [['', 'All cities']], opts.cities.map((c) => [c, c])),
@@ -472,7 +474,9 @@
         h('div', { class: 'bc-top' }, HEAT_DOT(l.heat), h('b', null, l.business),
           h('button', { class: 'bc-move', type: 'button', 'aria-label': 'Move ' + l.business, onclick: (e) => { e.preventDefault(); e.stopPropagation(); moveSheet(l); } }, icon('more'))),
         h('div', { class: 'bc-meta' }, [l.owner, l.city].filter(Boolean).join(' · ') || l.category || '—'),
-        when || (isAdmin && l.rep_name) || l.attempts ? h('div', { class: 'bc-foot' },
+        when || (isAdmin && l.rep_name) || l.attempts || l.reviews != null ? h('div', { class: 'bc-foot' },
+          l.website !== undefined && !String(l.website || '').trim() ? h('span', { class: 'nosite' }, 'No site') : null,
+          l.reviews != null ? h('span', null, l.reviews + ' rev') : null,
           when ? h('span', { class: due ? 'due' : null }, when) : null,
           l.attempts ? h('span', null, l.attempts + (l.attempts === 1 ? ' call' : ' calls')) : null,
           isAdmin ? h('span', { class: 'rep' }, l.rep_name ? first(l.rep_name) : 'Unassigned') : null) : null);
