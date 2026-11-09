@@ -2815,10 +2815,10 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
   const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow' };
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
   const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
-  function vidPlan(tid, seed, plain, voiceDur) {
+  function vidPlan(tid, seed, plain, voiceDur, style) {
     const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], fix = fixOf(t, plain);
     const m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0;
     const scenes = [
@@ -2839,7 +2839,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       durs[0] += 0.4; durs[durs.length - 1] += 0.9;
     } else durs = words.map((w) => Math.min(5.8, Math.max(3, 1.3 + w * 0.27)));
     let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; });
-    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name };
+    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain) : null };
   }
   const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -2953,6 +2953,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
   const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
   async function recordVideo(plan, voiceBuf, sfxOn, onProgress) {
+    try { await Promise.race([Promise.all([document.fonts.load('700 40px Kalam'), document.fonts.load('800 50px "Inter Tight"')]), new Promise((r) => setTimeout(r, 2500))]); } catch { /* fall back to system fonts */ }
     const canvas = document.createElement('canvas'); canvas.width = VW; canvas.height = VH; const ctx = canvas.getContext('2d');
     if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
@@ -2964,22 +2965,174 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3500000 } : undefined), chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((res) => { rec.onstop = res; });
-    const cache = {}; drawFrame(ctx, plan, 0, cache); rec.start(250);
+    const cache = {}, draw = plan.style === 'flow' ? drawFlow : drawFrame; draw(ctx, plan, 0, cache); rec.start(250);
     const start = performance.now() + 250;
     await new Promise((resolve) => {
-      const tick = () => { const t = Math.max(0, (performance.now() - start) / 1000); drawFrame(ctx, plan, t, cache); onProgress(clamp01(t / plan.total)); if (t >= plan.total + 0.2) resolve(); else requestAnimationFrame(tick); };
+      const tick = () => { const t = Math.max(0, (performance.now() - start) / 1000); draw(ctx, plan, t, cache); onProgress(clamp01(t / plan.total)); if (t >= plan.total + 0.2) resolve(); else requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     });
     rec.stop(); await done; try { ac.close(); } catch { /* ignore */ }
     const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
     return { blob: new Blob(chunks, { type }), type, ext: type.includes('mp4') ? 'mp4' : 'webm' };
   }
+  /* ================= flow-map look: a hand-drawn board the camera travels across, karaoke captions, brand colors ================= */
+  const HAND = '"Kalam", "Segoe Print", "Bradley Hand", "Marker Felt", "Comic Sans MS", cursive';
+  const FLOW = {
+    missed: { title: 'stop losing calls to voicemail', titleAI: 'AI receptionist for med spas', trigger: 'A new client calls at 6:40pm', pain: ['Front desk is with a patient', 'Nobody picks up', 'She hangs up. No voicemail.'], why: 'She books the next spa on Google', lost: 'Bookings lost every week', fix: 'Every call answered on ring one', fixAI: 'An AI receptionist answers on ring one', steps: ['Answers common questions', 'Checks the calendar', 'Books the consult'], check: 'Confirmation text goes out', before: 'Missed calls, lost bookings', after: 'Every call answered' },
+    slow: { title: 'win the first reply', titleAI: 'instant replies for med spas', trigger: 'A new inquiry at 7pm', pain: ['Nobody sees it tonight', 'She messages two other spas', 'One replies in 4 minutes'], why: 'The first reply wins the booking', lost: 'Leads that went cold', fix: 'Every inquiry answered in a minute', fixAI: 'An AI replies to every inquiry in a minute', steps: ['Replies right away', 'Asks the right questions', 'Offers a time to book'], check: 'Booked before she looks elsewhere', before: 'Reply tomorrow, lose the lead', after: 'Reply in a minute, win it' },
+    quiet: { title: 'bring back quiet clients', titleAI: 'AI follow-ups for med spas', trigger: 'A client visits once', pain: ['She loved it', 'Life got busy', 'Nobody follows up'], why: 'She forgot. She was not unhappy.', lost: 'Revenue sitting in your list', fix: 'A friendly text brings them back', fixAI: 'An AI texts them and books the replies', steps: ['Finds clients gone quiet', 'Sends a friendly text', 'Books the ones who reply'], check: 'Back on the calendar', before: 'A list nobody touches', after: 'Past clients rebooked' },
+    reviews: { title: 'get more 5-star reviews', titleAI: 'automatic reviews for med spas', trigger: 'A client loves her visit', pain: ['She says "I\'ll review later"', 'Finding the page takes 8 steps', 'Later never comes'], why: 'No ask, and too many steps', lost: 'Reviews that never get posted', fix: 'One tap to your Google review page', fixAI: 'One tap or text, straight to your review page', steps: ['Tap card at the front desk', 'Text after the visit', 'Straight to the review page'], check: 'Review posted', before: 'Happy clients, few reviews', after: 'New reviews every week' },
+    noshow: { title: 'fill the empty chair', titleAI: 'no-show protection for med spas', trigger: 'Thursday, 2pm appointment', pain: ['The client forgot', 'The chair sits empty', 'No one to fill it'], why: 'One missed reminder, zero revenue', lost: 'Treatments lost every week', fix: 'Reminders and one-tap rescheduling', fixAI: 'Automatic reminders with one-tap reschedule', steps: ['Reminder goes out', 'One-tap reschedule', 'Waitlist fills the slot'], check: 'The chair stays full', before: 'Empty chairs', after: 'A full calendar' },
+    afterhours: { title: 'book clients after hours', titleAI: 'an AI that never closes', trigger: 'Sunday, 9pm', pain: ['She is ready to book', 'No online booking, phone off', 'She books whoever answers'], why: 'Your best hours are when you are closed', lost: 'Bookings lost after close', fix: 'Booking that works while you sleep', fixAI: 'An AI answers and books 24/7', steps: ['Answers calls and messages', 'Checks the calendar', 'Books the consult'], check: 'Confirmed while you sleep', before: 'Closed means lost', after: 'Open all night' },
+    website: { title: 'a website that gets you booked', titleAI: 'a website that gets you booked', trigger: 'She searches "med spa near me"', pain: ['Taps your listing', 'The site loads in 6 seconds', 'She taps the next one'], why: 'People decide in seconds', lost: 'Visitors who never booked', fix: 'Fast site, Book Now on every screen', fixAI: 'Fast site, Book Now on every screen', steps: ['Loads fast on phones', 'Book Now on every screen', 'Google listing connected'], check: 'Booked from the search', before: 'Old, slow site', after: 'Found. Booked.' },
+    crm: { title: 'one place for every lead', titleAI: 'one place for every lead', trigger: 'A lead DMs on Instagram', pain: ['Another one texts', 'Another fills out a form', 'By Friday, who was who?'], why: 'Leads scattered in five places', lost: 'Leads that went cold', fix: 'One dashboard for every lead', fixAI: 'One dashboard for every lead', steps: ['Every lead in one list', 'Follow-ups scheduled', 'Bookings tracked'], check: 'You know who to call today', before: 'Notes, DMs, sticky notes', after: 'One clean list' },
+    chatbot: { title: 'answer clients at 9pm', titleAI: 'AI chat for med spa websites', trigger: 'It is 9pm on your website', pain: ['She wonders what Botox costs', 'No one to ask', 'She closes the tab'], why: 'Visitors will not wait for an email', lost: 'Questions that never became bookings', fix: 'Answers on your site, instantly', fixAI: 'An AI chat answers instantly', steps: ['Answers prices and downtime', 'Handles the common questions', 'Books the consult'], check: 'Booked while you sleep', before: 'Unanswered questions', after: 'Instant answers' },
+    plates: { title: 'one tap, one more review', titleAI: 'one tap, one more review', trigger: 'A happy client at checkout', pain: ['She wants to leave a review', 'She has to search Google', 'She walks out the door'], why: 'Too many steps between happy and posted', lost: 'Reviews you earned and never got', fix: 'A tap card opens your review page', fixAI: 'A tap card opens your review page', steps: ['Tap card at the front desk', 'Review page opens instantly', 'Tap, review, done'], check: 'Review posted', before: 'Happy clients, no reviews', after: 'Reviews every week' },
+  };
+  const FK = { warn: ['#f5b84b', 'rgba(245,184,75,.13)'], bad: ['#ff7a7a', 'rgba(255,122,122,.13)'], plain: ['#e9edf7', 'rgba(255,255,255,.05)'], ai: ['#5b8cff', 'rgba(91,140,255,.2)'], ok: ['#3ddc97', 'rgba(61,220,151,.14)'], cta: ['#5b8cff', 'rgba(91,140,255,.28)'] };
+  const hashStr = (s) => { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
+  const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  function roughRectPts(x, y, w, h, r, seed, amp) {
+    const R = rng(seed), pts = [], j = () => (R() - 0.5) * 2 * amp, step = 14;
+    const seg = (x0, y0, x1, y1) => { const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / step)); for (let i = 0; i < n; i++) pts.push([x0 + (x1 - x0) * i / n + j(), y0 + (y1 - y0) * i / n + j()]); };
+    const arc = (cx, cy, a0) => { for (let i = 0; i <= 4; i++) { const a = a0 + (Math.PI / 2) * i / 4; pts.push([cx + Math.cos(a) * r + j(), cy + Math.sin(a) * r + j()]); } };
+    seg(x + r, y, x + w - r, y); arc(x + w - r, y + r, -Math.PI / 2); seg(x + w, y + r, x + w, y + h - r); arc(x + w - r, y + h - r, 0);
+    seg(x + w - r, y + h, x + r, y + h); arc(x + r, y + h - r, Math.PI / 2); seg(x, y + h - r, x, y + r); arc(x + r, y + r, Math.PI);
+    pts.push(pts[0].slice()); return pts;
+  }
+  function flowGraph(tid, plain) {
+    const t = GEN_TOPICS[tid], f = FLOW[tid], m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
+    const add = (id, o) => { N[id] = Object.assign({ id, x: cx }, o); N[id].paths = [roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id), 1.6), roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id) + 7, 2.4)]; };
+    add('trigger', { text: f.trigger, kind: 'warn', y: 80, w: 580, h: 130 });
+    add('p1', { text: f.pain[0], kind: 'bad', y: 360, w: 580, h: 130 });
+    add('p2', { text: f.pain[1], kind: 'bad', y: 640, w: 580, h: 130 });
+    add('p3', { text: f.pain[2], kind: 'bad', y: 920, w: 580, h: 130 });
+    add('why', { text: f.why, kind: 'plain', y: 1200, w: 660, h: 130 });
+    add('cost', { text: week ? '$' + week.toLocaleString('en-US') + ' a week' : f.lost, sub: week ? 'Example numbers. Yours will differ.' : '', week, kind: 'bad', y: 1520, w: 640, h: 220, big: true });
+    add('fix', { text: plain ? f.fix : f.fixAI, kind: 'ai', y: 1900, w: 660, h: 150, star: true });
+    f.steps.forEach((s, i) => add('s' + (i + 1), { text: s, kind: 'plain', x: cx + (i - 1) * 300, y: 2230, w: 270, h: 170, small: true }));
+    add('check', { text: 'Checkpoint: ' + f.check, kind: 'ok', y: 2560, w: 680, h: 140 });
+    add('result', { text: 'Before: ' + f.before + '\nAfter: ' + f.after, kind: 'warn', y: 2860, w: 720, h: 230, double: true });
+    add('cta', { text: 'DM me\nAUDIT', kind: 'cta', y: 3260, w: 660, h: 300, cta: true });
+    [['trigger', 'p1', 'then'], ['p1', 'p2', 'so'], ['p2', 'p3', 'and'], ['p3', 'why', 'because'], ['why', 'cost', 'adds up to'], ['cost', 'fix', 'the fix'], ['fix', 's1', ''], ['fix', 's2', ''], ['fix', 's3', ''], ['s1', 'check', ''], ['s2', 'check', ''], ['s3', 'check', ''], ['check', 'result', 'so'], ['result', 'cta', 'next']].forEach(([a, b, label]) => {
+      const A = N[a], B = N[b], R = rng(hashStr(a + b)), x0 = A.x, y0 = A.y + A.h, x1 = B.x, y1 = B.y, mx = (x0 + x1) / 2 + (R() - 0.5) * 16, my = (y0 + y1) / 2;
+      E.push({ a, b, label, x0, y0, x1, y1, mx, my, seed: hashStr(a + b) });
+    });
+    return { N, E, title: plain ? f.title : f.titleAI, WW: 900, WH: 3600, week };
+  }
+  function flowFocus(plan) {
+    // for each scene, the board stops the camera visits (id list); step row is framed together
+    const per = [['_overview'], ['trigger', 'p1', 'p2', 'p3'], ['why'], ['cost'], ['fix', 's2', 'check', 'result'], ['cta']];
+    const G = plan.graph, W = VW, H = VH, key = [];
+    plan.scenes.forEach((sc, si) => {
+      const ids = per[si] || ['cta'], slice = sc.dur / ids.length;
+      ids.forEach((id, k) => {
+        let cx, cy, s;
+        if (id === '_overview') { s = (H * 0.5) / G.WH; cx = 450; cy = G.WH * 0.5 - (H * 0.14) / s; }
+        else if (id === 's2') { cx = 450; cy = G.N.s2.y + G.N.s2.h / 2; s = (W * 0.94) / 900; }
+        else { const n = G.N[id]; cx = n.x; cy = n.y + n.h / 2; s = Math.min(1.3, (W * 0.86) / n.w); }
+        key.push({ t: sc.start + k * slice, cx, cy, s, id, scene: si });
+      });
+    });
+    return key;
+  }
+  const lerp = (a, b, k) => a + (b - a) * k, easeIO = (x) => { x = clamp01(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+  function wrapLines(ctx, text, maxW) {
+    const out = [];
+    text.split('\n').forEach((para) => { let line = ''; para.split(/\s+/).forEach((w) => { const tst = line ? line + ' ' + w : w; if (line && ctx.measureText(tst).width > maxW) { out.push(line); line = w; } else line = tst; }); out.push(line); });
+    return out;
+  }
+  function drawPath(ctx, pts) { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); }
+  function drawFlow(ctx, plan, t, cache) {
+    const W = VW, H = VH, tt = Math.min(t, plan.total - 0.001), G = plan.graph, key = cache.key || (cache.key = flowFocus(plan));
+    let ki = 0; for (let i = 0; i < key.length; i++) if (tt >= key[i].t) ki = i;
+    const cur = key[ki], prev = key[Math.max(0, ki - 1)], p = ki === 0 ? 1 : easeIO((tt - cur.t) / 1.0);
+    const s = Math.exp(lerp(Math.log(prev.s), Math.log(cur.s), p)), cx = lerp(prev.cx, cur.cx, p) + Math.sin(tt * 0.7) * 5, cy = lerp(prev.cy, cur.cy, p) + Math.cos(tt * 0.6) * 5;
+    let si = plan.scenes.findIndex((x) => tt < x.end); if (si < 0) si = plan.scenes.length - 1;
+    const sc = plan.scenes[si], lt = tt - sc.start;
+    // background: near-black with a faint blue glow and dot grid
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
+    const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, 700); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(W / 2 - cx * s, H * 0.4 - cy * s); ctx.scale(s, s);
+    const lw = Math.max(3, 1.7 / s);
+    if (s > 0.45) { ctx.fillStyle = 'rgba(169,194,255,.09)'; const x0 = Math.floor((cx - W / s) / 60) * 60, x1 = cx + W / s, y0 = Math.floor((cy - H / s) / 60) * 60, y1 = cy + H / s; for (let x = x0; x < x1; x += 60) for (let y = y0; y < y1; y += 60) ctx.fillRect(x, y, 3, 3); }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // arrows
+    G.E.forEach((e) => {
+      const R = rng(e.seed); ctx.strokeStyle = 'rgba(233,237,247,.62)'; ctx.lineWidth = lw;
+      for (let pass = 0; pass < 2; pass++) { ctx.globalAlpha = pass ? 0.35 : 1; ctx.beginPath(); ctx.moveTo(e.x0 + (R() - 0.5) * 4, e.y0 + 2); ctx.quadraticCurveTo(e.mx + (R() - 0.5) * 18, e.my, e.x1 + (R() - 0.5) * 4, e.y1 - 4); ctx.stroke(); }
+      ctx.globalAlpha = 1; const ang = Math.atan2(e.y1 - e.my, e.x1 - e.mx);
+      ctx.beginPath(); ctx.moveTo(e.x1, e.y1 - 3); ctx.lineTo(e.x1 - Math.cos(ang - 0.45) * 22, e.y1 - 3 - Math.sin(ang - 0.45) * 22); ctx.moveTo(e.x1, e.y1 - 3); ctx.lineTo(e.x1 - Math.cos(ang + 0.45) * 22, e.y1 - 3 - Math.sin(ang + 0.45) * 22); ctx.stroke();
+      if (e.label) { ctx.font = '600 26px ' + HAND; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.textAlign = 'left'; ctx.fillText(e.label, e.mx + 18, e.my + 8); }
+    });
+    // boxes
+    const focusId = cur.id;
+    Object.values(G.N).forEach((n) => {
+      const [stroke, fill] = FK[n.kind], on = n.id === focusId || (focusId === 's2' && /^s\d$/.test(n.id)), pulse = on ? 0.6 + 0.4 * Math.sin(tt * 4) : 0;
+      ctx.save(); if (on) { ctx.shadowColor = stroke; ctx.shadowBlur = 28 + 14 * pulse; }
+      drawPath(ctx, n.paths[0]); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = lw * (on ? 1.5 : 1.1); ctx.stroke(); ctx.restore();
+      ctx.globalAlpha = 0.55; drawPath(ctx, n.paths[1]); ctx.strokeStyle = stroke; ctx.lineWidth = lw * 0.7; ctx.stroke(); ctx.globalAlpha = 1;
+      if (n.double) { const o = roughRectPts(n.x - n.w / 2 - 12, n.y - 12, n.w + 24, n.h + 24, 30, hashStr(n.id) + 21, 3); drawPath(ctx, o); ctx.strokeStyle = 'rgba(245,184,75,.8)'; ctx.lineWidth = lw * 1.2; ctx.stroke(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#eef2fb';
+      if (n.cta) {
+        ctx.font = '700 64px ' + HAND; ctx.fillText('DM me', n.x, n.y + 78); ctx.fillStyle = '#5b8cff'; ctx.shadowColor = 'rgba(91,140,255,.8)'; ctx.shadowBlur = 24; ctx.font = '800 112px "Inter Tight", ' + VFONT; ctx.fillText('AUDIT', n.x, n.y + 188); ctx.shadowBlur = 0;
+      } else if (n.big) {
+        const val = n.week ? Math.round(n.week * easeOut((si === 3 ? lt : (si > 3 ? 9 : 0)) / 1.8)) : 0;
+        ctx.font = (n.week ? '800 84px ' : '700 38px ') + (n.week ? '"Inter Tight", ' + VFONT : HAND); ctx.fillStyle = '#ff9a9a';
+        if (n.week) { ctx.fillText('$' + val.toLocaleString('en-US') + ' a week', n.x, n.y + 92); ctx.font = '600 28px ' + HAND; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText(n.sub, n.x, n.y + 170); }
+        else { ctx.font = '700 40px ' + HAND; wrapLines(ctx, n.text, n.w - 50).forEach((l, i, arr) => ctx.fillText(l, n.x, n.y + n.h / 2 + (i - (arr.length - 1) / 2) * 50)); }
+      } else {
+        const fs = n.small ? 31 : 38; ctx.font = '700 ' + fs + 'px ' + HAND; const lines = wrapLines(ctx, n.text, n.w - 46), lh = fs * 1.3;
+        lines.forEach((l, i) => ctx.fillText(l, n.x + (n.star ? 22 : 0), n.y + n.h / 2 + (i - (lines.length - 1) / 2) * lh));
+        if (n.star) { ctx.strokeStyle = '#a9c2ff'; ctx.lineWidth = lw; const sx = n.x - n.w / 2 + 44, sy = n.y + n.h / 2; for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4 + tt; ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * 9, sy + Math.sin(an) * 9); ctx.lineTo(sx + Math.cos(an) * 24, sy + Math.sin(an) * 24); ctx.stroke(); } }
+      }
+      ctx.textBaseline = 'alphabetic';
+    });
+    ctx.restore();
+    // title card over the overview (fades out as the camera dives in)
+    const tA = si === 0 ? 1 - easeOut((lt - (sc.dur - 0.9)) / 0.7) : 0;
+    if (tA > 0.01) {
+      ctx.globalAlpha = tA; ctx.textAlign = 'center'; ctx.fillStyle = '#f2f5fc'; ctx.font = '700 88px ' + HAND;
+      const lines = wrapLines(ctx, G.title, W - 120), y0 = 150; lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * 100));
+      const ly = y0 + (lines.length - 1) * 100 + 34, wl = Math.min(W - 160, ctx.measureText(lines[lines.length - 1]).width + 20), R = rng(11);
+      ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(W / 2 - wl / 2, ly); for (let k = 1; k <= 12; k++) ctx.lineTo(W / 2 - wl / 2 + wl * k / 12, ly + (R() - 0.5) * 8 + (k % 2 ? 3 : -3)); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    // brand + progress
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, W, 5); ctx.fillStyle = '#5b8cff'; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 5);
+    ctx.textAlign = 'left'; ctx.font = '700 22px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.55)'; ctx.fillText('REEKON SYSTEMS', 36, 52);
+    // karaoke captions
+    const cap = plan.caps || (plan.caps = karaoke(plan)), gy = ctx.createLinearGradient(0, H * 0.72, 0, H); gy.addColorStop(0, 'rgba(5,7,13,0)'); gy.addColorStop(0.45, 'rgba(5,7,13,.88)'); gy.addColorStop(1, 'rgba(5,7,13,.96)'); ctx.fillStyle = gy; ctx.fillRect(0, H * 0.72, W, H * 0.28);
+    let ci = 0; for (let i = 0; i < cap.chunks.length; i++) if (tt >= cap.chunks[i].t0) ci = i;
+    const ch = cap.chunks[ci];
+    if (ch && tt >= cap.chunks[0].t0 - 0.05) {
+      ctx.font = '800 50px "Inter Tight", ' + VFONT; const sp = ctx.measureText(' ').width, widths = ch.words.map((w) => ctx.measureText(w.w).width), total = widths.reduce((a, b) => a + b, 0) + sp * (ch.words.length - 1);
+      let x = (W - total) / 2; const y = H * 0.87; ctx.textAlign = 'left';
+      let wi = -1; ch.words.forEach((w, i) => { if (tt >= w.t) wi = i; });
+      ch.words.forEach((w, i) => {
+        if (i === wi) { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 12, y - 52, widths[i] + 24, 68, 16) : ctx.rect(x - 12, y - 52, widths[i] + 24, 68); ctx.fill(); }
+        ctx.fillStyle = i === wi ? '#ffffff' : 'rgba(255,255,255,.92)'; ctx.fillText(w.w, x, y); x += widths[i] + sp;
+      });
+    }
+    ctx.textAlign = 'center';
+  }
+  function karaoke(plan) {
+    const words = [];
+    plan.scenes.forEach((sc, i) => {
+      const ws = spoken(sc.vo).split(/\s+/).filter(Boolean), a = sc.start + (i === 0 ? plan.lead + 0.1 : 0.15), b = sc.end - (i === plan.scenes.length - 1 ? 0.7 : 0.25), span = Math.max(0.5, b - a);
+      ws.forEach((w, k) => words.push({ w, t: a + span * k / ws.length }));
+    });
+    const chunks = []; let cur = [];
+    words.forEach((w) => { cur.push(w); if (cur.length >= 4 || /[.!?]$/.test(w.w)) { chunks.push({ t0: cur[0].t, words: cur }); cur = []; } });
+    if (cur.length) chunks.push({ t0: cur[0].t, words: cur });
+    return { chunks };
+  }
   function videoMaker(tid, seed, plain, parent) {
     const v = genVideo(tid, seed, plain);
     const wrap = h('div', { class: 'vm' });
-    const voiceDur = VM.voice ? VM.voice.dur : 0, plan = vidPlan(tid, seed, plain, voiceDur);
+    const voiceDur = VM.voice ? VM.voice.dur : 0, plan = vidPlan(tid, seed, plain, voiceDur, VM.style);
     const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH });
-    drawFrame(prev.getContext('2d'), plan, plan.scenes[0].start + 1.7, {});
+    const pv = () => (plan.style === 'flow' ? drawFlow(prev.getContext('2d'), plan, plan.scenes[1].start + 1.4, {}) : drawFrame(prev.getContext('2d'), plan, plan.scenes[0].start + 1.7, {}));
+    pv(); try { document.fonts.load('700 40px Kalam').then(pv); } catch { /* ignore */ }
     const voiceBox = h('div', { class: 'cs-blk' });
     const drawVoice = () => {
       voiceBox.replaceChildren(...[
@@ -3008,6 +3161,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const teleprompter = h('div', { class: 'tele', hidden: true }, h('p', { class: 'dim small' }, 'Read this out loud:'), h('p', null, v.script));
     drawVoice();
     const sfxChips = h('div', { class: 'stagechips' }, [[true, 'Sound effects on'], [false, 'No sound effects']].map(([val, l]) => h('button', { class: 'schip' + (VM.sfx === val ? ' on' : ''), onclick: () => { VM.sfx = val; parent(); } }, l)));
+    const styleChips = h('div', { class: 'stagechips' }, [['flow', 'Flow map'], ['pulse', 'Heartbeat']].map(([k, l]) => h('button', { class: 'schip' + (VM.style === k ? ' on' : ''), onclick: () => { VM.style = k; vmClear(false); parent(); } }, l)));
     const bar = h('div', { class: 'vm-bar', hidden: true }, h('i'));
     const status = h('p', { class: 'dim small' });
     const genBtn = h('button', { class: 'btn primary big', onclick: async () => {
@@ -3026,8 +3180,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-' + tid + '.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[h('p', { class: 'dim small' }, 'Preview (the first scene). Your video gets animated text, a heartbeat line, sound effects and your voice.'), prev, voiceBox, teleprompter,
-      h('p', { class: 'dim small' }, '2. Sound'), sfxChips, h('p', { class: 'dim small' }, '3. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
+    wrap.append(...[h('p', { class: 'dim small' }, 'Preview. Flow map: a hand-drawn board the camera travels across, with captions that light up word by word.'), prev, voiceBox, teleprompter,
+      h('p', { class: 'dim small' }, '2. Look'), styleChips, h('p', { class: 'dim small' }, '3. Sound'), sfxChips, h('p', { class: 'dim small' }, '4. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
     return wrap;
   }
 
