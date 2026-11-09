@@ -2809,14 +2809,24 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     ['face', 'Film myself', 'A script you say to the camera', 'users'],
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
-  const CS = { business: (function () { try { return localStorage.getItem('rs_biz') || ''; } catch { return ''; } })(), step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
-  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false }); };
+  const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker']];
+  const CS = { business: (function () { try { return localStorage.getItem('rs_biz') || 'junk removal'; } catch { return 'junk removal'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const csReset = () => { vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
-  const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null };
+  const VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
+  // sizes for each place a video or picture is posted. capY/capW keep the captions where the apps do not cover them.
+  const VFMT = {
+    '9x16': { w: 720, h: 1280, label: 'Vertical 9:16', note: 'TikTok, Instagram Reels, YouTube Shorts, Facebook Reels, Stories', capY: 0.68, capW: 540, ph: { cx: 360, y: 270, w: 440, h: 620 }, bub: { x: 56, y: 112, w: 608 }, zones: [[0, 0, 1, 0.11, 'top bar'], [0, 0.78, 1, 0.22, 'name, caption and buttons'], [0.85, 0.42, 0.15, 0.36, 'like and share']] },
+    '4x5': { w: 720, h: 900, label: 'Portrait 4:5', note: 'Instagram and Facebook feed', capY: 0.84, capW: 620, ph: { cx: 360, y: 215, w: 330, h: 540 }, bub: { x: 50, y: 56, w: 620 }, zones: [] },
+    '1x1': { w: 720, h: 720, label: 'Square 1:1', note: 'Facebook, X and LinkedIn feed', capY: 0.85, capW: 620, ph: { cx: 360, y: 170, w: 250, h: 410 }, bub: { x: 50, y: 28, w: 620 }, zones: [] },
+    '16x9': { w: 1280, h: 720, label: 'Wide 16:9', note: 'X, LinkedIn and YouTube', capY: 0.86, capW: 1000, ph: { cx: 950, y: 28, w: 320, h: 566 }, bub: { x: 70, y: 0, w: 620 }, zones: [] },
+  };
+  let VW = 720, VH = 1280, VCAP = VFMT['9x16'];
+  const setFmt = (id) => { VCAP = VFMT[id] || VFMT['9x16']; VW = VCAP.w; VH = VCAP.h; };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null, fmt: '9x16', zones: false };
   const patchKey = (tid, seed) => tid + ':' + seed;
   const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
@@ -2978,7 +2988,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
   async function recordVideo(plan, voiceBuf, sfxOn, onProgress, hd) {
     try { await Promise.race([Promise.all([document.fonts.load('700 40px Kalam'), document.fonts.load('800 50px "Inter Tight"')]), new Promise((r) => setTimeout(r, 2500))]); } catch { /* fall back to system fonts */ }
-    const SC = hd ? 1.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(VW * SC); canvas.height = Math.round(VH * SC); const ctx = canvas.getContext('2d');
+    setFmt(VM.fmt); const SC = hd ? 1.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(VW * SC); canvas.height = Math.round(VH * SC); const ctx = canvas.getContext('2d');
     if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
     const dest = ac.createMediaStreamDestination(), out = ac.createGain(); out.gain.value = 1; out.connect(dest);
@@ -2993,7 +3003,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const done = new Promise((res) => { rec.onstop = res; });
     const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); };
     let bg = 0, lastVis = performance.now(), errN = 0;
-    const draw0 = drawFlow; draw(ctx, plan, 0, cache); rec.start(250);
+    const draw0 = VM.style === 'site' ? drawSite : drawFlow; draw(ctx, plan, 0, cache); rec.start(250);
     const start = performance.now() + 250;
     await new Promise((resolve) => {
       let fin = false, last = -1;
@@ -3059,7 +3069,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     return plan.scenes.map((sc, i) => {
       if (i === 0) { const s = (H * 0.5) / G.WH; return { t: sc.start, cx: 450, cy: G.WH * 0.5 - (H * 0.14) / s, s, id: null }; }
       const n = G.N['n' + i]; if (!n) return { t: sc.start, cx: 450, cy: G.WH, s: 0.5, id: null };
-      return { t: sc.start, cx: n.x, cy: n.y + n.h / 2, s: Math.min(1.3, (W * 0.86) / n.w, 560 / n.h), id: n.id };
+      return { t: sc.start, cx: n.x, cy: n.y + n.h / 2, s: Math.min(1.3, (W * 0.86) / n.w, (H * 0.44) / n.h), id: n.id };
     });
   }
   const lerp = (a, b, k) => a + (b - a) * k, easeIO = (x) => { x = clamp01(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
@@ -3122,19 +3132,127 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     }
     ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, W, 5); ctx.fillStyle = '#5b8cff'; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 5);
     ctx.textAlign = 'left'; ctx.font = '700 22px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.55)'; ctx.fillText('REEKON SYSTEMS', 36, 52);
-    const cap = plan.caps || (plan.caps = karaoke(plan)), gy = ctx.createLinearGradient(0, H * 0.72, 0, H); gy.addColorStop(0, 'rgba(5,7,13,0)'); gy.addColorStop(0.45, 'rgba(5,7,13,.88)'); gy.addColorStop(1, 'rgba(5,7,13,.96)'); ctx.fillStyle = gy; ctx.fillRect(0, H * 0.72, W, H * 0.28);
+    drawCaps(ctx, plan, tt);
+    ctx.textAlign = 'center';
+  }
+  // karaoke captions that always fit the picture: shrink first, then split into two lines, placed where the apps do not cover them
+  function drawCaps(ctx, plan, tt) {
+    const W = VW, H = VH, cap = plan.caps || (plan.caps = karaoke(plan)), cy = Math.round(H * VCAP.capY), maxW = VCAP.capW - 40;
     let ci = 0; for (let i = 0; i < cap.chunks.length; i++) if (tt >= cap.chunks[i].t0) ci = i;
     const ch = cap.chunks[ci];
-    if (ch && tt >= cap.chunks[0].t0 - 0.05) {
-      ctx.font = '800 50px "Inter Tight", ' + VFONT; const sp = ctx.measureText(' ').width, widths = ch.words.map((w) => ctx.measureText(w.w).width), total = widths.reduce((a, b) => a + b, 0) + sp * (ch.words.length - 1);
-      let x = (W - total) / 2; const y = H * 0.87; ctx.textAlign = 'left';
-      let wi = -1; ch.words.forEach((w, i) => { if (tt >= w.t) wi = i; });
-      ch.words.forEach((w, i) => {
-        if (i === wi) { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 12, y - 52, widths[i] + 24, 68, 16) : ctx.rect(x - 12, y - 52, widths[i] + 24, 68); ctx.fill(); }
-        ctx.fillStyle = i === wi ? '#ffffff' : 'rgba(255,255,255,.92)'; ctx.fillText(w.w, x, y); x += widths[i] + sp;
+    if (!ch || tt < cap.chunks[0].t0 - 0.05) return;
+    const gb = ctx.createLinearGradient(0, cy - 150, 0, cy + 120); gb.addColorStop(0, 'rgba(5,7,13,0)'); gb.addColorStop(0.3, 'rgba(5,7,13,.74)'); gb.addColorStop(0.7, 'rgba(5,7,13,.74)'); gb.addColorStop(1, 'rgba(5,7,13,0)'); ctx.fillStyle = gb; ctx.fillRect(0, cy - 150, W, 270);
+    const words = ch.words.map((w, i) => ({ w: w.w, i, t: w.t }));
+    const meas = (list, fs) => { ctx.font = '800 ' + fs + 'px "Inter Tight", ' + VFONT; const sp = ctx.measureText(' ').width, widths = list.map((x) => ctx.measureText(x.w).width); return { sp, widths, total: widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, list.length - 1) }; };
+    let fs = 50, m = meas(words, fs); while (m.total > maxW && fs > 38) { fs -= 2; m = meas(words, fs); }
+    let rows = [words]; if (m.total > maxW && words.length > 1) { const k = Math.ceil(words.length / 2); rows = [words.slice(0, k), words.slice(k)]; fs = 44; }
+    let wi = -1; ch.words.forEach((w, i) => { if (tt >= w.t) wi = i; });
+    const lh = Math.round(fs * 1.5), y0 = cy - ((rows.length - 1) * lh) / 2;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    rows.forEach((row, ri) => {
+      const mm = meas(row, fs); let x = (W - mm.total) / 2; const y = y0 + ri * lh;
+      row.forEach((w, k) => {
+        if (w.i === wi) { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 12, y - fs * 1.02, mm.widths[k] + 24, fs * 1.36, 16) : ctx.rect(x - 12, y - fs * 1.02, mm.widths[k] + 24, fs * 1.36); ctx.fill(); }
+        ctx.fillStyle = w.i === wi ? '#ffffff' : 'rgba(255,255,255,.93)'; ctx.fillText(w.w, x, y); x += mm.widths[k] + mm.sp;
       });
-    }
+    });
     ctx.textAlign = 'center';
+  }
+  // preview only: shows where TikTok, Reels and Shorts cover the picture
+  function drawZones(ctx) {
+    const W = VW, H = VH; ctx.save(); ctx.setLineDash([10, 8]); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.strokeRect(W * 0.05, H * 0.05, W * 0.9, H * 0.9); ctx.setLineDash([]);
+    (VCAP.zones || []).forEach(([x, y, w, h, lab]) => { ctx.fillStyle = 'rgba(255,60,80,.28)'; ctx.fillRect(W * x, H * y, W * w, H * h); ctx.fillStyle = '#fff'; ctx.font = '700 22px ' + VFONT; ctx.textAlign = 'center'; ctx.fillText(lab, W * (x + w / 2), H * (y + h / 2) + 8); });
+    ctx.restore();
+  }
+  const titleCase = (x) => String(x || '').replace(/\b\w/g, (c) => c.toUpperCase());
+  // faceless website video: a phone shows a business that is invisible on Google, then the site builds itself and a job lands
+  function drawSite(ctx, plan, t) {
+    const W = VW, H = VH, F = VCAP, tt = Math.min(Math.max(0, t), plan.total - 0.001);
+    let si = plan.scenes.findIndex((x) => tt < x.end); if (si < 0) si = plan.scenes.length - 1;
+    const sc = plan.scenes[si], lt = tt - sc.start, fixI = plan.scenes.findIndex((x) => x.kind === 'fix');
+    const bs = fixI >= 0 ? plan.scenes[fixI].start + 0.15 : plan.total * 0.45;
+    const endI = plan.scenes.findIndex((x, i) => i > fixI && (x.kind === 'result' || x.kind === 'cta'));
+    const be = Math.max(bs + 3, Math.min(bs + 12, (endI >= 0 ? plan.scenes[endI].start : plan.total) - 0.2));
+    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'junk removal'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
+    const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, Math.max(W, H) * 0.6); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    // phone
+    const P = F.ph, px = P.cx - P.w / 2, pa = cta ? 1 - 0.88 * easeOut(lt / 0.5) : 1;
+    ctx.save(); ctx.globalAlpha = pa; ctx.shadowColor = 'rgba(91,140,255,.35)'; ctx.shadowBlur = 40; rr(px, P.y, P.w, P.h, 46); ctx.fillStyle = '#0c1220'; ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = 4; ctx.strokeStyle = '#2a3552'; ctx.stroke();
+    const sx = px + 14, sy = P.y + 14, sw = P.w - 28, sh = P.h - 28, k = sw / 380, vh = sh / k;
+    rr(sx, sy, sw, sh, 34); ctx.clip(); ctx.fillStyle = '#f4f6fb'; ctx.fillRect(sx, sy, sw, sh); ctx.translate(sx, sy); ctx.scale(k, k);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    const SF = '-apple-system, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    if (tt < bs + 0.6) {
+      const fade = tt < bs ? 1 : 1 - easeOut((tt - bs) / 0.6); ctx.globalAlpha = pa * fade;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, vh);
+      rr(14, 20, 352, 46, 23); ctx.fillStyle = '#eef1f6'; ctx.fill();
+      const q = 'junk removal near me', nch = Math.min(q.length, Math.floor(tt * 12)); ctx.fillStyle = '#1c2330'; ctx.font = '600 17px ' + SF; ctx.fillText(q.slice(0, nch) + (nch < q.length && Math.floor(tt * 3) % 2 ? '|' : ''), 52, 49);
+      ctx.strokeStyle = '#5b6578'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(34, 42, 7, 0, 6.283); ctx.moveTo(39, 47); ctx.lineTo(45, 53); ctx.stroke();
+      const rows = [['Fast Haul Crew', '4.9 · Open 24 hours · Calls answered'], ['Same Day Junk Pros', '4.8 · Free estimates · Book online'], ['Clear It Out Hauling', '4.7 · Reviews · Quote in minutes']];
+      rows.forEach((r0, i) => { const a = easeOut((tt - 0.9 - i * 0.4) / 0.4); if (a <= 0) return; ctx.globalAlpha = pa * fade * a; const y = 96 + i * 88;
+        ctx.fillStyle = '#1a4fd1'; ctx.font = '700 18px ' + SF; ctx.fillText(r0[0], 18, y + 20); ctx.fillStyle = '#f5b84b'; ctx.fillText('★', 18, y + 44); ctx.fillStyle = '#5b6578'; ctx.font = '500 14px ' + SF; ctx.fillText(r0[1], 40, y + 44); ctx.fillStyle = '#e3e7ef'; ctx.fillRect(18, y + 58, 300, 7); });
+      const a3 = easeOut((tt - 2.4) / 0.5); if (a3 > 0) { ctx.globalAlpha = pa * fade * a3; const y = 96 + 3 * 88 + 6, pu = 0.6 + 0.4 * Math.sin(tt * 5); ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(229,72,77,' + (0.5 + 0.5 * pu) + ')'; ctx.lineWidth = 2.5; rr(14, y, 352, 92, 14); ctx.fillStyle = 'rgba(229,72,77,.07)'; ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#e5484d'; ctx.font = '800 19px ' + SF; ctx.fillText(biz.slice(0, 26), 28, y + 36); ctx.font = '700 16px ' + SF; ctx.fillText('Not on Google. Customers never see you.', 28, y + 62); }
+    }
+    if (tt >= bs) {
+      ctx.globalAlpha = pa; const sec = (n) => easeOut((tt - (bs + (be - bs) * n / 5)) / 0.7), tail = Math.max(0, 780 - vh);
+      const scroll = tail * easeIO((tt - bs - 0.9) / Math.max(1, be - bs - 0.9));
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, vh);
+      ctx.save(); ctx.translate(0, -scroll);
+      const blk = (n, fn) => { const e = sec(n); if (e <= 0) return; ctx.save(); ctx.globalAlpha = pa * e; ctx.translate(0, (1 - e) * 26); fn(); ctx.restore(); };
+      blk(0, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, 56); rr(16, 14, 28, 28, 8); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#0b1220'; ctx.font = '800 17px ' + SF; ctx.fillText(biz.toUpperCase().slice(0, 20), 54, 34); for (let i = 0; i < 3; i++) ctx.fillRect(338, 20 + i * 8, 24, 3); });
+      blk(1, () => { const g = ctx.createLinearGradient(0, 56, 0, 300); g.addColorStop(0, '#0b1a3a'); g.addColorStop(1, '#183a8c'); ctx.fillStyle = g; ctx.fillRect(0, 56, 380, 244); ctx.fillStyle = '#fff'; ctx.font = '800 34px ' + SF; ctx.fillText('Junk gone.', 24, 118); ctx.fillText('Same day.', 24, 158); ctx.fillStyle = '#cdd9ff'; ctx.font = '500 16px ' + SF; ctx.fillText('Free quote in 60 seconds.', 24, 190); rr(24, 214, 200, 50, 25); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText('Get my free quote', 48, 245); rr(236, 214, 120, 50, 25); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillText('Call now', 262, 245); });
+      blk(2, () => { ctx.fillStyle = '#f4f6fb'; ctx.fillRect(0, 300, 380, 82); ctx.fillStyle = '#0b1220'; ctx.font = '800 16px ' + SF; ctx.fillText(/junk|haul|remov/i.test(biz) ? 'What we haul' : 'What we do', 20, 326); const chips = /junk|haul|remov/i.test(biz) ? ['Furniture', 'Appliances', 'Yard waste', 'Cleanouts'] : ['Free quotes', 'Fast service', 'Fair prices', 'Local team']; let x = 20; ctx.font = '700 14px ' + SF; chips.forEach((c0) => { const w = ctx.measureText(c0).width + 24; rr(x, 340, w, 30, 15); ctx.fillStyle = '#e1e8fb'; ctx.fill(); ctx.fillStyle = '#1a3a8c'; ctx.fillText(c0, x + 12, 360); x += w + 8; }); });
+      blk(3, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 382, 380, 118); ctx.fillStyle = '#f5b84b'; ctx.font = '700 28px ' + SF; ctx.fillText('★★★★★', 20, 420); ctx.fillStyle = '#55607a'; ctx.font = '600 14px ' + SF; ctx.fillText('Your real Google reviews show here', 20, 446); ctx.fillStyle = '#e3e7ef'; ctx.fillRect(20, 462, 300, 7); ctx.fillRect(20, 478, 220, 7); });
+      blk(4, () => { ctx.fillStyle = '#eef2fb'; ctx.fillRect(0, 500, 380, 220); ctx.fillStyle = '#0b1220'; ctx.font = '800 20px ' + SF; ctx.fillText('Get a free quote', 20, 534);
+        const fields = [['Name', 'Jordan'], ['Phone', '(555) 010-0142'], ['What needs to go?', 'Couch and two mattresses']], t0 = bs + (be - bs) * 0.8; let typed = 0;
+        fields.forEach((f0, i) => { const y = 548 + i * 46; rr(20, y, 340, 38, 10); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#d3daea'; ctx.lineWidth = 1.5; ctx.stroke(); const n = Math.max(0, Math.floor((tt - t0 - typed * 0.5) * 16)); const txt = f0[1].slice(0, n); ctx.font = '600 15px ' + SF; ctx.fillStyle = txt ? '#0b1220' : '#8b95ab'; ctx.fillText(txt || f0[0], 32, y + 24); typed += 1; });
+        });
+      blk(4, () => { const t0 = bs + (be - bs) * 0.8, sent = tt > t0 + 2.2; rr(20, 692, 340, 44, 22); ctx.fillStyle = sent ? '#2fbf7a' : '#2f62ff'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText(sent ? '✓ Sent, we will call you' : 'Send', sent ? 82 : 160, 720); });
+      blk(4, () => { ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 744, 380, 60); ctx.fillStyle = '#fff'; ctx.font = '700 14px ' + SF; ctx.fillText('Open 24/7 · Free estimates · Call or text', 20, 780); });
+      ctx.restore();
+      const cb = sec(4); if (cb > 0) { ctx.save(); ctx.globalAlpha = pa * cb; ctx.translate(0, (1 - cb) * 20); rr(176, vh - 118, 188, 64, 18); ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = '#d3daea'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.fillStyle = '#0b1220'; ctx.font = '700 14px ' + SF; ctx.fillText('Hi! Need a free quote?', 190, vh - 80); ctx.fillStyle = '#5b6578'; ctx.font = '500 12px ' + SF; ctx.fillText('AI chat · replies in seconds', 190, vh - 62); ctx.restore(); }
+      const tz = (sc.kind === 'proof' || sc.kind === 'result' || tt > be + 0.4) ? easeOut(tt > be + 0.4 && sc.kind !== 'proof' && sc.kind !== 'result' ? (tt - be - 0.4) / 0.5 : lt / 0.5) : 0;
+      if (tz > 0 && !cta) { ctx.save(); ctx.globalAlpha = pa * tz; ctx.translate(0, -70 + 80 * tz); rr(18, 6, 344, 52, 16); ctx.fillStyle = '#16a05f'; ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 16; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText('✓ New job booked · 11:42 pm', 34, 38); ctx.restore(); }
+    }
+    ctx.restore();
+    // beat text card
+    const B = F.bub, kind = BEAT_STYLE[sc.kind] || 'plain', [stroke] = FK[kind] || FK.plain;
+    if (cta) {
+      const a = easeOut(lt / 0.4); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = '#eef2fb'; ctx.font = '700 64px ' + HAND; const mx = W > H ? W * 0.5 : W / 2, my = H * 0.3; ctx.fillText('DM me', mx, my);
+      ctx.fillStyle = '#5b8cff'; ctx.shadowColor = 'rgba(91,140,255,.8)'; ctx.shadowBlur = 26; ctx.font = '800 118px "Inter Tight", ' + VFONT; ctx.fillText('AUDIT', mx, my + 130); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    } else {
+      let text = si === 0 && plan.graph ? plan.graph.title : String(sc.text || '');
+      if (sc.kind === 'cost') { const e = easeOut(lt / 1.8); text = text.replace(/\$([\d,]+)/g, (m0, d) => '$' + Math.round(+d.replace(/,/g, '') * e).toLocaleString('en-US')); }
+      let fs = 42, lines; for (const f of [42, 38, 34, 30]) { fs = f; ctx.font = '700 ' + fs + 'px ' + HAND; lines = wrapLines(ctx, text, B.w - 56); if (lines.length <= 3) break; }
+      const bh = lines.length * fs * 1.3 + 40, a = easeOut(lt / 0.35), by = (W > H ? H * 0.42 - bh / 2 : B.y) + (1 - a) * -22;
+      ctx.globalAlpha = a; rr(B.x, by, B.w, bh, 24); ctx.fillStyle = 'rgba(7,10,20,.93)'; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 3.5; ctx.stroke();
+      ctx.fillStyle = sc.kind === 'cost' ? '#ff9a9a' : '#f2f5fc'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 ' + fs + 'px ' + HAND; lines.forEach((l, i) => ctx.fillText(l, B.x + B.w / 2, by + 20 + fs * 0.65 + i * fs * 1.3)); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, W, 5); ctx.fillStyle = '#5b8cff'; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 5);
+    ctx.textAlign = 'left'; ctx.font = '700 22px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.55)'; ctx.fillText('REEKON SYSTEMS', 36, 52);
+    drawCaps(ctx, plan, tt);
+    ctx.textAlign = 'center';
+  }
+  // picture card for a text post
+  function drawCard(ctx, W, H, lines, SC) {
+    ctx.setTransform(SC, 0, 0, SC, 0, 0); const u = Math.min(W, H) / 720, m = Math.round(Math.min(W, H) * 0.09), maxW = W - m * 2;
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
+    const rg = ctx.createRadialGradient(W * 0.5, H * 0.38, 20, W * 0.5, H * 0.38, Math.max(W, H) * 0.7); rg.addColorStop(0, 'rgba(91,140,255,.2)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(169,194,255,.09)'; for (let x = 24; x < W; x += 48) for (let y = 24; y < H; y += 48) ctx.fillRect(x, y, 3, 3);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = '700 ' + Math.round(22 * u) + 'px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText('REEKON SYSTEMS', m, m * 0.85 + 10 * u);
+    const head = lines[0] || 'Write your post lines here', rest = lines.slice(1), hf = '800 ', sans = '"Inter Tight", ' + VFONT, bottom = Math.round(110 * u), availH = H - m * 1.9 - bottom - m * 0.5;
+    let hs = Math.round(96 * u), HL, rs = Math.round(36 * u), RL;
+    const layoutAll = () => { ctx.font = hf + hs + 'px ' + sans; HL = wrapLines(ctx, head, maxW); ctx.font = '600 ' + rs + 'px ' + sans; RL = rest.map((r0) => wrapLines(ctx, r0, maxW - 44 * u)); return HL.length * hs * 1.1 + (rest.length ? 34 * u : 0) + RL.reduce((a, l) => a + l.length * rs * 1.3 + 14 * u, 0); };
+    let ch = layoutAll(); while ((ch > availH || HL.length > 4) && hs > 40 * u) { hs -= 4; if (rs > 26 * u && ch > availH) rs -= 1; ch = layoutAll(); }
+    let y = Math.max(m * 1.5, m * 1.2 + (availH - ch) / 2) + hs * 0.95;
+    ctx.font = hf + hs + 'px ' + sans; ctx.fillStyle = '#ffffff'; HL.forEach((l, i) => ctx.fillText(l, m, y + i * hs * 1.1));
+    const ly = y + (HL.length - 1) * hs * 1.1 + 18 * u, lw = Math.min(maxW, ctx.measureText(HL[HL.length - 1]).width), R = rng(7); ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 7 * u; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(m, ly); for (let k = 1; k <= 14; k++) ctx.lineTo(m + lw * k / 14, ly + (R() - 0.5) * 6 * u + (k % 2 ? 2 : -2) * u); ctx.stroke();
+    y = ly + 44 * u; ctx.font = '600 ' + rs + 'px ' + sans;
+    RL.forEach((ls) => { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.arc(m + 8 * u, y - rs * 0.3, 8 * u, 0, 6.283); ctx.fill(); ctx.fillStyle = 'rgba(238,242,251,.94)'; ls.forEach((l, i) => ctx.fillText(l, m + 44 * u, y + i * rs * 1.3)); y += ls.length * rs * 1.3 + 14 * u; });
+    const by = H - m * 0.9 - 8 * u, pw = 250 * u, ph = 64 * u; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, by - ph, pw, ph, ph / 2) : ctx.rect(m, by - ph, pw, ph); ctx.fillStyle = '#5b8cff'; ctx.fill(); ctx.fillStyle = '#04120a'; ctx.font = '800 ' + Math.round(30 * u) + 'px ' + sans; ctx.textBaseline = 'middle'; ctx.fillText('DM me AUDIT', m + 30 * u, by - ph / 2 + 2 * u);
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 ' + Math.round(22 * u) + 'px ' + sans; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText('AI for local businesses', m + pw + 26 * u, by - ph / 2 + 8 * u);
   }
   function karaoke(plan) {
     const words = [];
@@ -3168,12 +3286,25 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     if (VM.voice && VM.voice.sig && VM.voice.sig !== plan0.sig) VM.voice = null;
     let plan = VM.voice ? vidPlan(beats, title, VM.voice.dur) : plan0;
     const wrap = h('div', { class: 'vm' });
-    const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH });
-    const pv = () => { try { drawFlow(prev.getContext('2d'), plan, plan.scenes[Math.min(2, plan.scenes.length - 1)].start + 1.4, {}); } catch { /* preview only */ } };
+    setFmt(VM.fmt);
+    const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH, style: 'aspect-ratio:' + VW + '/' + VH + ';width:min(100%,' + (VW > VH ? 440 : 260) + 'px)' });
+    const pv = () => {
+      try {
+        setFmt(VM.fmt); const c = prev.getContext('2d'), fixS = plan.scenes.find((x) => x.kind === 'fix');
+        const resS = plan.scenes.find((x) => x.kind === 'result');
+        if (VM.style === 'site') drawSite(c, plan, resS ? Math.min(plan.total - 0.3, resS.start + 1.4) : fixS ? Math.min(plan.total - 0.3, fixS.start + 9) : plan.total * 0.8);
+        else drawFlow(c, plan, plan.scenes[Math.min(2, plan.scenes.length - 1)].start + 1.4, {});
+        if (VM.zones) drawZones(c);
+      } catch { /* preview only */ }
+    };
     pv(); try { document.fonts.load('700 40px Kalam').then(pv); } catch { /* ignore */ }
     const estSecs = Math.round(plan0.scenes.reduce((a, x) => a + wordCount(x.vo), 0) / 2.4);
     const chips = (cur, list, set) => h('div', { class: 'stagechips' }, list.map(([val, l]) => h('button', { class: 'schip' + (cur === val ? ' on' : ''), disabled: CS.busy, onclick: () => set(val) }, l)));
     const lenChips = chips(CS.secs, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']], (n) => { if (n !== CS.secs && opts.onLen) opts.onLen(n); });
+    const restyle = () => { vmClear(false); parent(); };
+    const styleChips = chips(VM.style, [['flow', 'Hand-drawn board'], ['site', 'Website demo']], (v) => { VM.style = v; restyle(); });
+    const fmtChips = chips(VM.fmt, Object.entries(VFMT).map(([k, f]) => [k, f.label]), (v) => { VM.fmt = v; restyle(); });
+    const zoneChips = chips(VM.zones, [[false, 'Hide'], [true, 'Show where the apps cover the video']], (v) => { VM.zones = v; parent(); });
     const hdChips = chips(VM.hd, [[false, 'Standard 720p (safest)'], [true, 'HD 1080p (can crash phones)']], (v) => { VM.hd = v; parent(); });
     const spChips = chips(VM.speed, [[0.95, 'Natural'], [0.85, 'Slower'], [1.05, 'Quicker']], (v) => { VM.speed = v; vmClear(true); parent(); });
     const sfxChips = chips(VM.sfx, [[true, 'Sound effects on'], [false, 'No sound effects']], (val) => { VM.sfx = val; parent(); });
@@ -3198,18 +3329,18 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         bar.hidden = false; status.textContent = 'Recording your video. Keep this screen open and on this page for about ' + Math.round(plan.total) + ' seconds.';
         const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { bar.firstChild.style.width = Math.round(p * 100) + '%'; }, VM.hd);
         if (!r.blob.size) throw new Error('The video came out empty. Try again.');
-        VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, secs: Math.round(plan.total) };
+        VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, secs: Math.round(plan.total), w: VFMT[VM.fmt].w, h: VFMT[VM.fmt].h };
         toast('Video ready'); VM.busy = false; parent();
       } catch (e) { VM.busy = false; fail(e); genBtn.disabled = false; bar.hidden = true; status.textContent = ''; }
     } }, VM.result ? 'Generate again' : 'Generate video');
-    const res = VM.result ? h('div', { class: 'cs-blk' }, h('video', { class: 'vm-video', src: VM.result.url, controls: true, playsinline: true, loop: true }),
+    const res = VM.result ? h('div', { class: 'cs-blk' }, h('video', { class: 'vm-video', src: VM.result.url, controls: true, playsinline: true, loop: true, style: 'aspect-ratio:' + VM.result.w + '/' + VM.result.h + ';width:min(100%,' + (VM.result.w > VM.result.h ? 460 : 300) + 'px)' }),
       h('p', { class: 'dim small' }, VM.result.secs + ' seconds · ' + (VM.result.blob.size / 1048576).toFixed(1) + ' MB · ' + VM.result.ext.toUpperCase()),
       h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: async () => {
         const file = new File([VM.result.blob], 'reekon-video-' + new Date().toISOString().slice(0, 10) + '.' + VM.result.ext, { type: VM.result.type });
         try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-video.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, bar, status, res, VM.result ? editBox() : null, more].filter(Boolean));
+    wrap.append(...[prev, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, bar, status, res, VM.result ? editBox() : null, more].filter(Boolean));
     return wrap;
   }
 
@@ -3258,7 +3389,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       h('div', { class: 'row wrap' }, h('a', { class: 'btn small', href: '#/calendar' }, 'See calendar'), h('button', { class: 'btn small primary', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Make another'))) : null);
 
     const applyIdea = (res) => {
-      CS.ideaN += 1; CS.idea = Object.assign({ kind: CS.fmt }, res); CS.topic = res.tid || 'missed'; CS.edits = {}; CS.posted = {};
+      CS.ideaN += 1; CS.idea = Object.assign({ kind: CS.fmt }, res); CS.topic = res.tid || 'missed'; CS.edits = {}; CS.posted = {}; CS.cardLines = null;
       if (CS.fmt === 'video') vmClear(true);
     };
     const quickIdea = () => {
@@ -3274,7 +3405,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       CS.chat.push({ role: 'user', text: text.trim() }); CS.busy = true; draw();
       try {
         const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
-        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business, secs: CS.secs });
+        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business, secs: CS.secs, offers: CS.offers });
         CS.chat.push({ role: 'bot', text: x.reply });
         if (x.business) { CS.business = x.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } }
         if (x.result && CS.step === 'edit') toast('Rewritten. Tap Generate video again.');
@@ -3289,18 +3420,46 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('p', { class: 'dim small' }, 'Want it different? Keep talking to the bot below.'));
     };
     const chatStep = () => {
-      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? Type the kind of business above first (junk removal, med spa, anything), then give me a rough idea or tap Surprise me.' });
+      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? The business is set to ' + (CS.business || 'junk removal') + ' (change it above any time). Pick the offers you want in it, then give me a rough idea or tap Surprise me.' });
       const biz = h('input', { class: 'ct-text', type: 'text', placeholder: 'Type of business, like junk removal', value: CS.business, style: 'min-height:0;padding:10px 12px' });
       biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } };
       const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
+      const offerRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'What should it sell? Tap every offer you want in it (or none and the bot picks).'),
+        h('div', { class: 'stagechips' }, [...OFFERS.map(([k, l]) => h('button', { class: 'schip' + (CS.offers.includes(k) ? ' on' : ''), disabled: CS.busy, onclick: () => { CS.offers = CS.offers.includes(k) ? CS.offers.filter((x) => x !== k) : CS.offers.concat(k); draw(); } }, l)),
+          h('button', { class: 'schip', disabled: CS.busy, onclick: () => { CS.offers = CS.offers.length === OFFERS.length ? [] : OFFERS.map((o) => o[0]); draw(); } }, CS.offers.length === OFFERS.length ? 'Clear all' : 'All offers')]));
       const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
       input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
       const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain that ' + (CS.business || 'small business') + ' owners hate the most' : t) }, t));
       return h('div', null,
-        bizRow, CS.fmt !== 'post' ? h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'How long?'), h('div', { class: 'stagechips' }, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']].map(([n, l]) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; draw(); } }, l)))) : null, ideaPreview(),
+        bizRow, offerRow, CS.fmt !== 'post' ? h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'How long?'), h('div', { class: 'stagechips' }, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']].map(([n, l]) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; draw(); } }, l)))) : null, ideaPreview(),
         h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? h('div', { class: 'bot-msg bot dim' }, 'Thinking…') : null),
         h('div', { class: 'stagechips' }, quick), input,
-        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', onclick: quickIdea }, 'Skip the chat')));
+        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', disabled: CS.busy, onclick: () => sendToBot('Surprise me with a fresh idea for ' + (CS.business || 'junk removal') + ' owners') }, 'Surprise me now')));
+    };
+    const CARD_FMT = { ig: '4x5', fb: '4x5', x: '16x9', li: '1x1', tt: '9x16', yt: '9x16' };
+    const cardTextFor = (I) => {
+      if (CS.cardLines != null) return CS.cardLines;
+      if (I.card && I.card.length) return I.card.join('\n');
+      return String(I.post || '').replace(/#\S+/g, '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x && x.length < 90).slice(0, 4).join('\n');
+    };
+    const cardBlock = (I) => {
+      const fid = CS.cardFmt || CARD_FMT[CS.plat] || '4x5', F = VFMT[fid];
+      const cv = h('canvas', { class: 'card-prev', width: F.w, height: F.h, style: 'aspect-ratio:' + F.w + '/' + F.h + ';width:min(100%,' + (F.w > F.h ? 460 : 300) + 'px)' });
+      const ta = h('textarea', { class: 'ct-text', rows: 5 }); ta.value = cardTextFor(I);
+      const linesOf = () => ta.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 6);
+      const paint = () => { try { drawCard(cv.getContext('2d'), F.w, F.h, linesOf(), 1); } catch { /* preview only */ } };
+      ta.oninput = () => { CS.cardLines = ta.value; paint(); };
+      paint(); try { document.fonts.load('700 40px Kalam').then(paint); document.fonts.load('800 50px "Inter Tight"').then(paint); } catch { /* ignore */ }
+      const save = h('button', { class: 'btn primary', onclick: async () => {
+        const big = document.createElement('canvas'); big.width = Math.round(F.w * 1.5); big.height = Math.round(F.h * 1.5); drawCard(big.getContext('2d'), F.w, F.h, linesOf(), 1.5);
+        const blob = await new Promise((res) => big.toBlob(res, 'image/png')); if (!blob) return toast('Could not make the picture', true);
+        const file = new File([blob], 'reekon-post-' + fid + '.png', { type: 'image/png' });
+        try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+        const a = h('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the picture');
+      } }, 'Save or share picture');
+      return h('div', { class: 'cs-blk' }, h('b', null, 'Picture for this post'), h('p', { class: 'dim small' }, 'A card with the best lines, ready to post with the text. One line per row. The first line is the big hook.'),
+        h('div', { class: 'stagechips' }, Object.entries(VFMT).map(([k, f]) => h('button', { class: 'schip' + (fid === k ? ' on' : ''), onclick: () => { CS.cardFmt = k; draw(); } }, f.label))),
+        h('p', { class: 'dim small' }, VFMT[fid].note), cv, ta, save);
     };
     const editStep = () => {
       const I = CS.idea, parts = [];
@@ -3318,7 +3477,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const ta = field(12, captionFor()), count = h('small', { class: 'dim' });
         const upd = () => { count.textContent = CS.plat === 'x' ? ta.value.length + ' / 280' : ta.value.length + ' characters'; count.style.color = CS.plat === 'x' && ta.value.length > 280 ? 'var(--bad)' : ''; };
         const oi = ta.oninput; ta.oninput = () => { oi(); upd(); }; upd();
-        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value), again);
+        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value), cardBlock(I), again);
       }
       return h('div', { class: 'cs-edit' }, doneBanner(), parts);
     };

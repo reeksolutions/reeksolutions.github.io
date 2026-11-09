@@ -1402,3 +1402,4 @@ html.nonav{--nav:0px}
 .bot-msg.bot{align-self:flex-start;background:var(--bg-2);border:1px solid var(--line-2)}
 .bot-msg.user{align-self:flex-end;background:var(--accent);color:#fff}
 .bot-idea{margin-bottom:12px}.bot-idea .btn.big{width:100%;margin:8px 0}
+.card-prev{border-radius:14px;border:1px solid var(--line-2);align-self:center;background:#05070d;display:block;margin:6px auto}
