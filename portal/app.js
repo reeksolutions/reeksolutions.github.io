@@ -1054,7 +1054,7 @@
     const openEditor = async (ev, presetDay, presetKind) => {
       const base = ev ? new Date(ev.starts_at) : new Date(presetDay + 'T09:00');
       const done = await sheet((box, close) => {
-        const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Glow Med Spa', value: ev ? ev.title : '' });
+        const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Torres Pavers', value: ev ? ev.title : '' });
         const kind = h('select', null, Object.entries(CAL_KIND).filter(([v]) => v !== 'posted' || (ev && ev.kind === 'posted')).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'audit') === v ? true : null }, t)));
         const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
         const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
@@ -1837,6 +1837,7 @@
     } }, 'Run one search now');
     const perNight = h('input', { id: 'auto-per', type: 'number', min: 1, max: 150, inputmode: 'numeric', value: cfg.per_night, oninput: (e) => { cfg.per_night = +e.target.value || 1; dirty(); } });
     const maxRev = h('input', { id: 'auto-rev', type: 'number', min: 0, max: 5000, inputmode: 'numeric', value: cfg.max_reviews, oninput: (e) => { cfg.max_reviews = +e.target.value || 0; dirty(); } });
+    const lowRev = h('input', { id: 'auto-lowrev', type: 'checkbox', checked: !!cfg.low_review_only, onchange: (e) => { cfg.low_review_only = e.target.checked; dirty(); } });
     const anySite = h('input', { id: 'auto-anysite', type: 'checkbox', checked: !!cfg.any_site, onchange: (e) => { cfg.any_site = e.target.checked; dirty(); } });
     const social = h('input', { id: 'auto-social', type: 'checkbox', checked: cfg.include_social, onchange: (e) => { cfg.include_social = e.target.checked; dirty(); } });
     const targetIn = h('input', { id: 'auto-target', type: 'number', min: 10, max: 2000, inputmode: 'numeric', value: cfg.target_ready, oninput: (e) => { cfg.target_ready = +e.target.value || 200; dirty(); } });
@@ -1845,25 +1846,25 @@
     const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
     const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
     const stockBar = h('div', { class: 'stockbar' },
-      h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh med spa leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
+      h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh backyard contractor leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
       h('div', { class: 'stk-track' }, h('i', { style: 'width:' + pct + '%' + (pct >= 100 ? ';background:var(--ok)' : '') })),
       h('div', { class: 'sub' }, d.usage.month.toLocaleString() + ' of ' + d.caps.month.toLocaleString() + ' searches used this month' + (d.both ? ' (Google ' + d.usage.google + ', TomTom ' + d.usage.tomtom + ' · auto-switches to TomTom near Google\'s free limit)' : '') + ((d.expanded || []).length ? ' · expanded into ' + d.expanded.length + ' more cities (latest: ' + d.expanded[d.expanded.length - 1] + ')' : '')));
     const cleanBtn = h('button', { class: 'btn block', style: 'margin-top:10px', onclick: async () => {
       try {
         const p = await api('POST', '/leads/cleanup', {});
-        if (!p.count) return toast('Nothing to remove. Every other lead has been worked or is a med spa.');
+        if (!p.count) return toast('Nothing to remove. Every other lead has been worked or is a backyard contractor.');
         const go = await sheet((box, close) => box.append(h('h2', null, 'Remove ' + p.count.toLocaleString() + ' old leads?'),
-          h('p', { class: 'sub' }, 'These are not med spas and nobody has called, noted or booked them. Med spa leads and anything you have worked stay' + (p.kept_touched ? ' (' + p.kept_touched + ' worked leads kept)' : '') + '. This cannot be undone.'),
+          h('p', { class: 'sub' }, 'These are not backyard contractors and nobody has called, noted or booked them. Backyard contractor leads and anything you have worked stay' + (p.kept_touched ? ' (' + p.kept_touched + ' worked leads kept)' : '') + '. This cannot be undone.'),
           h('div', { class: 'card', style: 'margin:10px 0' }, p.sample.map((x) => h('div', { class: 'sub' }, x.business + (x.city ? ' · ' + x.city : '')))),
           h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'Remove ' + p.count.toLocaleString()), h('button', { class: 'btn', onclick: () => close(false) }, 'Cancel'))));
         if (!go) return;
         const r = await api('POST', '/leads/cleanup', { confirm: true }); toast(r.removed.toLocaleString() + ' old leads removed'); again();
-      } catch (e) { fail(e); } } }, 'Remove old non-med-spa leads');
+      } catch (e) { fail(e); } } }, 'Remove old leads outside this niche');
     const runs = (d.runs || []).slice(0, 8);
-    const isMed = cfg.niches.some((n) => /med|botox|aesthetic|laser/i.test(n)) && cfg.any_site && cfg.per_night >= 20;
-    const medBtn = isMed ? null : h('button', { class: 'btn primary block', style: 'margin-bottom:12px', disabled: !d.ready, onclick: async () => {
-      try { await api('PUT', '/finder/auto', { enabled: true, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 20, max_reviews: 5000, any_site: true, include_social: true });
-        toast('Med spa mode on: 20 searches a night across LA. Leads appear in the morning'); again(); } catch (e) { fail(e); } } }, 'Med spa mode: LA, 20 searches a night, turn on');
+    const isBack = cfg.niches.some((n) => /backyard|hardscape|paver|turf|landscap|patio/i.test(n)) && cfg.low_review_only && cfg.per_night >= 20;
+    const medBtn = isBack ? null : h('button', { class: 'btn primary block', style: 'margin-bottom:12px', disabled: !d.ready, onclick: async () => {
+      try { await api('PUT', '/finder/auto', { enabled: true, focus: 'backyard contractor', niches: ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'], cities: ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Whittier, CA', 'Irvine, CA', 'Anaheim, CA'], per_night: 20, max_reviews: 30, any_site: false, low_review_only: true, include_social: true });
+        toast('Backyard contractor mode on: owner-operators with 30 or fewer reviews, 20 searches a night across LA. Leads appear in the morning'); again(); } catch (e) { fail(e); } } }, 'Backyard contractor mode: low-review owners, LA, turn on');
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
       h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
         h('div', { class: 'row', style: 'gap:8px' }, toggle)),
@@ -1879,11 +1880,12 @@
           h('div', { class: 'field' }, h('label', { for: 'auto-per' }, 'Searches per night'), perNight, h('span', { class: 'hint' }, 'Up to 20. Some daily searches are always saved for you.')),
           d.provider === 'google' ? h('div', { class: 'field' }, h('label', { for: 'auto-rev' }, 'Most Google reviews'), maxRev, h('span', { class: 'hint' }, 'Skip businesses with more reviews than this.')) : h('div')),
         h('div', { class: 'grid2' },
-          h('div', { class: 'field' }, h('label', { for: 'auto-target' }, 'Fresh leads to keep ready'), targetIn, h('span', { class: 'hint' }, 'It keeps searching each night until this many uncalled med spa leads are waiting.')),
+          h('div', { class: 'field' }, h('label', { for: 'auto-target' }, 'Fresh leads to keep ready'), targetIn, h('span', { class: 'hint' }, 'It keeps searching each night until this many uncalled backyard contractor leads are waiting.')),
           h('div', { class: 'field' }, h('label', { for: 'auto-cap' }, 'Searches allowed per month'), capIn, h('span', { class: 'hint' }, d.provider === 'google' ? 'Google gives about 900 free a month. Searches past that cost roughly 3 to 4 cents each.' : 'TomTom gives about 1,100 free a month here. Past that your plan may charge.'))),
         h('label', { class: 'check' }, expandBox, ' Expand to new cities and states on its own when these run dry'),
-        h('label', { class: 'check' }, purgeBox, ' Each night, delete untouched leads that are not med spas'),
-        h('label', { class: 'check' }, anySite, ' Include businesses that already have a website (use for med spas, gyms, insurance)'),
+        h('label', { class: 'check' }, purgeBox, ' Each night, delete untouched leads that are not backyard contractors'),
+        h('label', { class: 'check' }, lowRev, ' Only owner-operators with few reviews (keeps them whether or not they have a website)'),
+        h('label', { class: 'check' }, anySite, ' Include any business with a phone number, any review count'),
         cfg.any_site ? h('p', { class: 'sub', style: 'margin:4px 0 8px' }, 'On: the bot adds any business with a phone number, ignores the review limit, and files them under New instead of Demo needed.') : h('label', { class: 'check' }, social, ' Include businesses that only have a Facebook or Instagram page'),
         h('div', { class: 'row', style: 'justify-content:flex-end;margin-top:8px' }, save)),
       h('div', { class: 'auto-runs' },
@@ -2356,48 +2358,48 @@
 
   /* ================= content system (from the notes: problem / demo / audit / result) ================= */
   const CONTENT_TYPES = [
-    { id: 'problem', name: 'Problem post', job: 'Show where med spas are losing money right now.', visual: 'Text card or screenshot: one big number or one sentence on a dark background. No face needed.' },
+    { id: 'problem', name: 'Problem post', job: 'Show where backyard contractors are losing money right now.', visual: 'Text card or screenshot: one big number or one sentence on a dark background. No face needed.' },
     { id: 'demo', name: 'Demo post', job: 'Show the AI actually working.', visual: 'Screen recording on your phone: the AI receptionist answering a call, or the missed-call text going out. 15–30 seconds.' },
-    { id: 'audit', name: 'Audit post', job: 'Break down a med spa\'s front desk and show what you would fix.', visual: 'Screenshot of a public Google listing (hours, phone, reviews) with arrows and 3 fixes. Blur the name if you haven\'t asked permission.' },
+    { id: 'audit', name: 'Audit post', job: 'Break down a backyard contractor\'s office and show what you would fix.', visual: 'Screenshot of a public Google listing (hours, phone, reviews) with arrows and 3 fixes. Blur the name if you haven\'t asked permission.' },
     { id: 'result', name: 'Result post', job: 'Show the wins.', visual: 'Screenshot of your own scorecard (dials, audits booked) until you have client results. Never invent a client result.' },
   ];
   const CTA = {
-    ig: 'Own a med spa? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your front desk.',
-    fb: 'Own a med spa? Send me a message with the word AUDIT and I\'ll run a free 30-minute AI audit of your front desk.',
-    tt: 'Own a med spa? DM me AUDIT for a free AI audit.',
-    yt: 'Own a med spa? DM me AUDIT for a free 30-minute AI audit.',
-    x: 'Own a med spa? DM me "AUDIT" for a free 30-min AI audit.',
-    li: 'If you run a med spa and want a free 30-minute AI audit of your front desk, send me a message.' };
-  const TAGS = '#medspa #medspamarketing #aesthetics #botox #aiautomation #smallbusiness';
-  const TAGSBY = { ig: TAGS, fb: '', tt: '#medspa #aiautomation #smallbusiness #businesstips', yt: '#shorts #medspa #aiautomation', x: '', li: '#medspa #aiautomation #smallbusiness' };
+    ig: 'Own a backyard contractor? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your office.',
+    fb: 'Own a backyard contractor? Send me a message with the word AUDIT and I\'ll run a free 30-minute AI audit of your office.',
+    tt: 'Own a backyard contractor? DM me AUDIT for a free AI audit.',
+    yt: 'Own a backyard contractor? DM me AUDIT for a free 30-minute AI audit.',
+    x: 'Own a backyard contractor? DM me "AUDIT" for a free 30-min AI audit.',
+    li: 'If you run a backyard contractor and want a free 30-minute AI audit of your office, send me a message.' };
+  const TAGS = '#backyard #hardscape #landscaping #pavers #aiautomation #smallbusiness';
+  const TAGSBY = { ig: TAGS, fb: '', tt: '#backyard #aiautomation #smallbusiness #businesstips', yt: '#shorts #backyard #aiautomation', x: '', li: '#backyard #aiautomation #smallbusiness' };
   const CONTENT_LIB = {
     problem: [
-      { hook: 'Where med spas lose the most money',
-        ig: 'Most med spas don\'t lose clients to a competitor.\n\nThey lose them to a phone that rings and nobody picks up.\n\nThe front desk is with a patient. It\'s after 5pm. It\'s lunch. The caller books somewhere else in under 5 minutes.\n\nExample math (yours will differ): 10 missed calls a week × 3 that would have booked × $400 treatment = $1,200 a week walking out the door.',
-        x: 'Med spas rarely lose clients to competitors.\n\nThey lose them to a phone nobody answers after 5pm.\n\nExample: 3 missed bookings a week x $400 = $1,200/week gone.',
-        li: 'The most expensive problem I see in med spas isn\'t marketing. It\'s the phone.\n\nA caller who reaches voicemail rarely leaves a message. They call the next spa on Google.\n\nIllustrative math, not a statistic: if 3 missed calls a week would have booked a $400 treatment, that\'s about $1,200 a week and over $60,000 a year.\n\nThe fix is simple: every call answered, every missed call texted back within a minute.' },
+      { hook: 'Where backyard contractors lose the most money',
+        ig: 'Most backyard contractors don\'t lose clients to a competitor.\n\nThey lose them to a phone that rings and nobody picks up.\n\nYou are on a job site. It\'s after 5pm. It\'s lunch. The caller books somewhere else in under 5 minutes.\n\nExample math (yours will differ): 10 missed calls a week × 3 that would have booked × $400 job = $1,200 a week walking out the door.',
+        x: 'Backyard contractors rarely lose clients to competitors.\n\nThey lose them to a phone nobody answers after 5pm.\n\nExample: 3 missed bookings a week x $400 = $1,200/week gone.',
+        li: 'The most expensive problem I see in backyard contractors isn\'t marketing. It\'s the phone.\n\nA caller who reaches voicemail rarely leaves a message. They call the next contractor on Google.\n\nIllustrative math, not a statistic: if 3 missed calls a week would have booked a $400 job, that\'s about $1,200 a week and over $60,000 a year.\n\nThe fix is simple: every call answered, every missed call texted back within a minute.' },
       { hook: 'The 5pm problem',
-        ig: 'Think about when people look up a med spa.\n\nEvenings. Weekends. On their phone after work.\n\nThat\'s exactly when most front desks are closed.\n\nSo the person who was ready to book a consult tonight gets voicemail and books with whoever answers.',
-        x: 'People search for med spas at night and on weekends.\n\nMost front desks are closed then.\n\nWhoever answers first gets the booking.',
-        li: 'Most med spa searches happen outside business hours. Most med spa phones go to voicemail outside business hours.\n\nThat gap is where bookings quietly leak.\n\nAn AI receptionist that answers, answers basic questions and books the consult closes that gap without adding staff.' },
+        ig: 'Think about when people look up a backyard contractor.\n\nEvenings. Weekends. On their phone after work.\n\nThat\'s exactly when most offices are closed.\n\nSo the person who was ready to book an estimate tonight gets voicemail and books with whoever answers.',
+        x: 'People search for backyard contractors at night and on weekends.\n\nMost offices are closed then.\n\nWhoever answers first gets the booking.',
+        li: 'Most backyard contractor searches happen outside business hours. Most backyard contractor phones go to voicemail outside business hours.\n\nThat gap is where bookings quietly leak.\n\nAn AI receptionist that answers, answers basic questions and books the estimate closes that gap without adding staff.' },
       { hook: 'Speed to lead: who replies first wins',
         ig: `A new customer fills out a form at 7pm.
 
-If nobody replies until tomorrow, they've already messaged two other spas.
+If nobody replies until tomorrow, they've already messaged two other contractors.
 
 The business that answers in under a minute usually gets the booking. That's not luck, it's just speed.
 
 An AI can reply in seconds, ask the right questions, and offer a time. Every night. Every weekend.`,
         x: `A lead fills out a form at 7pm.
 
-The spa that replies first usually wins.
+The contractor who replies first usually wins.
 
 AI replies in seconds, even at 2am.`,
         li: `Speed to lead is one of the cheapest wins in a service business. A new inquiry that gets a reply in a minute is far more likely to book than one that waits until morning.
 
 An AI can respond instantly, qualify the inquiry and offer times, without anyone staying late.` },
       { hook: 'Your past clients are your cheapest revenue',
-        ig: `Every med spa has a list of clients who came once or twice and never came back.
+        ig: `Every backyard contractor has a list of clients who came once or twice and never came back.
 
 They already trust you. They just haven't heard from you in a while.
 
@@ -2409,57 +2411,57 @@ Example math (yours will differ): 200 quiet clients × 5% rebook × $300 = $3,00
 They just haven't heard from you in 6 months.
 
 Example: 200 quiet clients x 5% x $300 = $3,000.`,
-        li: `The cheapest new revenue in a med spa is often sitting in the client list: people who visited once or twice and drifted away.
+        li: `The cheapest new revenue in a backyard contractor is often sitting in the client list: people who visited once or twice and drifted away.
 
 A simple, friendly follow-up to lapsed clients costs almost nothing and requires no new advertising.
 
 Illustrative math, not a statistic: 200 quiet clients, 5% rebook, $300 each, about $3,000.` },
     ],
     demo: [
-      { hook: 'Watch an AI receptionist book a consult',
-        ig: 'This is what happens when a patient calls a med spa at 7pm.\n\nThe AI answers on the first ring, answers questions about Botox and fillers, and books the consult into the calendar.\n\nNo voicemail. No missed lead. The front desk wakes up to a full schedule.',
-        x: '7pm. A patient calls a med spa.\n\nThe AI answers, answers questions, books the consult.\n\nNo voicemail. No lost lead.',
-        li: 'A short demo of an AI voice receptionist handling an after-hours call for a med spa: greeting, treatment questions, and booking a consult.\n\nThe point isn\'t the technology. It\'s that the caller never hit voicemail.' },
+      { hook: 'Watch an AI receptionist book an estimate',
+        ig: 'This is what happens when a homeowner calls a backyard contractor at 7pm.\n\nThe AI answers on the first ring, answers questions about pavers, turf and patios, and books the estimate into the calendar.\n\nNo voicemail. No missed lead. The office wakes up to a full schedule.',
+        x: '7pm. A homeowner calls a backyard contractor.\n\nThe AI answers, answers questions, books the estimate.\n\nNo voicemail. No lost lead.',
+        li: 'A short demo of an AI voice receptionist handling an after-hours call for a backyard contractor: greeting, project questions, and booking an estimate.\n\nThe point isn\'t the technology. It\'s that the caller never hit voicemail.' },
       { hook: 'The missed-call text-back',
-        ig: 'A call goes unanswered.\n\n60 seconds later the patient gets a text: "Sorry we missed you, want to book a consult? Here\'s our link."\n\nMost people reply to a text faster than they return a voicemail.',
+        ig: 'A call goes unanswered.\n\n60 seconds later the homeowner gets a text: "Sorry we missed you, want to book an estimate? Here\'s our link."\n\nMost people reply to a text faster than they return a voicemail.',
         x: 'Missed call.\n\n60 seconds later: an automatic text with a booking link.\n\nPeople answer texts faster than they check voicemail.',
         li: 'Missed-call text-back in action: a call goes unanswered and the caller gets a friendly text with a booking link within a minute.\n\nIt turns a lost call into a conversation.' },
-      { hook: 'AI answers while your front desk is busy',
-        ig: `The front desk is checking a patient in. The phone rings. Nobody can get it.
+      { hook: 'AI answers while your office is busy',
+        ig: `You are on a roof deck with both hands full. The phone rings. Nobody can get it.
 
-An AI receptionist picks up, answers the common questions (hours, prices, what to expect) and books the consult.
+An AI receptionist picks up, answers the common questions (hours, prices, what to expect) and books the estimate.
 
-The front desk keeps doing the work only a human can do.`,
-        x: `Front desk is with a patient. Phone rings.
+The office keeps doing the work only a human can do.`,
+        x: `You are on a job site. Phone rings.
 
-AI picks up, answers questions, books the consult.
+AI picks up, answers questions, books the estimate.
 
 Humans handle humans. AI handles the phone.`,
-        li: `The busiest moments in a med spa are exactly when the phone goes unanswered.
+        li: `The busiest moments in a backyard contractor are exactly when the phone goes unanswered.
 
-An AI receptionist covers those moments: it answers common questions, books consults and passes anything unusual to a person. It supports the front desk instead of replacing it.` },
+An AI receptionist covers those moments: it answers common questions, books estimates and passes anything unusual to a person. It supports the office instead of replacing it.` },
       { hook: 'Website chatbot: the 24/7 front door',
-        ig: `Most people check a med spa's website at night on their phone.
+        ig: `Most people check a backyard contractor's website at night on their phone.
 
-A chatbot that answers "how much is filler?" and "do you have anything Saturday?" turns that visit into a booking.
+A chatbot that answers "how much is a turf lawn?" and "do you have anything Saturday?" turns that visit into a booking.
 
-No waiting for the front desk to open.`,
-        x: `People browse med spa sites at night.
+No waiting for the office to open.`,
+        x: `People browse backyard contractor sites at night.
 
-A chatbot that answers questions and books the consult turns a visit into an appointment.`,
-        li: `A website that only displays information is a brochure. A website with an AI assistant that answers questions and books consults is a front door that never closes.
+A chatbot that answers questions and books the estimate turns a visit into an appointment.`,
+        li: `A website that only displays information is a brochure. A website with an AI assistant that answers questions and books estimates is a front door that never closes.
 
 For businesses that get evening and weekend traffic, that difference shows up in the calendar.` },
     ],
     audit: [
-      { hook: 'I audited a med spa\'s front desk in 10 minutes',
-        ig: 'I looked at one med spa\'s Google listing for 10 minutes. Here\'s what I\'d fix:\n\n1. Phone goes to voicemail after 5pm\n2. No instant reply to new inquiries\n3. Old clients never get a "we miss you" message\n\nNone of it needs more staff. It needs a system.',
-        x: 'Audited a med spa\'s front desk in 10 minutes.\n\nFixes:\n1. After-hours calls answered\n2. Instant reply to inquiries\n3. Message past clients\n\nNo new staff needed.',
-        li: 'I spent ten minutes reviewing a med spa\'s public presence. Three fixes stood out: after-hours calls, response speed to new inquiries, and reactivating past clients.\n\nNone of them need more staff. They need a system that runs without anyone remembering to do it.' },
-      { hook: 'Three questions to ask your front desk today',
-        ig: 'Ask your front desk three questions today:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to a new inquiry?\n3. When did we last message clients who haven\'t booked in 6 months?\n\nIf nobody knows the answers, that\'s where the money is.',
-        x: 'Ask your front desk:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to new inquiries?\n3. When did we last message lapsed clients?\n\nIf nobody knows, that\'s the leak.',
-        li: 'Three questions every med spa owner should be able to answer: how many calls we missed this week, how quickly we respond to a new inquiry, and when we last contacted clients who haven\'t booked in six months.\n\nIf the answers aren\'t known, that is usually where revenue is leaking.' },
+      { hook: 'I audited a backyard contractor\'s office in 10 minutes',
+        ig: 'I looked at one backyard contractor\'s Google listing for 10 minutes. Here\'s what I\'d fix:\n\n1. Phone goes to voicemail after 5pm\n2. No instant reply to new inquiries\n3. Old clients never get a "we miss you" message\n\nNone of it needs more staff. It needs a system.',
+        x: 'Audited a backyard contractor\'s office in 10 minutes.\n\nFixes:\n1. After-hours calls answered\n2. Instant reply to inquiries\n3. Message past clients\n\nNo new staff needed.',
+        li: 'I spent ten minutes reviewing a backyard contractor\'s public presence. Three fixes stood out: after-hours calls, response speed to new inquiries, and reactivating past clients.\n\nNone of them need more staff. They need a system that runs without anyone remembering to do it.' },
+      { hook: 'Three questions to ask your office today',
+        ig: 'Ask your office three questions today:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to a new inquiry?\n3. When did we last message clients who haven\'t booked in 6 months?\n\nIf nobody knows the answers, that\'s where the money is.',
+        x: 'Ask your office:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to new inquiries?\n3. When did we last message lapsed clients?\n\nIf nobody knows, that\'s the leak.',
+        li: 'Three questions every backyard contractor owner should be able to answer: how many calls we missed this week, how quickly we respond to a new inquiry, and when we last contacted clients who haven\'t booked in six months.\n\nIf the answers aren\'t known, that is usually where revenue is leaking.' },
       { hook: 'Call your own business at 7pm',
         ig: `Try this tonight: call your own business at 7pm like a customer would.
 
@@ -2501,11 +2503,11 @@ Each is a small friction point, and together they decide who gets the booking.` 
       { hook: 'Day-by-day scorecard',
         ig: 'Day {day} of 30 building my AI agency in public.\n\nDials today: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nNo shortcuts. Inputs drive outputs.',
         x: 'Day {day} of 30.\n\nDials: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nInputs drive outputs.',
-        li: 'Day {day} of a 30-day push to prove an AI front-desk offer for med spas.\n\nToday: {dials} dials, {talks} conversations, {demos} audits booked.\n\nBuilding in public, and the numbers stay honest.' },
+        li: 'Day {day} of a 30-day push to prove an AI front-desk offer for backyard contractors.\n\nToday: {dials} dials, {talks} conversations, {demos} audits booked.\n\nBuilding in public, and the numbers stay honest.' },
       { hook: 'What I learned this week',
-        ig: 'Week of calling med spas, what I learned:\n\n• Front desks are busiest right before lunch\n• The owner usually picks up after 4pm\n• "We already have someone" usually means "we miss calls and don\'t know it"\n\nDials this week: {week}',
-        x: 'A week of cold calling med spas:\n\n- Owners pick up more after 4pm\n- "We have someone" often means they miss calls and don\'t know it\n\nDials this week: {week}',
-        li: 'A week of calling med spas taught me a few things: owners are easier to reach late in the afternoon, and "we already have someone covering the phones" often means missed calls nobody is counting.\n\nDials this week: {week}.' },
+        ig: 'Week of calling backyard contractors, what I learned:\n\n• Offices are busiest right before lunch\n• The owner usually picks up after 4pm\n• "We already have someone" usually means "we miss calls and don\'t know it"\n\nDials this week: {week}',
+        x: 'A week of cold calling backyard contractors:\n\n- Owners pick up more after 4pm\n- "We have someone" often means they miss calls and don\'t know it\n\nDials this week: {week}',
+        li: 'A week of calling backyard contractors taught me a few things: owners are easier to reach late in the afternoon, and "we already have someone covering the phones" often means missed calls nobody is counting.\n\nDials this week: {week}.' },
       { hook: 'Inputs, not outcomes',
         ig: `Day {day} of 30.
 
@@ -2550,8 +2552,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const DV_STYLES = { A: 'Flow map', B: 'Text thread', C: 'Money counter' };
   const DV_TOPICS = {
     missed: { name: 'Missed calls after 5', hook: 'Losing $1,200 a week to missed calls',
-      cap: { ig: 'A customer calls at 6:42 PM. The front desk is closed. Voicemail. She books your competitor.\n\nThree of those a week at $400 each is $1,200 a week walking out the door.\n\nThe fix: an AI receptionist that answers on the first ring and books the appointment.\n\n(Example numbers. Yours will differ.)', x: 'Customer calls at 6:42 PM. Voicemail. She books your competitor.\n\n3 a week x $400 = $1,200/week gone.\n\nAI answers on ring one and books it.\n\n(Example numbers)', li: 'A customer calls after hours, reaches voicemail and books a competitor. Three of those a week at $400 each is about $1,200 a week.\n\nAn AI receptionist that answers every call and books the appointment closes that gap.\n\n(Illustrative numbers, not a statistic.)' },
-      vo: { hook: "Your business could be losing twelve hundred dollars a week. Here's where it leaks.", problem: "It's Tuesday, six forty-two PM. A customer finds you on Google and calls. Your front desk is closed. It rings, then goes to voicemail. She doesn't leave a message. She books your competitor instead. That's about four hundred dollars, gone.", cost: "Say that happens three times a week. Three bookings, four hundred dollars each. That's twelve hundred a week. Over a year, over sixty-two thousand dollars walking out the door.", fix: "Now, same call. But an AI receptionist picks up on the first ring. It answers her questions and books her appointment for seven thirty, right on your calendar. She shows up, and you keep the four hundred." } },
+      cap: { ig: 'A customer calls at 6:42 PM. The office is closed. Voicemail. She books your competitor.\n\nThree of those a week at $400 each is $1,200 a week walking out the door.\n\nThe fix: an AI receptionist that answers on the first ring and books the appointment.\n\n(Example numbers. Yours will differ.)', x: 'Customer calls at 6:42 PM. Voicemail. She books your competitor.\n\n3 a week x $400 = $1,200/week gone.\n\nAI answers on ring one and books it.\n\n(Example numbers)', li: 'A customer calls after hours, reaches voicemail and books a competitor. Three of those a week at $400 each is about $1,200 a week.\n\nAn AI receptionist that answers every call and books the appointment closes that gap.\n\n(Illustrative numbers, not a statistic.)' },
+      vo: { hook: "Your business could be losing twelve hundred dollars a week. Here's where it leaks.", problem: "It's Tuesday, six forty-two PM. A customer finds you on Google and calls. Your office is closed. It rings, then goes to voicemail. She doesn't leave a message. She books your competitor instead. That's about four hundred dollars, gone.", cost: "Say that happens three times a week. Three bookings, four hundred dollars each. That's twelve hundred a week. Over a year, over sixty-two thousand dollars walking out the door.", fix: "Now, same call. But an AI receptionist picks up on the first ring. It answers her questions and books her appointment for seven thirty, right on your calendar. She shows up, and you keep the four hundred." } },
     slow: { name: 'Slow replies lose the job', hook: 'The first to reply wins',
       cap: { ig: 'A new inquiry comes in at 7 PM. Nobody sees it until morning. By then she has hired someone who replied in minutes.\n\nTwo cold leads a week at $500 each is $1,000 a week.\n\nThe fix: an AI that replies in seconds, asks the right questions and books the visit.\n\n(Example numbers. Yours will differ.)', x: 'New inquiry at 7 PM. No reply until morning. She already hired someone else.\n\n2 leads a week x $500 = $1,000/week.\n\nAI replies in 20 seconds.\n\n(Example numbers)', li: 'A new inquiry that waits until morning has usually gone to whoever replied first. Two lost jobs a week at $500 each is about $1,000 a week.\n\nAn AI that replies in seconds, asks the right questions and books the visit fixes the delay.\n\n(Illustrative numbers, not a statistic.)' },
       vo: { hook: "The first business to reply usually wins. Slow replies lose the job.", problem: "It's seven PM. A new customer fills out your form and asks for a quote. Nobody sees it tonight. Fourteen hours go by with no reply. By morning, she's already hired someone else. That's about five hundred dollars, gone.", cost: "Two leads a week going cold, at five hundred dollars each, is a thousand dollars every week. Over a year, that's fifty-two thousand dollars going to whoever replied first.", fix: "Now, same inquiry. An AI replies in twenty seconds, asks the right questions, and books the visit for Tuesday morning. You wake up to a booking you would have lost." } },
@@ -2593,59 +2595,59 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   /* ================= content generator v2: topic x stage x platform, all free and in the CRM ================= */
   const GEN_TOPICS = {
     missed: { name: 'Missed calls',
-      hooks: ['Your phone just cost you a booking.', 'Nobody leaves a voicemail anymore.', 'Where your med spa bleeds money: the phone.'],
-      symptom: 'Your front desk is with a patient. The phone rings. Nobody picks up.',
-      diagnosis: "That caller doesn't leave a voicemail. They call the next spa on Google, usually within minutes.",
+      hooks: ['Your phone just cost you a booking.', 'Nobody leaves a voicemail anymore.', 'Where your backyard business bleeds money: the phone.'],
+      symptom: 'You are on a job site. The phone rings. Nobody picks up.',
+      diagnosis: "That caller doesn't leave a voicemail. They call the next contractor on Google, usually within minutes.",
       math: '3 missed bookings a week × $400 = $1,200 a week',
-      surgery: 'An AI receptionist answers every call on the first ring, answers questions and books the consult.',
-      recovery: 'You keep the booking, and your front desk stays with the patient in the room.',
-      question: 'How many calls did your spa miss this week? Be honest 👇',
-      scenes: ['Luxury med spa front desk at dusk, empty chair, desk phone lighting up and ringing, warm light, slow push-in', 'Woman on a couch in the evening looking at her phone, hearing voicemail, frustrated, cinematic', 'Phone screen showing an appointment confirmed, glowing calendar, dark background'] },
+      surgery: 'An AI receptionist answers every call on the first ring, answers questions and books the estimate.',
+      recovery: 'You keep the booking, and your crew stays on the job.',
+      question: 'How many calls did you miss this week? Be honest 👇',
+      scenes: ['Pickup truck parked outside a backyard patio job at dusk, phone on the dashboard lighting up and ringing, warm light, slow push-in', 'Woman on a couch in the evening looking at her phone, hearing voicemail, frustrated, cinematic', 'Phone screen showing an appointment confirmed, glowing calendar, dark background'] },
     slow: { name: 'Slow replies',
-      hooks: ['The first spa to reply wins.', 'A 7pm inquiry and a 9am reply. Already lost.', 'Speed is the whole game.'],
+      hooks: ['The first contractor to reply wins.', 'A 7pm inquiry and a 9am reply. Already lost.', 'Speed is the whole game.'],
       symptom: 'A new inquiry comes in at 7pm. Nobody sees it until morning.',
-      diagnosis: 'By then she has messaged two other spas, and whoever replied first got the booking.',
+      diagnosis: 'By then she has messaged two other contractors, and whoever replied first got the booking.',
       math: '2 lost leads a week × $500 = $1,000 a week',
       surgery: 'An AI replies in seconds, asks the right questions and offers a time.',
-      recovery: 'You wake up to a booked consult instead of a cold lead.',
+      recovery: 'You wake up to a booked estimate instead of a cold lead.',
       question: 'How fast do you reply to a new inquiry? Be honest 👇',
       scenes: ['Woman at night typing an inquiry on her phone in a dim living room, cinematic close-up', 'Clock on a wall showing hours passing while a phone sits unanswered on a desk', 'Phone lighting up with an instant reply and a booked time, soft glow'] },
     quiet: { name: 'Quiet customers',
       hooks: ['200 customers went quiet.', 'Your best leads are already in your list.', 'Past clients are the cheapest bookings.'],
-      symptom: 'Every spa has clients who came once and never came back. Nobody followed up.',
+      symptom: 'Every contractor has clients who came once and never came back. Nobody followed up.',
       diagnosis: "They didn't leave unhappy. They just forgot, and no one reminded them.",
       math: '200 quiet clients × 5% returning × $300 = $3,000 sitting in your list',
       surgery: 'An AI texts them a friendly "we miss you" and books the ones who reply.',
       recovery: 'Revenue from people you already earned, with zero staff time.',
       question: 'When did you last follow up with a past client? 👇',
-      scenes: ['Rows of old client cards in a drawer in a quiet med spa, soft light, dust in the air', 'Woman smiling as a friendly text message arrives on her phone', 'Treatment room with a client relaxing, calm and premium, shallow depth of field'] },
+      scenes: ['Rows of old customer cards in a drawer in a quiet contractor office, soft light, dust in the air', 'Woman smiling as a friendly text message arrives on her phone', 'Treatment room with a client relaxing, calm and premium, shallow depth of field'] },
     reviews: { name: 'Reviews',
-      hooks: ['Two spas. Same quality. Different reviews.', 'Reviews are a system, not luck.', 'Your Google rating is your front desk.'],
+      hooks: ['Two spas. Same quality. Different reviews.', 'Reviews are a system, not luck.', 'Your Google rating is your office.'],
       symptom: 'Happy clients leave without ever posting a review.',
       diagnosis: 'Nobody asks at the right moment, and leaving one takes too many steps.',
       math: '',
       surgery: 'One tap after the visit sends them straight to your Google review page, automatically.',
       recovery: 'More 5-star reviews every week, without the awkward ask.',
       question: 'How many reviews did you get last month? 👇',
-      scenes: ['Phone showing two spa listings side by side, one with many five-star reviews, cinematic', 'Happy client leaving a med spa holding her phone, golden hour', 'Close-up of a phone tapping a review link, stars lighting up'] },
+      scenes: ['Phone showing two contractor listings side by side, one with many five-star reviews, cinematic', 'Happy homeowner standing in a finished backyard holding her phone, golden hour', 'Close-up of a phone tapping a review link, stars lighting up'] },
     noshow: { name: 'No-shows',
-      hooks: ['No-shows are a leak you can fix.', 'An empty chair costs more than an ad.', 'A text can save the appointment.'],
-      symptom: 'Clients forget their appointment and the chair sits empty.',
+      hooks: ['No-shows are a leak you can fix.', 'An empty slot costs more than an ad.', 'A text can save the appointment.'],
+      symptom: 'Clients forget their appointment and the slot sits empty.',
       diagnosis: 'One missed reminder turns a $400 slot into zero, and nobody can fill it last minute.',
       math: '4 no-shows a week × $300 = $1,200 a week',
       surgery: 'Automatic reminders and a quick reschedule text keep the calendar full.',
-      recovery: 'Fewer empty chairs, and a waitlist that fills open slots.',
+      recovery: 'Fewer empty slots, and a waitlist that fills open slots.',
       question: "What's your no-show rate? 👇",
-      scenes: ['Empty treatment chair in a bright med spa, clock ticking, quiet and still', 'Woman at home glancing at a phone reminder, then smiling', 'Full appointment calendar on a tablet at a reception desk'] },
+      scenes: ['Empty slot on a contractor wall calendar in a bright office, clock ticking, quiet and still', 'Woman at home glancing at a phone reminder, then smiling', 'Full appointment calendar on a tablet at a reception desk'] },
     afterhours: { name: 'After hours',
-      hooks: ['People search for med spas at night.', 'The 5pm problem.', 'Weekends are when they book.'],
-      symptom: 'Most people look up a med spa in the evening or on the weekend.',
-      diagnosis: "That's exactly when most front desks are closed, so they book whoever answers.",
+      hooks: ['People search for backyard contractors at night.', 'The 5pm problem.', 'Weekends are when they book.'],
+      symptom: 'Most people look up a backyard contractor in the evening or on the weekend.',
+      diagnosis: "That's exactly when most offices are closed, so they book whoever answers.",
       math: '',
-      surgery: 'An AI answers calls and messages 24/7 and books the consult.',
-      recovery: 'Your spa never closes, even when your team does.',
-      question: 'What happens to calls at 9pm at your spa? 👇',
-      scenes: ['City street at night through a window, a closed med spa with a dark front desk, neon reflections', 'Woman searching on her phone in bed at night, screen glow on her face', 'Phone confirming a booking at 9pm, calm and satisfying'] },
+      surgery: 'An AI answers calls and messages 24/7 and books the estimate.',
+      recovery: 'Your phone never goes unanswered, even when your crew is on a job.',
+      question: 'What happens to calls at 9pm at your business? 👇',
+      scenes: ['City street at night through a window, a closed backyard contractor with a dark office, neon reflections', 'Woman searching on her phone in bed at night, screen glow on her face', 'Phone confirming a booking at 9pm, calm and satisfying'] },
   };
   /* ---- more offers: website, client CRM, site chat, review cards (hooks lead with the pain, not the tech) ---- */
   Object.assign(GEN_TOPICS, {
@@ -2657,7 +2659,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       surgery: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
       recovery: 'More calls and bookings from people who were already looking for you.',
       question: 'When did you last look at your own website on your phone? 👇',
-      scenes: ['Phone screen with a slow-loading outdated website, a thumb scrolling in frustration, cinematic', 'Same phone showing a fast modern spa website with a Book Now button, soft glow', 'Calendar filling with bookings on a tablet at a reception desk, premium'] },
+      scenes: ['Phone screen with a slow-loading outdated website, a thumb scrolling in frustration, cinematic', 'Same phone showing a fast modern contractor website with a Book Now button, soft glow', 'Calendar filling with bookings on a tablet at a reception desk, premium'] },
     crm: { name: 'Client CRM',
       hooks: ['Your leads live in your notes app.', 'Where do your leads actually go?', "Texts, DMs, sticky notes. That's not a system."],
       symptom: 'Leads come in through calls, DMs, texts and forms, and they end up scattered across five places.',
@@ -2668,60 +2670,60 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       question: 'Where do your leads live right now: notes app, DMs, or a real system? 👇',
       scenes: ['Messy desk with sticky notes and a phone full of unread messages, shallow depth of field', 'Clean dashboard on a phone showing a tidy list of leads, dark UI with blue glow', 'Owner glancing at a phone and smiling, organized and calm'] },
     chatbot: { name: 'Site chat',
-      hooks: ['Your website has questions. Who answers?', "Who answers 'how much is Botox?' at 9pm?", 'Visitors leave when nobody replies.'],
+      hooks: ['Your website has questions. Who answers?', "Who answers 'how much is a paver patio?' at 9pm?", 'Visitors leave when nobody replies.'],
       symptom: 'Someone is on your website at 9pm with a question about pricing or downtime, and there is nobody to ask.',
       diagnosis: "Most visitors won't send an email and wait. They leave and ask whoever answers now.",
       math: '',
-      surgery: 'A chat on your site answers the common questions instantly and books the consult.',
+      surgery: 'A chat on your site answers the common questions instantly and books the estimate.',
       recovery: 'Questions get answered while your team sleeps, and curious visitors become booked clients.',
       question: 'What question do clients ask you ten times a week? 👇',
-      scenes: ['Woman at night on her phone looking at a spa website with a question, screen glow on her face', 'Chat bubble answering a question on a phone, dark UI with blue glow', 'Booking confirmation on a phone, calm and satisfying'] },
+      scenes: ['Woman at night on her phone looking at a contractor website with a question, screen glow on her face', 'Chat bubble answering a question on a phone, dark UI with blue glow', 'Booking confirmation on a phone, calm and satisfying'] },
     plates: { name: 'Review cards',
       hooks: ['One tap. One more five-star review.', "Reviews shouldn't take eight steps.", 'Your next 50 reviews are one tap away.'],
       symptom: 'Happy clients mean to leave a review and never do, because it takes too many steps.',
       diagnosis: 'The fewer taps between the visit and the review page, the more reviews you get.',
       math: '',
-      surgery: 'A tap card at your front desk opens your Google review page instantly.',
+      surgery: 'A tap card at your office opens your Google review page instantly.',
       recovery: 'Reviews build up every week, and your listing climbs above the competition.',
       question: 'How many happy clients left without a review last month? 👇',
-      scenes: ['Hand tapping a phone on a sleek card at a med spa front desk, shallow depth of field', 'Phone showing a Google review page with five stars lighting up', 'Front desk with a small tap card stand, warm premium lighting'] },
+      scenes: ['Hand tapping a phone on a sleek card at a backyard contractor office, shallow depth of field', 'Phone showing a Google review page with five stars lighting up', 'Office with a small tap card stand, warm premium lighting'] },
   });
   // plain = the fix without naming the tech; story/tip/save feed the longer face-to-camera scripts
   const GEN_EXTRA = {
-    missed: { plain: 'A system picks up every call, answers the common questions and books the consult, so nothing goes to voicemail.',
-      story: "Picture it: a woman has been thinking about lip filler for months. Tonight she finally decides to book. She calls your spa at 6:40. Nobody answers. She doesn't leave a message. She calls the next spa on Google.",
-      tip: 'Today, call your own spa line at 7pm and hear what a new client hears. Do it again on Saturday. That is your real front desk.',
+    missed: { plain: 'A system picks up every call, answers the common questions and books the estimate, so nothing goes to voicemail.',
+      story: "Picture it: a homeowner has been thinking about a new patio for months. Tonight she finally decides to book. She calls your business at 6:40. Nobody answers. She doesn't leave a message. She calls the next contractor on Google.",
+      tip: 'Today, call your own business line at 7pm and hear what a new client hears. Do it again on Saturday. That is your real office.',
       save: 'Every missed call is ad money and Google ranking you already paid for, wasted at the very last step.' },
     slow: { plain: 'Every new inquiry gets a reply within a minute, with a link to book, even at 9pm.',
-      story: 'She fills out your form at 7pm. She has also messaged two other spas. One replies in four minutes with a time. You reply the next morning. She has already booked.',
+      story: 'She fills out your form at 7pm. She has also messaged two other contractors. One replies in four minutes with a time. You reply the next morning. She has already booked.',
       tip: 'Check your last five inquiries and write down how long each one waited for a reply. That number is your leak.',
       save: 'You already paid to get that lead to your form. A slow reply throws the whole cost away.' },
     quiet: { plain: 'A friendly text goes out to past clients on a schedule, and the ones who reply get booked.',
       story: 'You have a list of people who came in once, loved it, and never came back. Not because anything went wrong. Life got busy and nobody reminded them.',
       tip: 'Pull your client list, sort by last visit, and personally text the ten oldest ones this week. See how many reply.',
       save: 'Bringing back a past client costs a text. Winning a new one costs ad spend.' },
-    reviews: { plain: 'A tap card at the front desk and a text after the visit send happy clients straight to your Google review page.',
+    reviews: { plain: 'A tap card at the office and a text after the visit send happy clients straight to your Google review page.',
       story: "Your client just had a great visit. She'd happily leave five stars, but she has to open Google, search your name and find the button. She's in her car and gone. No review.",
       tip: 'Look at your Google rating next to the two closest competitors. Count the reviews from the last 90 days. That is the gap.',
       save: 'Reviews bring in clients for free, and they work while you sleep.' },
     noshow: { plain: 'Automatic reminders go out before every appointment with a one-tap reschedule, and open slots go to a waitlist.',
-      story: 'Thursday, 2pm. Your injector is ready. The chair is empty. The client forgot. That is a $300 slot gone, with no one to fill it on an hour of notice.',
-      tip: 'Count your no-shows and late cancels from the last month and multiply by your average treatment. Write that number on a sticky note.',
-      save: 'A reminder text costs almost nothing. An empty chair costs the whole treatment.' },
+      story: 'Thursday, 2pm. Your estimator is on the way. Nobody is home. The homeowner forgot. That is a wasted drive and an hour gone, with no one to fill it on an hour of notice.',
+      tip: 'Count your no-shows and late cancels from the last month and multiply by the cost of a wasted drive and hour. Write that number on a sticky note.',
+      save: 'A reminder text costs almost nothing. An empty estimate slot costs you a drive and an hour.' },
     afterhours: { plain: 'Calls and messages after hours are answered and booked on the spot, so the evening and weekend crowd does not bounce.',
-      story: "Sunday night, 9pm. She's scrolling, she's ready, she finds your spa and tries to book. There's no online booking and the phone is off. She books the one that lets her.",
-      tip: 'Try booking your own spa as a stranger on a Sunday night. Count the steps. Every extra step loses someone.',
+      story: "Sunday night, 9pm. She's scrolling, she's ready, she finds your business and tries to book. There's no online booking and the phone is off. She books the one that lets her.",
+      tip: 'Try booking your own business as a stranger on a Sunday night. Count the steps. Every extra step loses someone.',
       save: 'Your best booking window is when your team is off the clock. You do not need staff for it, you need a system.' },
     website: { plain: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
-      story: "A woman searches 'med spa near me' on her phone. She taps your listing. The site takes six seconds to load and the text is tiny. She hits back and taps the next one.",
+      story: "A woman searches 'backyard contractor near me' on her phone. She taps your listing. The site takes six seconds to load and the text is tiny. She hits back and taps the next one.",
       tip: 'Open your site on your phone right now, on cellular, not wifi. Time it, and try to book in under thirty seconds.',
       save: 'Ads and social posts send people to your site. If the site loses them, you pay for traffic that never turns into a booking.' },
     crm: { plain: 'One simple dashboard on your phone: every lead, every follow-up, every booked appointment in one place.',
       story: "A lead DMs you on Instagram, another texts, another fills out a form. By Friday you can't remember who asked about what, and one of them already went somewhere else.",
       tip: 'List every place a lead can reach you. Count them. If it is more than two, people are slipping through the cracks.',
       save: 'Many CRMs charge per seat and per feature. A simple one built around how you already work costs less, and you will actually use it.' },
-    chatbot: { plain: 'A chat box on your site answers the common questions, like prices, downtime and hours, and books the consult.',
-      story: "It's 9pm. Someone is on your site, wondering how long Botox lasts and what it costs. There's no one to ask and no price on the page. She closes the tab.",
+    chatbot: { plain: 'A chat box on your site answers the common questions, like prices, timelines and hours, and books the consult.',
+      story: "It's 9pm. Someone is on your site, wondering how long a paver patio takes and what it costs. There's no one to ask and no price on the page. She closes the tab.",
       tip: 'Write down the five questions your front desk answers most. If those were answered automatically, how many hours would you get back?',
       save: 'Answering the same ten questions all day is paid time. Let the site handle the repeats.' },
     plates: { plain: 'A tap card at your front desk opens your Google review page instantly.',
@@ -2773,7 +2775,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   // Longer script to say to the camera: 30 / 60 / 90 seconds, with a cue for each beat
   function genFace(tid, secs, seed, plain) {
     const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
-    const cta = plain ? 'If you own a med spa, DM me the word AUDIT and I will take a free look at your front desk and show you where bookings are slipping.' : 'If you own a med spa, DM me the word AUDIT and I will run a free AI audit of your front desk and show you where bookings are slipping.';
+    const cta = plain ? 'If you own a backyard contractor, DM me the word AUDIT and I will take a free look at your office and show you where bookings are slipping.' : 'If you own a backyard contractor, DM me the word AUDIT and I will run a free AI audit of your office and show you where bookings are slipping.';
     const ex = t.math ? 'Say that adds up: ' + t.math + '. That is an example, your numbers will differ.' : '';
     const beats = secs === 30 ? [['HOOK', 'Look at the camera, no intro', hook], ['PAIN', 'Slow down, make it a scene', t.symptom], ['THE FIX', 'Lean in', fixOf(t, plain)], ['CTA', 'Point down at the caption', cta]]
       : secs === 60 ? [['HOOK', 'Look at the camera, no intro', hook], ['STORY', 'Tell it like a story', t.story], ['WHY IT HAPPENS', 'Show the number on screen', [t.diagnosis, ex].filter(Boolean).join(' ')], ['THE FIX', 'Lean in', fixOf(t, plain) + ' ' + t.recovery], ['CTA', 'Point down at the caption', cta]]
@@ -2781,13 +2783,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const words = beats.reduce((n, b) => n + b[2].split(/\s+/).length, 0);
     return { beats, text: beats.map(([n, cue, line]) => '[' + n + '] (' + cue + ')\n' + line).join('\n\n'), plainText: beats.map((b) => b[2]).join('\n\n'), est: Math.round(words / 2.6) };
   }
-  // Weekly AI news: what happened, what it means, and the med spa angle. Source: one roundup, so check each item at the original before posting.
+  // Weekly AI news: what happened, what it means, and the backyard contractor angle. Source: one roundup, so check each item at the original before posting.
   const NEWS = { week: 'Nov 2 to 8, 2026', source: 'hellogrowth.ai roundup of AI news (Nov 5, 2026). It is one roundup, so open the original announcement for any item before you post it.',
     items: [
       { date: 'Nov 4', title: 'ChatGPT agents that keep working between conversations', hook: 'AI just learned to keep working after you close the chat.',
         fact: 'OpenAI made "Dots", personal agents that keep working on a task between conversations, available in ChatGPT Enterprise, Edu and Healthcare.',
         meaning: 'Software that follows up and finishes tasks without being told twice is becoming normal.',
-        angle: 'A med spa has the same problem: leads and follow-ups that depend on someone remembering. The goal is the same, nothing waits for a person to remember.' },
+        angle: 'A backyard contractor has the same problem: leads and follow-ups that depend on someone remembering. The goal is the same, nothing waits for a person to remember.' },
       { date: 'Oct 28', title: 'AI plans now come with spending limits and monthly credit', hook: 'AI bills just got a spending cap.',
         fact: 'Anthropic added shared team budgets with alerts at 50, 75, 95 and 100 percent, and said its Team plan includes up to $500 a month in pooled API credit. OpenAI said ChatGPT Pro and Business plans include monthly API credit.',
         meaning: 'AI costs are getting predictable, because you can cap what a team spends.',
@@ -2795,7 +2797,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       { date: 'Nov 4', title: 'ChatGPT images got faster and more consistent', hook: 'You can now make a week of branded posts in one afternoon.',
         fact: 'OpenAI released Images 2.6: faster generation, more consistent results across edits, and animated GIFs, on all plans.',
         meaning: 'Making branded visuals no longer needs a designer for every post.',
-        angle: 'A spa can keep the same look on every post without paying someone each time. Keep real before-and-afters real.' },
+        angle: 'A contractor can keep the same look on every post without paying someone each time. Keep real before-and-afters real.' },
       { date: 'This week', title: 'AI-made content is getting labeled', hook: 'AI-made content is about to get a label. Here is what that means for your business.',
         fact: 'Anthropic began adding invisible watermarks and C2PA provenance data to Claude output to meet EU AI Act Article 50.',
         meaning: 'Expect labels on AI-made images and text over time. Honest businesses will be fine.',
@@ -2806,14 +2808,14 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         angle: 'Before you pay for another AI add-on, check what you already have and what it costs per month.' },
     ] };
   const newsPost = (n, plat) => {
-    const body = n.hook + '\n\nWhat happened: ' + n.fact + '\n\nWhat it means: ' + n.meaning + '\n\nFor a med spa: ' + n.angle;
+    const body = n.hook + '\n\nWhat happened: ' + n.fact + '\n\nWhat it means: ' + n.meaning + '\n\nFor a backyard contractor: ' + n.angle;
     if (plat === 'x') { const cta = CTA.x; const s = n.hook + '\n\n' + n.meaning + '\n\n' + n.angle; return (s + '\n\n' + cta).length <= 280 ? s + '\n\n' + cta : n.hook + '\n\n' + n.meaning + '\n\n' + cta; }
     return body + '\n\n' + CTA[plat] + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : '');
   };
-  const newsFace = (n) => '[HOOK] (Look at the camera, no intro)\n' + n.hook + '\n\n[WHAT HAPPENED] (Show the headline on screen)\n' + n.fact + '\n\n[WHAT IT MEANS]\n' + n.meaning + '\n\n[FOR A MED SPA] (Lean in)\n' + n.angle + '\n\n[CTA] (Point down at the caption)\nIf you own a med spa and want to know what this means for your front desk, DM me the word AUDIT.';
+  const newsFace = (n) => '[HOOK] (Look at the camera, no intro)\n' + n.hook + '\n\n[WHAT HAPPENED] (Show the headline on screen)\n' + n.fact + '\n\n[WHAT IT MEANS]\n' + n.meaning + '\n\n[FOR A MED SPA] (Lean in)\n' + n.angle + '\n\n[CTA] (Point down at the caption)\nIf you own a backyard contractor and want to know what this means for your office, DM me the word AUDIT.';
   const WEEK1 = [
     ['Day 1: Intro', "I'm the Business Surgeon. I find where your business is bleeding money and fix it with AI. Missed calls, slow replies, no reviews. Most owners don't know it's happening. I'll show you how to spot it. 🩺"],
-    ['Day 2: Symptom (missed calls)', "Symptom: your phone rings during a treatment and nobody picks up. That caller doesn't leave a voicemail. They call the next spa on Google. An AI receptionist answers in seconds, 24/7, and books them. Do you know how many calls you missed this week?"],
+    ['Day 2: Symptom (missed calls)', "Symptom: your phone rings during a job and nobody picks up. That caller doesn't leave a voicemail. They call the next contractor on Google. An AI receptionist answers in seconds, 24/7, and books them. Do you know how many calls you missed this week?"],
     ['Day 3: Diagnosis (slow replies)', "Diagnosis: you reply to a new lead 3 hours later. They already booked somewhere else. The first business to answer usually wins. Speed is the cure."],
     ['Day 4: Reviews', "Two spas, same quality. One has 400 reviews and one has 40. Guess who gets the call. Reviews aren't luck, they're a system. Ask every happy client at the right moment, and make it one tap."],
     ['Day 5: The surgery', "The surgery: 1) AI answers every call. 2) Every lead gets a text back instantly. 3) Reviews are collected automatically. You keep treating clients, and the system does the rest."],
@@ -2834,7 +2836,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       root.append(h('div', { class: 'ct-tpl' }, h('b', null, n.date + ': ' + n.title), tabs, area,
         h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Post copied') }, 'Copy post'), h('button', { class: 'btn', onclick: () => copyText(newsFace(n), 'Face script copied') }, 'Copy face script'))));
     });
-    const tpl = 'Hook: [the news in one line a business owner cares about]\n\nWhat happened: [one sentence, with the date and who announced it]\n\nWhat it means: [plain English, no jargon]\n\nFor a med spa: [what changes for their front desk, bookings or costs]\n\nWhat to do: [one free action they can take today]';
+    const tpl = 'Hook: [the news in one line a business owner cares about]\n\nWhat happened: [one sentence, with the date and who announced it]\n\nWhat it means: [plain English, no jargon]\n\nFor a backyard contractor: [what changes for their office, bookings or costs]\n\nWhat to do: [one free action they can take today]';
     root.append(h('div', { class: 'ct-tpl' }, h('b', null, 'Template for any news item'), h('pre', { class: 'gen-pre' }, tpl), h('button', { class: 'btn', onclick: () => copyText(tpl, 'Template copied') }, 'Copy template')));
     return root;
   }
@@ -2860,8 +2862,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     ['face', 'Film myself', 'A script you say to the camera', 'users'],
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
-  const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker']];
-  const CS = { business: (function () { try { return localStorage.getItem('rs_biz') || 'junk removal'; } catch { return 'junk removal'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker'], ['ballpark', 'Instant ballpark'], ['jobdone', 'Job-done automation']];
+  const CS = { business: (function () { try { return localStorage.getItem('rs_biz2') || 'backyard contractor'; } catch { return 'backyard contractor'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
   const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
@@ -3109,15 +3111,15 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   /* ================= flow-map look: a hand-drawn board the camera travels across, karaoke captions, brand colors ================= */
   const HAND = '"Kalam", "Segoe Print", "Bradley Hand", "Marker Felt", "Comic Sans MS", cursive';
   const FLOW = {
-    missed: { title: 'stop losing calls to voicemail', titleAI: 'AI receptionist for med spas', trigger: 'A new client calls at 6:40pm', pain: ['Front desk is with a patient', 'Nobody picks up', 'She hangs up. No voicemail.'], why: 'She books the next spa on Google', lost: 'Bookings lost every week', fix: 'Every call answered on ring one', fixAI: 'An AI receptionist answers on ring one', steps: ['Answers common questions', 'Checks the calendar', 'Books the consult'], check: 'Confirmation text goes out', before: 'Missed calls, lost bookings', after: 'Every call answered' },
-    slow: { title: 'win the first reply', titleAI: 'instant replies for med spas', trigger: 'A new inquiry at 7pm', pain: ['Nobody sees it tonight', 'She messages two other spas', 'One replies in 4 minutes'], why: 'The first reply wins the booking', lost: 'Leads that went cold', fix: 'Every inquiry answered in a minute', fixAI: 'An AI replies to every inquiry in a minute', steps: ['Replies right away', 'Asks the right questions', 'Offers a time to book'], check: 'Booked before she looks elsewhere', before: 'Reply tomorrow, lose the lead', after: 'Reply in a minute, win it' },
-    quiet: { title: 'bring back quiet clients', titleAI: 'AI follow-ups for med spas', trigger: 'A client visits once', pain: ['She loved it', 'Life got busy', 'Nobody follows up'], why: 'She forgot. She was not unhappy.', lost: 'Revenue sitting in your list', fix: 'A friendly text brings them back', fixAI: 'An AI texts them and books the replies', steps: ['Finds clients gone quiet', 'Sends a friendly text', 'Books the ones who reply'], check: 'Back on the calendar', before: 'A list nobody touches', after: 'Past clients rebooked' },
-    reviews: { title: 'get more 5-star reviews', titleAI: 'automatic reviews for med spas', trigger: 'A client loves her visit', pain: ['She says "I\'ll review later"', 'Finding the page takes 8 steps', 'Later never comes'], why: 'No ask, and too many steps', lost: 'Reviews that never get posted', fix: 'One tap to your Google review page', fixAI: 'One tap or text, straight to your review page', steps: ['Tap card at the front desk', 'Text after the visit', 'Straight to the review page'], check: 'Review posted', before: 'Happy clients, few reviews', after: 'New reviews every week' },
-    noshow: { title: 'fill the empty chair', titleAI: 'no-show protection for med spas', trigger: 'Thursday, 2pm appointment', pain: ['The client forgot', 'The chair sits empty', 'No one to fill it'], why: 'One missed reminder, zero revenue', lost: 'Treatments lost every week', fix: 'Reminders and one-tap rescheduling', fixAI: 'Automatic reminders with one-tap reschedule', steps: ['Reminder goes out', 'One-tap reschedule', 'Waitlist fills the slot'], check: 'The chair stays full', before: 'Empty chairs', after: 'A full calendar' },
+    missed: { title: 'stop losing calls to voicemail', titleAI: 'AI receptionist for backyard contractors', trigger: 'A new client calls at 6:40pm', pain: ['You are on a job site', 'Nobody picks up', 'She hangs up. No voicemail.'], why: 'She books the next contractor on Google', lost: 'Bookings lost every week', fix: 'Every call answered on ring one', fixAI: 'An AI receptionist answers on ring one', steps: ['Answers common questions', 'Checks the calendar', 'Books the estimate'], check: 'Confirmation text goes out', before: 'Missed calls, lost bookings', after: 'Every call answered' },
+    slow: { title: 'win the first reply', titleAI: 'instant replies for backyard contractors', trigger: 'A new inquiry at 7pm', pain: ['Nobody sees it tonight', 'She messages two other spas', 'One replies in 4 minutes'], why: 'The first reply wins the booking', lost: 'Leads that went cold', fix: 'Every inquiry answered in a minute', fixAI: 'An AI replies to every inquiry in a minute', steps: ['Replies right away', 'Asks the right questions', 'Offers a time to book'], check: 'Booked before she looks elsewhere', before: 'Reply tomorrow, lose the lead', after: 'Reply in a minute, win it' },
+    quiet: { title: 'bring back quiet clients', titleAI: 'AI follow-ups for backyard contractors', trigger: 'A client visits once', pain: ['She loved it', 'Life got busy', 'Nobody follows up'], why: 'She forgot. She was not unhappy.', lost: 'Revenue sitting in your list', fix: 'A friendly text brings them back', fixAI: 'An AI texts them and books the replies', steps: ['Finds clients gone quiet', 'Sends a friendly text', 'Books the ones who reply'], check: 'Back on the calendar', before: 'A list nobody touches', after: 'Past clients rebooked' },
+    reviews: { title: 'get more 5-star reviews', titleAI: 'automatic reviews for backyard contractors', trigger: 'A client loves her visit', pain: ['She says "I\'ll review later"', 'Finding the page takes 8 steps', 'Later never comes'], why: 'No ask, and too many steps', lost: 'Reviews that never get posted', fix: 'One tap to your Google review page', fixAI: 'One tap or text, straight to your review page', steps: ['Tap card at the office', 'Text after the visit', 'Straight to the review page'], check: 'Review posted', before: 'Happy clients, few reviews', after: 'New reviews every week' },
+    noshow: { title: 'fill the empty slot', titleAI: 'no-show protection for backyard contractors', trigger: 'Thursday, 2pm estimate', pain: ['The client forgot', 'The slot sits empty', 'No one to fill it'], why: 'One missed reminder, zero revenue', lost: 'Treatments lost every week', fix: 'Reminders and one-tap rescheduling', fixAI: 'Automatic reminders with one-tap reschedule', steps: ['Reminder goes out', 'One-tap reschedule', 'Waitlist fills the slot'], check: 'The chair stays full', before: 'Empty chairs', after: 'A full calendar' },
     afterhours: { title: 'book clients after hours', titleAI: 'an AI that never closes', trigger: 'Sunday, 9pm', pain: ['She is ready to book', 'No online booking, phone off', 'She books whoever answers'], why: 'Your best hours are when you are closed', lost: 'Bookings lost after close', fix: 'Booking that works while you sleep', fixAI: 'An AI answers and books 24/7', steps: ['Answers calls and messages', 'Checks the calendar', 'Books the consult'], check: 'Confirmed while you sleep', before: 'Closed means lost', after: 'Open all night' },
-    website: { title: 'a website that gets you booked', titleAI: 'a website that gets you booked', trigger: 'She searches "med spa near me"', pain: ['Taps your listing', 'The site loads in 6 seconds', 'She taps the next one'], why: 'People decide in seconds', lost: 'Visitors who never booked', fix: 'Fast site, Book Now on every screen', fixAI: 'Fast site, Book Now on every screen', steps: ['Loads fast on phones', 'Book Now on every screen', 'Google listing connected'], check: 'Booked from the search', before: 'Old, slow site', after: 'Found. Booked.' },
+    website: { title: 'a website that gets you booked', titleAI: 'a website that gets you booked', trigger: 'She searches "backyard contractor near me"', pain: ['Taps your listing', 'The site loads in 6 seconds', 'She taps the next one'], why: 'People decide in seconds', lost: 'Visitors who never booked', fix: 'Fast site, Book Now on every screen', fixAI: 'Fast site, Book Now on every screen', steps: ['Loads fast on phones', 'Book Now on every screen', 'Google listing connected'], check: 'Booked from the search', before: 'Old, slow site', after: 'Found. Booked.' },
     crm: { title: 'one place for every lead', titleAI: 'one place for every lead', trigger: 'A lead DMs on Instagram', pain: ['Another one texts', 'Another fills out a form', 'By Friday, who was who?'], why: 'Leads scattered in five places', lost: 'Leads that went cold', fix: 'One dashboard for every lead', fixAI: 'One dashboard for every lead', steps: ['Every lead in one list', 'Follow-ups scheduled', 'Bookings tracked'], check: 'You know who to call today', before: 'Notes, DMs, sticky notes', after: 'One clean list' },
-    chatbot: { title: 'answer clients at 9pm', titleAI: 'AI chat for med spa websites', trigger: 'It is 9pm on your website', pain: ['She wonders what Botox costs', 'No one to ask', 'She closes the tab'], why: 'Visitors will not wait for an email', lost: 'Questions that never became bookings', fix: 'Answers on your site, instantly', fixAI: 'An AI chat answers instantly', steps: ['Answers prices and downtime', 'Handles the common questions', 'Books the consult'], check: 'Booked while you sleep', before: 'Unanswered questions', after: 'Instant answers' },
+    chatbot: { title: 'answer clients at 9pm', titleAI: 'AI chat for backyard contractor websites', trigger: 'It is 9pm on your website', pain: ['She wonders what a patio costs', 'No one to ask', 'She closes the tab'], why: 'Visitors will not wait for an email', lost: 'Questions that never became bookings', fix: 'Answers on your site, instantly', fixAI: 'An AI chat answers instantly', steps: ['Answers prices and downtime', 'Handles the common questions', 'Books the estimate'], check: 'Booked while you sleep', before: 'Unanswered questions', after: 'Instant answers' },
     plates: { title: 'one tap, one more review', titleAI: 'one tap, one more review', trigger: 'A happy client at checkout', pain: ['She wants to leave a review', 'She has to search Google', 'She walks out the door'], why: 'Too many steps between happy and posted', lost: 'Reviews you earned and never got', fix: 'A tap card opens your review page', fixAI: 'A tap card opens your review page', steps: ['Tap card at the front desk', 'Review page opens instantly', 'Tap, review, done'], check: 'Review posted', before: 'Happy clients, no reviews', after: 'Reviews every week' },
   };
   const FK = { warn: ['#f5b84b', 'rgba(245,184,75,.13)'], bad: ['#ff7a7a', 'rgba(255,122,122,.13)'], plain: ['#e9edf7', 'rgba(255,255,255,.05)'], ai: ['#5b8cff', 'rgba(91,140,255,.2)'], ok: ['#3ddc97', 'rgba(61,220,151,.14)'], cta: ['#5b8cff', 'rgba(91,140,255,.28)'] };
@@ -3256,7 +3258,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const bs = fixI >= 0 ? plan.scenes[fixI].start + 0.15 : plan.total * 0.45;
     const endI = plan.scenes.findIndex((x, i) => i > fixI && (x.kind === 'result' || x.kind === 'cta'));
     const be = Math.max(bs + 3, Math.min(bs + 12, (endI >= 0 ? plan.scenes[endI].start : plan.total) - 0.2));
-    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'junk removal'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
+    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'backyard contractor'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
     ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
     const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, Math.max(W, H) * 0.6); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
     // phone
@@ -3270,7 +3272,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const fade = tt < bs ? 1 : 1 - easeOut((tt - bs) / 0.6); ctx.globalAlpha = pa * fade;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, vh);
       rr(14, 20, 352, 46, 23); ctx.fillStyle = '#eef1f6'; ctx.fill();
-      const q = 'junk removal near me', nch = Math.min(q.length, Math.floor(tt * 12)); ctx.fillStyle = '#1c2330'; ctx.font = '600 17px ' + SF; ctx.fillText(q.slice(0, nch) + (nch < q.length && Math.floor(tt * 3) % 2 ? '|' : ''), 52, 49);
+      const q = biz.toLowerCase() + ' near me', nch = Math.min(q.length, Math.floor(tt * 12)); ctx.fillStyle = '#1c2330'; ctx.font = '600 17px ' + SF; ctx.fillText(q.slice(0, nch) + (nch < q.length && Math.floor(tt * 3) % 2 ? '|' : ''), 52, 49);
       ctx.strokeStyle = '#5b6578'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(34, 42, 7, 0, 6.283); ctx.moveTo(39, 47); ctx.lineTo(45, 53); ctx.stroke();
       const rows = [['Fast Haul Crew', '4.9 · Open 24 hours · Calls answered'], ['Same Day Junk Pros', '4.8 · Free estimates · Book online'], ['Clear It Out Hauling', '4.7 · Reviews · Quote in minutes']];
       rows.forEach((r0, i) => { const a = easeOut((tt - 0.9 - i * 0.4) / 0.4); if (a <= 0) return; ctx.globalAlpha = pa * fade * a; const y = 96 + i * 88;
@@ -3286,7 +3288,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const blk = (n, fn) => { const e = sec(n); if (e <= 0) return; ctx.save(); ctx.globalAlpha = pa * e; ctx.translate(0, (1 - e) * 26); fn(); ctx.restore(); };
       blk(0, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, 56); rr(16, 14, 28, 28, 8); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#0b1220'; ctx.font = '800 17px ' + SF; ctx.fillText(biz.toUpperCase().slice(0, 20), 54, 34); for (let i = 0; i < 3; i++) ctx.fillRect(338, 20 + i * 8, 24, 3); });
       blk(1, () => { const g = ctx.createLinearGradient(0, 56, 0, 300); g.addColorStop(0, '#0b1a3a'); g.addColorStop(1, '#183a8c'); ctx.fillStyle = g; ctx.fillRect(0, 56, 380, 244); ctx.fillStyle = '#fff'; ctx.font = '800 34px ' + SF; ctx.fillText('Junk gone.', 24, 118); ctx.fillText('Same day.', 24, 158); ctx.fillStyle = '#cdd9ff'; ctx.font = '500 16px ' + SF; ctx.fillText('Free quote in 60 seconds.', 24, 190); rr(24, 214, 200, 50, 25); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText('Get my free quote', 48, 245); rr(236, 214, 120, 50, 25); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillText('Call now', 262, 245); });
-      blk(2, () => { ctx.fillStyle = '#f4f6fb'; ctx.fillRect(0, 300, 380, 82); ctx.fillStyle = '#0b1220'; ctx.font = '800 16px ' + SF; ctx.fillText(/junk|haul|remov/i.test(biz) ? 'What we haul' : 'What we do', 20, 326); const chips = /junk|haul|remov/i.test(biz) ? ['Furniture', 'Appliances', 'Yard waste', 'Cleanouts'] : ['Free quotes', 'Fast service', 'Fair prices', 'Local team']; let x = 20; ctx.font = '700 14px ' + SF; chips.forEach((c0) => { const w = ctx.measureText(c0).width + 24; rr(x, 340, w, 30, 15); ctx.fillStyle = '#e1e8fb'; ctx.fill(); ctx.fillStyle = '#1a3a8c'; ctx.fillText(c0, x + 12, 360); x += w + 8; }); });
+      blk(2, () => { ctx.fillStyle = '#f4f6fb'; ctx.fillRect(0, 300, 380, 82); ctx.fillStyle = '#0b1220'; ctx.font = '800 16px ' + SF; ctx.fillText(/junk|haul|remov/i.test(biz) ? 'What we haul' : /backyard|hardscape|paver|turf|landscap|patio|fence|deck/i.test(biz) ? 'What we build' : 'What we do', 20, 326); const chips = /junk|haul|remov/i.test(biz) ? ['Furniture', 'Appliances', 'Yard waste', 'Cleanouts'] : /backyard|hardscape|paver|turf|landscap|patio|fence|deck/i.test(biz) ? ['Pavers', 'Turf', 'Patios', 'Walls'] : ['Free quotes', 'Fast service', 'Fair prices', 'Local team']; let x = 20; ctx.font = '700 14px ' + SF; chips.forEach((c0) => { const w = ctx.measureText(c0).width + 24; rr(x, 340, w, 30, 15); ctx.fillStyle = '#e1e8fb'; ctx.fill(); ctx.fillStyle = '#1a3a8c'; ctx.fillText(c0, x + 12, 360); x += w + 8; }); });
       blk(3, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 382, 380, 118); ctx.fillStyle = '#f5b84b'; ctx.font = '700 28px ' + SF; ctx.fillText('★★★★★', 20, 420); ctx.fillStyle = '#55607a'; ctx.font = '600 14px ' + SF; ctx.fillText('Your real Google reviews show here', 20, 446); ctx.fillStyle = '#e3e7ef'; ctx.fillRect(20, 462, 300, 7); ctx.fillRect(20, 478, 220, 7); });
       blk(4, () => { ctx.fillStyle = '#eef2fb'; ctx.fillRect(0, 500, 380, 220); ctx.fillStyle = '#0b1220'; ctx.font = '800 20px ' + SF; ctx.fillText('Get a free quote', 20, 534);
         const fields = [['Name', 'Jordan'], ['Phone', '(555) 010-0142'], ['What needs to go?', 'Couch and two mattresses']], t0 = bs + (be - bs) * 0.8; let typed = 0;
@@ -3498,9 +3500,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
         const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business, secs: CS.secs, offers: CS.offers });
         CS.chat.push({ role: 'bot', text: x.reply });
-        if (x.business) { CS.business = x.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } }
+        if (x.business) { CS.business = x.business; try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } }
         if (x.result && CS.step === 'edit') toast('Rewritten. Tap Generate video again.');
-        if (x.result) { if (x.result.business) { CS.business = x.result.business; try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } } applyIdea(x.result); }
+        if (x.result) { if (x.result.business) { CS.business = x.result.business; try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } } applyIdea(x.result); }
       } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
     };
     const ideaPreview = () => {
@@ -3512,8 +3514,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     };
     const chatStep = () => {
       if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? The business is set to ' + (CS.business || 'junk removal') + ' (change it above any time). Pick the offers you want in it, then give me a rough idea or tap Surprise me.' });
-      const biz = h('input', { class: 'ct-text', type: 'text', placeholder: 'Type of business, like junk removal', value: CS.business, style: 'min-height:0;padding:10px 12px' });
-      biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz', CS.business); } catch { /* ignore */ } };
+      const biz = h('input', { class: 'ct-text', type: 'text', placeholder: 'Type of business, like backyard contractor', value: CS.business, style: 'min-height:0;padding:10px 12px' });
+      biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } };
       const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
       const offerRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'What should it sell? Tap every offer you want in it (or none and the bot picks).'),
         h('div', { class: 'stagechips' }, [...OFFERS.map(([k, l]) => h('button', { class: 'schip' + (CS.offers.includes(k) ? ' on' : ''), disabled: CS.busy, onclick: () => { CS.offers = CS.offers.includes(k) ? CS.offers.filter((x) => x !== k) : CS.offers.concat(k); if (CS.offers.length >= 5 && CS.fmt === 'video') CS.secs = 90; draw(); } }, l)),
@@ -3618,7 +3620,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     return h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Website and alerts'), stats, msg, test);
   }
   function botRulesCard() {
-    const ta = h('textarea', { class: 'ct-text', rows: 6, placeholder: 'Example: Always write for junk removal owners. Never use the word "leverage". Keep hooks under 10 words.' });
+    const ta = h('textarea', { class: 'ct-text', rows: 6, placeholder: 'Example: Always write for backyard contractor owners. Never use the word "leverage". Keep hooks under 10 words.' });
     api('GET', '/content/bot-rules').then((x) => { ta.value = x.rules || ''; }).catch(() => {});
     const save = h('button', { class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('PUT', '/content/bot-rules', { rules: ta.value }); toast('Saved. The bot follows these now.'); } catch (e) { fail(e); } finally { save.disabled = false; } } }, 'Save');
     return h('details', { class: 'card ct-det', style: 'margin-top:16px' }, h('summary', null, h('b', null, 'Bot instructions'), h('small', { class: 'dim' }, 'your own rules for the idea bot')),
@@ -3790,7 +3792,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const p = s.providers;
     const status = (name, ok, where) => h('div', { class: 'rb-row' }, h('div', null, h('b', null, name), h('small', null, ok ? 'Connected' : where)), h('span', { class: 'tag ' + (ok ? 'good' : 'hot') }, ok ? 'On' : 'Missing'));
     let list = {}; try { list = JSON.parse(s.checklist || '{}'); } catch { /* ignore */ }
-    const CHECK = [['gv', 'Google Voice number set up and popups allowed for this site'], ['places', 'Lead Finder returns med spa results (Google key working)'], ['bot', 'Lead bot on: med spa, my cities, include businesses with websites'], ['ig', 'Instagram set to a business profile, bio + link ready'], ['x', 'X account ready (bio says what you do)'], ['li', 'LinkedIn profile updated with the med spa offer'], ['cal', 'Google Calendar open for audit bookings'], ['cards', 'Review cards arrived and counted'], ['script', 'Call script finalized for med spas']];
+    const CHECK = [['gv', 'Google Voice number set up and popups allowed for this site'], ['places', 'Lead Finder returns backyard contractor results (Google key working)'], ['bot', 'Lead bot on: backyard contractor, my cities, include businesses with websites'], ['ig', 'Instagram set to a business profile, bio + link ready'], ['x', 'X account ready (bio says what you do)'], ['li', 'LinkedIn profile updated with the backyard contractor offer'], ['cal', 'Google Calendar open for audit bookings'], ['cards', 'Review cards arrived and counted'], ['script', 'Call script finalized for backyard contractors']];
     const checkRow = ([k, label]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!list[k], onchange: async (e) => { list[k] = e.target.checked; try { await api('PUT', '/settings', { checklist: JSON.stringify(list) }); } catch (x) { fail(x); } } }), h('span', null, label));
     const link = (href, name, sub) => h('a', { class: 'list-row link', href }, h('div', { style: 'flex:1;min-width:0' }, h('b', null, name), h('div', { class: 'sub' }, sub)));
     shell('settings', [
@@ -3801,7 +3803,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
           h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: saveAll }, 'Save'), savedMsg)),
         sec('Connections', 'status only', status('Google Places (Lead Finder)', p.google_places, 'Add GOOGLE_PLACES_KEY in Cloudflare'), status('TomTom (backup finder)', p.tomtom, 'Optional'), status('Twilio (in-portal dialer)', p.twilio, 'Optional. Google Voice works without it.'),
           h('p', { class: 'ov-note' }, 'API keys are kept as secrets in Cloudflare (Workers → your worker → Settings → Variables and Secrets), so they never sit in this page. Finder is using: ' + p.finder_provider + '.')),
-        sec('Instagram handles', 'automatic', h('p', { class: 'dim' }, 'The lead bot reads each med spa\'s own website for an Instagram link and saves it on the lead. It runs by itself every night. Businesses without a website still need Find on Instagram on their lead page.'),
+        sec('Instagram handles', 'automatic', h('p', { class: 'dim' }, 'The lead bot reads each backyard contractor\'s own website for an Instagram link and saves it on the lead. It runs by itself every night. Businesses without a website still need Find on Instagram on their lead page.'),
           (() => { const out = h('p', { class: 'ov-note' }, 'Checking…'); api('GET', '/instagram/stats').then((x) => { out.textContent = x.have + ' leads have an Instagram saved. ' + x.waiting + ' websites are waiting to be checked.'; }).catch(() => { out.textContent = ''; });
             const btn = h('button', { class: 'btn', onclick: async () => { btn.disabled = true; btn.textContent = 'Checking…'; try { const r = await api('POST', '/instagram/enrich'); out.textContent = 'Checked ' + r.checked + ', found ' + r.found + '. ' + r.have + ' leads now have an Instagram. ' + r.waiting + ' waiting.'; } catch (e) { fail(e); } btn.disabled = false; btn.textContent = 'Check 15 more now'; } }, 'Check 15 more now');
             return h('div', { class: 'row wrap' }, btn, out); })()),
@@ -3814,7 +3816,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   async function viewAdminHome() {
     const ov = await api('GET', '/overview');
     const trk = ov;
-    const niche = ov.focus_niche || 'med spa';
+    const niche = ov.focus_niche || 'backyard contractor';
     const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
     const labels = C.days.map(shortDay);
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -4451,12 +4453,12 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
     { id: 'reset', from: '07:15', to: '07:45', title: 'Shower and eat' },
     { id: 'mind', from: '07:45', to: '08:15', title: 'Read or journal', tag: 'Mental win', win: true },
-    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's med spa list, read the offer, say the opener 10 times" },
-    { id: 'c1', from: '09:00', to: '10:30', title: 'Call block 1: Med spas', quota: 67 },
+    { id: 'prep', from: '08:15', to: '09:00', title: "Load today's backyard contractor list, read the offer, say the opener 10 times" },
+    { id: 'c1', from: '09:00', to: '10:30', title: 'Call block 1: Backyard contractors', quota: 67 },
     { id: 'rep', from: '10:30', to: '10:45', title: 'Answer every reply, call every positive reply' },
-    { id: 'c2', from: '10:45', to: '12:15', title: 'Call block 2: Med spas', quota: 67 },
+    { id: 'c2', from: '10:45', to: '12:15', title: 'Call block 2: Backyard contractors', quota: 67 },
     { id: 'lunch', from: '12:15', to: '13:00', title: 'Lunch' },
-    { id: 'c3', from: '13:00', to: '14:30', title: 'Call block 3: Med spas', quota: 66 },
+    { id: 'c3', from: '13:00', to: '14:30', title: 'Call block 3: Backyard contractors', quota: 66 },
     { id: 'brk', from: '14:30', to: '14:45', title: 'Break' },
     { id: 'aud', from: '14:45', to: '16:15', title: 'Audits and closing calls (write scopes between calls)' },
     { id: 'cont', from: '16:15', to: '17:00', title: 'Post content (Instagram, X, LinkedIn) and send DMs' },

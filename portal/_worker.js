@@ -197,6 +197,9 @@ const PACKAGES = [
   { key: 'website-founding', name: 'Website — founding', amount: 497 },
   { key: 'website-ai', name: 'Website + AI', amount: 2997 },
   { key: 'website-ai-founding', name: 'Website + AI — founding', amount: 1497 },
+  { key: 'bk-starter', name: 'Backyard — Starter system', amount: 3000 },
+  { key: 'bk-growth', name: 'Backyard — Growth system', amount: 6500 },
+  { key: 'bk-full', name: 'Backyard — Full system', amount: 12000 },
   { key: 'custom-quote', name: 'Custom quote (type the amount)', amount: null },
   { key: 'custom', name: 'Custom — Full Automation', amount: 5000 },
   // Upsells / add-ons (log each as its own deal on the client's lead page)
@@ -210,55 +213,61 @@ const DEFAULT_SCRIPT = [
   { kind: 'step', title: 'Opener', body:
 `Hey, is this {owner_first}?
 
-[If yes] Hey {owner_first}, this is {rep_first} with Reekon Systems, here in LA. I'll be quick, I know you're busy running {business}.
+[If yes] Hey {owner_first}, this is {rep_first} with Reekon Systems, here in LA. I'll be quick, I know you're probably on a job site.
 
-[If you emailed them] Hey {owner_first}, this is {rep_first} with Reekon Systems. I sent you an email {email_day} with a free website we built for {business}. Ring a bell?
+[If you messaged them] Hey {owner_first}, it's {rep_first}. I sent you a demo for {business}, a version of your own AI receptionist. Did you get a chance to try it?
 
-[If gatekeeper] Hey! Quick one: who's the best person to talk to about the website and getting more customers for {business}? … Is {owner_first} around?` },
-  { kind: 'step', title: 'The hook (free demo)', body:
-`So here's why I'm calling. We actually went ahead and built a free website preview for {business}. No cost, no catch. We do it for a few {category} spots around {city} every week.
+[If gatekeeper] Hey! Quick one: who handles the calls and new jobs for {business}? … Is {owner_first} around?` },
+  { kind: 'step', title: 'The hook (their own demo)', body:
+`Here's why I'm calling. We build AI phone and text systems for backyard contractors. When you're on a job and can't pick up, it answers the call, answers questions, and books the free estimate.
 
-Can I text it to this number so you can take a look?
+We already put together a live demo for {business}. You can talk to it on your phone right now. Can I text you the link?
 
 [Demo link] {demo_link}` },
-  { kind: 'step', title: 'Quick questions', body:
-`While you pull it up, can I ask two quick things?
+  { kind: 'step', title: 'Quick questions (the audit)', body:
+`While you pull it up, three quick ones:
 
-- When someone calls or DMs you after hours, what happens? Do they get a reply?
-- How do people book with you right now: call, text, Instagram, walk-in?
+- When you're on a job and the phone rings, what happens to that call?
 - Roughly how many calls or messages do you think you miss in a week?
+- When you give someone an estimate, who follows up, and how many go quiet?
+- Say an average job is what, a few thousand? So one lost job is a few thousand lost.
 
-[Listen. Write what they say in Notes.]` },
+[Listen. Write what they say in Notes. Get: staff, software, how leads come in, who decides, budget.]` },
   { kind: 'step', title: 'What we do', body:
-`That's exactly what we fix. We build you a clean website that shows up when people Google you, works on phones, and lets customers book you right from the site. We host it, keep it updated, and handle any changes, so you never have to touch it.
+`That's exactly what the system fixes:
 
-If you're missing calls or DMs, we can also add an AI assistant that answers questions and books people for you, day or night.` },
-  { kind: 'step', title: 'Book the call', body:
-`The best next step is a quick 20-minute call with Marquise, our founder. He'll walk you through the demo and show you what it'd look like for {business}. No pressure.
+1) Every call is answered, even while you're working, and the estimate gets booked.
+2) Every new lead gets a text back in seconds.
+3) Every quote gets followed up until they say yes or no.
+4) Every finished job asks for the review and the referral.
+
+It runs for {business} on top of your own number. You keep working. Want me to book the free 30-minute audit so Marquise can show you exactly what it would look like?` },
+  { kind: 'step', title: 'Book the audit', body:
+`The next step is a free 30-minute AI audit with Marquise, our founder. He'll look at how calls and quotes work at {business} today and give you a rough number before the call ends. No pressure.
 
 Does tomorrow morning or tomorrow afternoon work better?
 
-[Lock a day and time → tap Booked and put the time in.]` },
+[Lock a day and time → tap Booked and put the time in. Always book the second call on the audit.]` },
   { kind: 'objection', title: '"How much is it?"', body:
-`Totally fair. Websites start at $997 to launch, plus $79 a month for hosting, updates and support, and we have a founding offer for our first 10 clients. Exact price depends on what you want added, and Marquise lays it all out on the call so there are no surprises.
-
-Want me to grab you a time?` },
-  { kind: 'objection', title: '"I already have a website"', body:
-`Love that. Is it getting you booked? Ours is built to show up on Google and get people to book, and we handle every update for you. Take a look at the preview we made and compare. Worth 20 minutes?` },
+`Fair question. Setups usually run from about $3,000 depending on what we turn on, plus a monthly fee, and Marquise gives you the exact number on the audit. Most contractors look at it as: if it books one extra job, it has paid for itself. Want me to grab you a time to see the real number for {business}?` },
+  { kind: 'objection', title: '"I already have someone answering the phone"', body:
+`That's great. Does that person answer at 7pm, on weekends, and while you're all at lunch? This doesn't replace them. It catches what they can't. Worth 30 minutes to see how many calls slip through?` },
+  { kind: 'objection', title: '"I get enough work"', body:
+`Love that. The goal isn't more work than you can handle. It's making sure the jobs you're already paying to get don't leak out through a missed call or a quote nobody followed up. Want to see what leaks, free?` },
   { kind: 'objection', title: '"Just send me info"', body:
-`For sure, I'll text you the demo right now. The info only makes sense once you see it set up for {business}, so let's put 20 minutes on the calendar too. What's better, morning or afternoon?` },
-  { kind: 'objection', title: '"I\'m busy right now"', body:
-`Totally get it. When's a better time for a 2-minute call back, later today or tomorrow?
+`For sure, I'll text you the demo right now. It only makes sense once you've talked to it, so let's put 30 minutes on the calendar too. What's better, morning or afternoon?` },
+  { kind: 'objection', title: '"I\'m on a job right now"', body:
+`Totally get it, that's exactly why I'm calling. When's a better time for a 2-minute call back, early tomorrow or late afternoon?
 
 [Tap Callback and set the time.]` },
   { kind: 'objection', title: '"Not interested"', body:
-`No problem at all. Can I ask: is it the timing, or you just don't see a need for it? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
+`No problem at all. Can I ask: is it the timing, or you just don't see a need? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
   { kind: 'objection', title: '"Is this a robot?"', body:
-`Ha, I'm a real person! The website is built by our team. If you add the AI assistant later, it only handles the repetitive stuff like "are you open?" and booking, and anything important comes straight to you.` },
+`Ha, I'm a real person! The AI only handles the repetitive stuff like "do you do pavers?" and booking the estimate. Anything important goes straight to you.` },
   { kind: 'step', title: 'Voicemail', body:
-`Hey {owner_first}, it's {rep_first} with Reekon Systems. We built a free website preview for {business} and I'd love to send it over. I'll shoot you a text with the link. Talk soon!
+`Hey {owner_first}, it's {rep_first} with Reekon Systems. We built a demo of an AI receptionist for {business}, so the next time you're on a job and the phone rings, it books the estimate for you. I'll text you the link. Talk soon!
 
-[Then tap Voicemail, and text the demo.]` },
+[Then tap Voicemail, and text the demo link.]` },
 ];
 
 /* -------- personal tracker -------- */
@@ -304,12 +313,13 @@ async function trkBump(env, userId, add) {
     ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, updated_at = excluded.updated_at`)
     .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, now()).run();
 }
-const FOCUS_DEFAULT = 'med spa';
+const FOCUS_DEFAULT = 'backyard contractor';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
+  if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
   if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
   return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 12);
 }
@@ -771,7 +781,8 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 }
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
-const AUTO_DEFAULTS = { enabled: false, niches: ['med spa', 'medical spa', 'botox clinic', 'aesthetics clinic', 'laser hair removal'], cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 5000, include_social: true, any_site: true, target_ready: 200, expand: true, purge_nonfocus: false };
+const BACKYARD_NICHES = ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'];
+const AUTO_DEFAULTS = { enabled: false, niches: BACKYARD_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 30, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -850,10 +861,11 @@ async function autoStep(env, { manual } = {}) {
   }
   const run = { at: now(), search: pick.what + ' in ' + pick.where, checked: 0, added: 0, error: null };
   try {
-    const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, cfg.any_site ? 0 : 6);
+    const lowRev = !!cfg.low_review_only;
+    const f = await finderSearch(env, 1, pick.what, pick.where, st.pages[pick.key] || undefined, cfg.any_site || lowRev ? 0 : 6);
     run.checked = f.results.length;
-    // any_site (med spas, gyms, insurance): keep businesses that already have a website, whatever their review count
-    const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (cfg.any_site || x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
+    // any_site (any niche): keep businesses that already have a website, whatever their review count
+    const keep = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && (cfg.any_site || lowRev || x.site_status === 'none' || (cfg.include_social && x.site_status === 'social'))
       && (cfg.any_site || x.reviews == null || x.reviews <= cfg.max_reviews));
     if (keep.length) {
       const name = 'Auto lead bot · ' + new Date().toLocaleDateString('en-US', { timeZone: BOT_TZ, month: 'short', day: 'numeric' });
@@ -862,7 +874,7 @@ async function autoStep(env, { manual } = {}) {
       const city = pick.where.split(',')[0].trim();
       const rows = keep.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city, category: p.category, rating: p.rating == null ? '' : String(p.rating),
         link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
-      const res = await importRows(env, { batchId: b.id, rows, startStatus: cfg.any_site ? 'new' : 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
+      const res = await importRows(env, { batchId: b.id, rows, startStatus: cfg.any_site || lowRev ? 'new' : 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
       run.added = res.inserted || 0;
     }
     st.pages[pick.key] = f.next || 'done';
@@ -2355,6 +2367,8 @@ async function api(request, env, url) {
     if (body.max_reviews !== undefined) out.max_reviews = Math.max(0, Math.min(5000, parseInt(body.max_reviews, 10) || 50));
     if (body.include_social !== undefined) out.include_social = !!body.include_social;
     if (body.any_site !== undefined) out.any_site = !!body.any_site;
+    if (body.low_review_only !== undefined) out.low_review_only = !!body.low_review_only;
+    if (body.focus !== undefined) await setSetting(env, 'focus_niche', str(body.focus, 40).toLowerCase());
     if (out.enabled && (!out.niches.length || !out.cities.length)) bad('Add at least one type of business and one city');
     await setSetting(env, 'auto_finder', JSON.stringify(out));
     return json({ ok: true, config: out });
@@ -2442,7 +2456,7 @@ async function api(request, env, url) {
     else if (workDays7.length >= 3 && avg7 >= goal) add('good', `7-day average is ${avg7} dials/day. Volume is on target.`);
     if (dayN >= 4 && demos7 === 0) add('bad', `Zero audits booked in the last 7 days. Dials without bookings means the opener or the list needs work.`);
     else if (dials7 >= 50 && talks7 > 0 && demos7 / talks7 < 0.1) add('warn', `Only ${demos7} audit${demos7 === 1 ? '' : 's'} from ${talks7} conversations (${Math.round(100 * demos7 / talks7)}%). Tighten the first 20 seconds of the call.`);
-    if (dials7 >= 30 && talks7 / dials7 < 0.05) add('warn', `Pick-up rate is ${Math.round(100 * talks7 / dials7)}%. Try calling med spas 10–12 and 2–4, when the front desk is quieter.`);
+    if (dials7 >= 30 && talks7 / dials7 < 0.05) add('warn', `Pick-up rate is ${Math.round(100 * talks7 / dials7)}%. Try calling contractors early (6:30 to 8am) or late afternoon (3:30 to 5pm), when they are between jobs.`);
     if (setupTotal === 0 && dayN >= 7) add('bad', `No revenue yet and you're on day ${dayN} of 30. Every day without a booked audit makes day 30 harder.`);
     if (focusOpen < goal * 2) add('warn', `Only ${focusOpen} fresh ${(await getSetting(env, 'focus_niche')) || FOCUS_DEFAULT} leads left — ${daysOfLeads < 1 ? 'less than a day' : 'about ' + daysOfLeads + ' days'} of dialing. Turn on the lead bot or run the Lead Finder.`);
     if (sent14 >= 20 && replied14 === 0) add('warn', `${sent14} cold emails sent in 14 days and no replies. The email isn't your channel yet — the phone is.`);
@@ -2717,16 +2731,16 @@ async function api(request, env, url) {
     const kind = ['video', 'post', 'face'].includes(body.kind) ? body.kind : 'post';
     const msgs = Array.isArray(body.messages) ? body.messages.slice(-10).map((m) => ({ role: m && m.role === 'bot' ? 'assistant' : 'user', content: str(m && m.text, 900) })).filter((m) => m.content) : [];
     if (!msgs.length || msgs[msgs.length - 1].role !== 'user') bad('Say something to the bot first');
-    let business = str(body.business, 80) || 'junk removal'; const manyOffers = Array.isArray(body.offers) && body.offers.length >= 5 && body.kind === 'video'; const secs = manyOffers ? 90 : [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = manyOffers ? '15 to 18' : secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
+    let business = str(body.business, 80) || 'backyard contractor'; const manyOffers = Array.isArray(body.offers) && body.offers.length >= 5 && body.kind === 'video'; const secs = manyOffers ? 90 : [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = manyOffers ? '15 to 18' : secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
     try {
       const d0 = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: 'Read the message and find the type of business it is about. Answer ONLY JSON: {"business": string or null}. Use 1 to 4 lowercase words, like "junk removal", "dental office", "med spa", "plumbing". Use null if the message does not name a type of business.' }, { role: 'user', content: msgs[msgs.length - 1].content }], max_tokens: 40, temperature: 0 });
       const t0 = typeof (d0 && d0.response) === 'string' ? d0.response : JSON.stringify((d0 && d0.response) || '');
       const m0 = t0.match(/\{[\s\S]*\}/), named = m0 ? JSON.parse(m0[0]).business : null;
       if (typeof named === 'string' && named.trim() && named.trim().length <= 40 && !/^(null|none|small business|business|local business)$/i.test(named.trim())) business = named.trim().toLowerCase();
     } catch { /* keep the box value */ }
-    const OFFER_LINES = { missed: 'an AI receptionist that answers every call and books the job', slow: 'instant replies to every new inquiry (speed to lead)', quotes: 'automatic quote follow-ups so no estimate is forgotten', quiet: 'win-back texts to past customers', reviews: 'automatic review requests after every job', plates: 'tap-to-review NFC cards', noshow: 'appointment reminders and easy rescheduling', afterhours: 'calls, messages and bookings handled at night and on weekends', website: 'a website that turns visitors into bookings', chatbot: 'an AI chat on the website that answers and books', crm: 'one place that tracks every lead' };
+    const OFFER_LINES = { missed: 'an AI receptionist that answers every call and books the free estimate', slow: 'instant replies to every new inquiry (speed to lead)', quotes: 'automatic quote follow-ups so no estimate goes quiet', quiet: 'win-back texts to past customers for repeat projects and referrals', reviews: 'automatic review requests after every job', plates: 'tap-to-review NFC cards', noshow: 'estimate reminders and easy rescheduling so nobody is a no-show', afterhours: 'calls, messages and bookings handled at night and on weekends', website: 'a website that turns visitors into estimate requests', chatbot: 'an AI chat on the website that answers and books', crm: 'one place that tracks every lead and quote', ballpark: 'an instant ballpark price tool on the website that qualifies the lead', jobdone: 'a job-done automation: review ask, referral ask and a before and after post' };
     const offerIds = (Array.isArray(body.offers) ? body.offers : []).map((x) => String(x)).filter((x) => OFFER_LINES[x]).slice(0, 11);
-    const OFFER_RX = { missed: /call|receptionist|phone|answer/i, slow: /repl|respon|inquir|minute|speed/i, quotes: /quote|estimate/i, quiet: /past|former|previous|win.?back|bring.{0,12}back|repeat|come back/i, reviews: /review/i, plates: /tap|nfc|card|plate/i, noshow: /remind|no.?show|cancel|resched/i, afterhours: /night|after.?hours|weekend|24|midnight|evening/i, website: /website|web site|google|online/i, chatbot: /chat/i, crm: /track|one place|every lead|dashboard|list of leads|pipeline/i };
+    const OFFER_RX = { missed: /call|receptionist|phone|answer/i, slow: /repl|respon|inquir|minute|speed/i, quotes: /quote|estimate/i, quiet: /past|former|previous|win.?back|bring.{0,12}back|repeat|come back/i, reviews: /review/i, plates: /tap|nfc|card|plate/i, noshow: /remind|no.?show|cancel|resched/i, afterhours: /night|after.?hours|weekend|24|midnight|evening/i, website: /website|web site|google|online/i, chatbot: /chat/i, crm: /track|one place|every lead|dashboard|list of leads|pipeline/i , ballpark: /ballpark|price range|instant (quote|price)|estimator|calculator|how much/i, jobdone: /job.?done|finished|before and after|referral|after the job/i };
     const offerNote = offerIds.length ? '\n\nOFFERS TO FEATURE (Marquise picked these, use all of them and nothing else): ' + offerIds.map((x) => OFFER_LINES[x]).join('; ') + '. For a video give every one of them its own fix or step beat, named in plain words and tied to a pain the owner feels. Never cover only one of them. ' + (offerIds.length >= 5 ? 'Because there are many, make it an everything-we-set-up video: a hook, one pain, one cost, then one short step beat for EACH offer (under 14 spoken words each), a result and the cta.' : '') + ' For a post or script work each one in naturally.' : '';
     const TIDS = { missed: 'missed calls', slow: 'slow replies to new inquiries', quiet: 'quiet past customers', reviews: 'getting more reviews', noshow: 'no-shows and cancellations', afterhours: 'bookings and quotes after hours', website: 'website', crm: 'one place for every lead', chatbot: 'chat on the website', plates: 'tap-to-review NFC cards' };
     const tidList = Object.keys(TIDS).join('|') + '|custom';
