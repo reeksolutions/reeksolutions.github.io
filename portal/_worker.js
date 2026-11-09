@@ -1487,7 +1487,7 @@ async function api(request, env, url) {
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
     const SORTS = { business: 'l.business COLLATE NOCASE', city: 'l.city COLLATE NOCASE', status: 'l.status', last_call: 'l.last_call_at', next: 'l.next_action_at', added: 'l.id', rep: 'u.name' };
     const sortKey = SORTS[p.get('sort')], dir = p.get('dir') === 'desc' ? 'DESC' : 'ASC';
-    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, COALESCE(l.callback_at, l.updated_at) ASC, l.id ASC`;
+    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, CASE WHEN l.status IN ('callback','booked') THEN COALESCE(l.callback_at, l.updated_at) END ASC, l.id DESC`;
     const orderArgs = sortKey ? [] : fx.args;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
