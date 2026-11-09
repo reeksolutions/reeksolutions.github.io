@@ -382,7 +382,7 @@
     const isAdmin = S.me.role === 'admin';
     const opts = await getOptions(true);
     const F = S.leadFilters;
-    const mode = lsGet('rs_leads_mode', 'board');
+    const mode = lsGet('rs_leads_mode', 'list');
     const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
     const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
     const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
@@ -398,7 +398,7 @@
     const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '' }, f); viewLeads(); } }, l)));
     const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
     const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
-    const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['board', 'Board'], ['table', 'Table']].map(([k, l]) =>
+    const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['list', 'List'], ['board', 'Board'], ['table', 'Table']].map(([k, l]) =>
       h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode', k); viewLeads(); } }, l)));
 
     async function filterSheet() {
@@ -451,6 +451,28 @@
       }));
       body.replaceChildren(board);
     }
+    // ---- list: every stage stacked in sequence ----
+    async function loadList() {
+      body.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' })));
+      let r; try { r = await api('GET', '/leads/board?' + qsFrom({ per: 50 })); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
+      const total = r.stages.reduce((a, s) => a + s.count, 0);
+      countEl.textContent = total.toLocaleString() + (total === 1 ? ' lead' : ' leads');
+      const LBL = { new: 'Not reached out', called: 'Reached out' };
+      let shut = {}; try { shut = JSON.parse(lsGet('rs_leads_shut', '{}')); } catch { shut = {}; }
+      const mover = S.justMoved; S.justMoved = null;
+      const secs = r.stages.map((st) => {
+        const closed = !!shut[st.key];
+        const sec = h('section', { class: 'lstage s-' + st.key + (closed ? ' shut' : '') });
+        const head = h('button', { type: 'button', class: 'lstage-h', 'aria-expanded': String(!closed), onclick: () => { shut[st.key] = !shut[st.key]; lsSet('rs_leads_shut', JSON.stringify(shut)); sec.classList.toggle('shut', !!shut[st.key]); head.setAttribute('aria-expanded', String(!shut[st.key])); } },
+          h('b', null, LBL[st.key] || st.label), h('span', { class: 'lcount' }, st.count.toLocaleString()), h('i', { class: 'chev' }, '▾'));
+        const cards = st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); if (mover && mover === l.id) c.classList.add('just-moved'); return c; });
+        sec.append(head, h('div', { class: 'lstage-b' }, cards.length ? cards : h('div', { class: 'bempty' }, 'Nobody here yet')),
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
+        return sec;
+      });
+      body.replaceChildren(h('div', { class: 'lstages' }, secs));
+      const jm = body.querySelector('.just-moved'); if (jm && jm.scrollIntoView) jm.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
     function boardCard(l) {
       const due = l.next_action_at && new Date(l.next_action_at) < new Date();
       const when = l.status === 'callback' && l.callback_at ? '↻ ' + fmt(l.callback_at) : l.status === 'booked' && l.booked_at ? '📅 ' + fmt(l.booked_at) : l.next_action_at ? '⏰ ' + fmt(l.next_action_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
@@ -473,7 +495,7 @@
       if (to) moveLead(l.id, to);
     }
     async function moveLead(id, stage) {
-      try { await api('PATCH', '/leads/' + id, { status: stage }); toast('Moved to ' + STAGE_NAME[stage]); load(); } catch (e) { fail(e); }
+      try { await api('PATCH', '/leads/' + id, { status: stage }); toast('Moved to ' + STAGE_NAME[stage]); S.justMoved = id; load(); } catch (e) { fail(e); }
     }
 
     // ---- table ----
@@ -529,7 +551,7 @@
         h('button', { class: 'btn small', onclick: () => { S.selected.clear(); loadTable(); } }, 'Clear'));
     }
 
-    const load = () => (mode === 'board' ? loadBoard() : loadTable());
+    const load = () => (mode === 'list' ? loadList() : mode === 'board' ? loadBoard() : loadTable());
     shell('leads', [
       h('div', { class: 'lhead' },
         h('div', { class: 'lt' }, h('h1', null, isAdmin ? 'Leads' : 'My leads'), countEl),
@@ -799,6 +821,7 @@
       h('button', { class: 'btn small', onclick: async () => {
         try { const t = await api('GET', '/tracker'); await api('PUT', '/tracker', { dms: t.day.dms + 1 }); toast('DM logged (' + (t.day.dms + 1) + ' today)'); } catch (e) { fail(e); }
       } }, 'Sent a DM'),
+      L.booked_at && ['booked', 'call2'].includes(L.status) ? h('button', { class: 'btn small primary', onclick: () => { CAL.preset = { title: (L.status === 'call2' ? 'Call 2: ' : 'Free AI audit: ') + L.business, start: L.booked_at, lead_id: L.id, notes: 'Phone: ' + (L.phone || '') }; location.hash = '#/calendar'; } }, 'Calendar + Meet') : null,
       (() => { const w = L.booked_at && ['booked', 'call2'].includes(L.status) ? [L.booked_at, (L.status === 'call2' ? 'Call 2: ' : 'Free AI audit: '), 30] : L.callback_at && L.status === 'callback' ? [L.callback_at, 'Callback: ', 15] : null; return w ? h('a', { class: 'btn small', target: '_blank', rel: 'noopener', href: gcalLink({ title: w[1] + L.business, start: w[0], minutes: w[2], details: 'Phone: ' + (L.phone || '') + '\nFrom Reekon CRM' }) }, '+ Calendar') : null; })(),
       h('button', { class: 'btn small', onclick: goNext }, 'Next lead →')) : null;
     const earlier = notes.slice(0, 3);
@@ -1042,7 +1065,7 @@
       const out = [];
       x.events.forEach((e) => out.push({ at: e.starts_at, end: e.ends_at, type: e.kind, title: e.title, sub: [e.lead_name, S.me.role === 'admin' ? e.owner_name : null].filter(Boolean).join(' · '), ev: e }));
       x.callbacks.forEach((l) => out.push({ at: l.at, type: 'callback', title: 'Call back ' + l.business, sub: 'Callback', lead: l }));
-      x.booked.forEach((l) => out.push({ at: l.at, type: 'booked', title: 'Booked: ' + l.business, sub: 'Booked call', lead: l }));
+      x.booked.forEach((l) => { if (x.events.some((e) => e.lead_id === l.id && Math.abs(new Date(e.starts_at) - new Date(l.at)) < 36e5)) return; out.push({ at: l.at, type: 'booked', title: 'Booked: ' + l.business, sub: 'Booked call', lead: l }); });
       return out.sort((a, b) => new Date(a.at) - new Date(b.at));
     };
     const all = toItems(r), upcoming = toItems(soon);
@@ -1051,21 +1074,23 @@
     shown.forEach((it) => { const k = dayKey(new Date(it.at)); (byDay[k] = byDay[k] || []).push(it); });
     const redraw = () => viewCalendar();
 
-    const openEditor = async (ev, presetDay, presetKind) => {
-      const base = ev ? new Date(ev.starts_at) : new Date(presetDay + 'T09:00');
+    const openEditor = async (ev, presetDay, presetKind, pre) => {
+      pre = pre || {};
+      const base = ev ? new Date(ev.starts_at) : pre.start ? new Date(pre.start) : new Date(presetDay + 'T09:00');
       const done = await sheet((box, close) => {
-        const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Torres Pavers', value: ev ? ev.title : '' });
+        const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Torres Pavers', value: ev ? ev.title : pre.title || '' });
         const kind = h('select', null, Object.entries(CAL_KIND).filter(([v]) => v !== 'posted' || (ev && ev.kind === 'posted')).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'audit') === v ? true : null }, t)));
         const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
         const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
-        const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : '' });
-        const notes = h('textarea', { rows: 3, maxlength: 1000, placeholder: 'Notes, what to cover, who is on the call' }, ev && ev.notes ? ev.notes : '');
+        const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : pre.link || '' });
+        const meetBtn = h('a', { class: 'btn small', href: 'https://meet.google.com/new', target: '_blank', rel: 'noopener' }, '+ Create Google Meet');
+        const notes = h('textarea', { rows: 3, maxlength: 1000, placeholder: 'Notes, what to cover, who is on the call' }, ev && ev.notes ? ev.notes : pre.notes || '');
         const save = h('button', { class: 'btn primary block', onclick: async () => {
           save.disabled = true;
           const startIso = starts.value ? new Date(starts.value).toISOString() : '';
           let endIso = ends.value ? new Date(ends.value).toISOString() : null;
           if (!endIso && !ev && startIso && CAL_MINS[kind.value]) endIso = new Date(new Date(startIso).getTime() + CAL_MINS[kind.value] * 6e4).toISOString();
-          try { await api(ev ? 'PATCH' : 'POST', ev ? '/calendar/' + ev.id : '/calendar', { title: title.value, kind: kind.value, starts_at: startIso, ends_at: endIso, link: link.value, notes: notes.value }); close(true); }
+          try { await api(ev ? 'PATCH' : 'POST', ev ? '/calendar/' + ev.id : '/calendar', Object.assign({ title: title.value, kind: kind.value, starts_at: startIso, ends_at: endIso, link: link.value, notes: notes.value }, !ev && pre.lead_id ? { lead_id: pre.lead_id } : {})); close(true); }
           catch (e) { fail(e); save.disabled = false; }
         } }, ev ? 'Save changes' : 'Add to calendar');
         box.append(h('h2', null, ev ? 'Edit event' : 'New event'),
@@ -1073,6 +1098,8 @@
           h('div', { class: 'two' }, h('label', { class: 'field' }, h('span', null, 'Type'), kind), h('label', { class: 'field' }, h('span', null, 'Starts'), starts)),
           h('label', { class: 'field' }, h('span', null, 'Ends (optional, filled in for you)'), ends),
           h('label', { class: 'field' }, h('span', null, 'Meeting link (optional)'), link),
+          h('div', { class: 'row', style: 'margin:-4px 0 10px;gap:8px' }, meetBtn, h('small', { class: 'dim' }, 'Opens Meet in a new tab. Copy the link, come back, paste it above.')),
+          ev && ev.link ? h('a', { class: 'btn ok block', style: 'margin-bottom:10px', href: ev.link, target: '_blank', rel: 'noopener' }, 'Join the call') : null,
           h('label', { class: 'field' }, h('span', null, 'Notes'), notes),
           save,
           ev ? h('button', { class: 'btn danger block', style: 'margin-top:10px', onclick: async () => {
@@ -1095,10 +1122,31 @@
       if (it.lead) return h('a', { class: cls, href: '#/lead/' + it.lead.id }, inner, it.lead.phone ? h('a', { class: 'call-btn', href: telHref(it.lead.phone), onclick: (e) => e.stopPropagation() }, icon('phone')) : null);
       return h('button', { type: 'button', class: cls, onclick: () => openEditor(it.ev) }, inner);
     };
+    const openDay = async (k) => {
+      const d = new Date(k + 'T12:00'), list = (byDay[k] || []);
+      const act = await sheet((box, close) => {
+        const item = (it) => {
+          const past = new Date(it.end || it.at) < now;
+          return h('button', { type: 'button', class: 'dayw-item' + (past ? ' past' : ''), onclick: () => close(it) },
+            h('span', { class: 'cal-bar ' + it.type }),
+            h('div', { class: 'body' }, h('b', null, it.title),
+              h('small', null, hm(it.at) + (it.end ? ' – ' + hm(it.end) : '') + (it.sub ? ' · ' + it.sub : '') + (it.ev && it.ev.link ? ' · Meet link set' : ''))),
+            h('span', { class: 'dayw-go' }, '›'));
+        };
+        box.append(h('h2', null, (k === dayKey(now) ? 'Today · ' : '') + d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })),
+          h('p', { class: 'sub' }, list.length ? list.length + (list.length === 1 ? ' thing' : ' things') + ' on this day. Tap one to open it.' : 'Nothing scheduled.'),
+          h('div', { class: 'dayw-list' }, list.map(item)),
+          h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Close'),
+            h('button', { class: 'btn primary', onclick: () => close('add') }, '+ Add to this day')));
+      });
+      if (act === 'add') openEditor(null, k);
+      else if (act && act.lead) location.hash = '#/lead/' + act.lead.id;
+      else if (act && act.ev) openEditor(act.ev);
+    };
     const dayBlock = (d, opts) => {
       const k = dayKey(d), list = byDay[k] || [];
       return h('div', { class: 'cal-day' + (k === dayKey(now) ? ' today' : '') },
-        h('div', { class: 'cal-day-h' }, h('b', null, (k === dayKey(now) ? 'Today · ' : '') + d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })),
+        h('div', { class: 'cal-day-h' }, h('b', { onclick: () => openDay(k), style: 'cursor:pointer' }, (k === dayKey(now) ? 'Today · ' : '') + d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })),
           h('button', { class: 'cal-plus', 'aria-label': 'Add to ' + k, onclick: () => openEditor(null, k) }, '+')),
         list.length ? list.map(row) : h('p', { class: 'dim cal-free' }, opts && opts.free ? opts.free : 'Nothing scheduled'));
     };
@@ -1132,7 +1180,7 @@
         const d = new Date(from); d.setDate(from.getDate() + i);
         const k = dayKey(d), list = byDay[k] || [];
         cells.push(h('button', { type: 'button', class: 'cal-cell' + (d.getMonth() !== CAL.month.getMonth() ? ' out' : '') + (k === dayKey(now) ? ' today' : '') + (k === CAL.sel ? ' sel' : ''),
-          'aria-label': d.toDateString() + (list.length ? ', ' + list.length + ' items' : ''), onclick: () => { CAL.sel = k; redraw(); } },
+          'aria-label': d.toDateString() + (list.length ? ', ' + list.length + ' items' : ''), onclick: () => { CAL.sel = k; document.querySelectorAll('.cal-cell.sel').forEach((c) => c.classList.remove('sel')); openDay(k); } },
           h('span', { class: 'n' }, String(d.getDate())),
           h('span', { class: 'dots' }, list.slice(0, 3).map((it) => h('i', { class: 'dot ' + it.type })), list.length > 3 ? h('b', null, '+' + (list.length - 3)) : null)));
       }
@@ -1152,6 +1200,7 @@
         keys.length ? keys.map((k) => dayBlock(new Date(k + 'T12:00'))) : h('div', { class: 'card empty' }, h('b', null, 'Nothing coming up'), 'Add an audit call, closing call or meeting with + Add.')];
     }
 
+    if (CAL.preset) { const pr = CAL.preset; CAL.preset = null; setTimeout(() => openEditor(null, dayKey(new Date(pr.start)), 'audit', pr).then(() => {}), 80); }
     const counts = {}; all.forEach((it) => { const g = CAL_GROUP[it.type] || 'other'; counts[g] = (counts[g] || 0) + 1; });
     shell('calendar', [
       h('div', { class: 'head' }, h('div', null, h('h1', null, 'Calendar'), h('p', { class: 'sub' }, 'Audits, closing calls, demos, meetings and callbacks in one place.')),
