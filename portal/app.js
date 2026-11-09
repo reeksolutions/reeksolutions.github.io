@@ -2816,7 +2816,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
   const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: true, speed: 0.95, sol: null, solFor: null };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null };
   const patchKey = (tid, seed) => tid + ':' + seed;
   const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
@@ -3003,6 +3003,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
     const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
     const dest = ac.createMediaStreamDestination(), out = ac.createGain(); out.gain.value = 1; out.connect(dest);
+    let wl = null; try { if (navigator.wakeLock) wl = await navigator.wakeLock.request('screen'); } catch { /* optional */ }
     const t0 = ac.currentTime + 0.25;
     if (voiceBuf) { const src = ac.createBufferSource(); src.buffer = voiceBuf; const vg = ac.createGain(); vg.gain.value = 1.0; src.connect(vg); vg.connect(out); src.start(t0 + plan.lead); }
     if (sfxOn) { const sg = ac.createGain(); sg.gain.value = voiceBuf ? 0.45 : 0.8; sg.connect(out); sfxSchedule(ac, sg, plan, t0); }
@@ -3016,7 +3017,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const tick = () => { const t = Math.max(0, (performance.now() - start) / 1000); draw(ctx, plan, t, cache); onProgress(clamp01(t / plan.total)); if (t >= plan.total + 0.2) resolve(); else requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     });
-    rec.stop(); await done; try { ac.close(); } catch { /* ignore */ }
+    rec.stop(); await done; try { ac.close(); } catch { /* ignore */ } try { if (wl) wl.release(); } catch { /* ignore */ } canvas.width = 1; canvas.height = 1;
     const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
     return { blob: new Blob(chunks, { type }), type, ext: type.includes('mp4') ? 'mp4' : 'webm' };
   }
@@ -3214,7 +3215,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     };
     const chips = (cur, opts, set) => h('div', { class: 'stagechips' }, opts.map(([val, l]) => h('button', { class: 'schip' + (cur === val ? ' on' : ''), onclick: () => set(val) }, l)));
     const lenChips = chips(VM.len, [['short', 'Short · ~40s'], ['full', 'Long · ~80s']], (v) => { VM.len = v; vmClear(true); parent(); });
-    const hdChips = chips(VM.hd, [[true, 'HD 1080p'], [false, 'Fast 720p']], (v) => { VM.hd = v; parent(); });
+    const hdChips = chips(VM.hd, [[false, 'Standard 720p (safest)'], [true, 'HD 1080p (can crash phones)']], (v) => { VM.hd = v; parent(); });
     const spChips = chips(VM.speed, [[0.95, 'Natural'], [0.85, 'Slower'], [1.05, 'Quicker']], (v) => { VM.speed = v; vmClear(true); parent(); });
     const styleChips = chips(VM.style, [['flow', 'Flow map'], ['pulse', 'Heartbeat']], (k) => { VM.style = k; vmClear(false); parent(); });
     const sfxChips = chips(VM.sfx, [[true, 'Sound effects on'], [false, 'No sound effects']], (val) => { VM.sfx = val; parent(); });
@@ -3334,7 +3335,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
       const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
       input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
-      const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain these business owners hate the most' : t) }, t));
+      const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain that ' + (CS.business || 'small business') + ' owners hate the most' : t) }, t));
       return h('div', null,
         bizRow, ideaPreview(),
         h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? h('div', { class: 'bot-msg bot dim' }, 'Thinking…') : null),
