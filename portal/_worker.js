@@ -2770,12 +2770,17 @@ async function api(request, env, url) {
           method: 'POST', headers: { 'xi-api-key': env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: long, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true, speed: Math.min(1.2, Math.max(0.7, +body.speed || 0.95)) } }),
         });
-        if (!r.ok) throw new Error('elevenlabs ' + r.status + ' ' + (await r.text()).slice(0, 120));
+        if (!r.ok) {
+          const raw = await r.text(); let msg = raw.slice(0, 160);
+          try { const jj = JSON.parse(raw); const d = jj.detail; msg = (d && (d.message || d.status)) || (typeof d === 'string' ? d : msg); } catch { /* keep raw */ }
+          const hint = r.status === 401 ? ' (the API key was rejected or lacks Text to Speech permission)' : r.status === 404 ? ' (that voice ID was not found on this account)' : r.status === 402 || r.status === 403 ? ' (your plan or key cannot use this voice)' : r.status === 429 ? ' (out of credits or too many requests)' : '';
+          const err = new Error('ElevenLabs: ' + String(msg).slice(0, 140) + hint); err.eleven = true; throw err;
+        }
         const j = await r.json();
         if (!j.audio_base64) throw new Error('no audio');
         const al = j.alignment || j.normalized_alignment || null;
         return json({ audio: j.audio_base64, mime: 'audio/mpeg', engine: 'eleven', starts: al ? al.character_start_times_seconds : null, nchars: al && al.characters ? al.characters.length : 0 });
-      } catch (e) { console.error('eleven', e); if (!env.AI) bad('ElevenLabs said no: ' + String((e && e.message) || e).slice(0, 100)); }
+      } catch (e) { console.error('eleven', e); bad(String((e && e.message) || e).slice(0, 260) + '. Fix that in ElevenLabs or Cloudflare and try again.'); }
     }
     if (!env.AI) bad('The voice engine is not switched on yet');
     const speaker = ['luna', 'asteria', 'athena', 'hera', 'stella'].includes(body.voice) ? body.voice : 'luna';
