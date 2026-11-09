@@ -2679,6 +2679,34 @@ async function api(request, env, url) {
       ORDER BY CASE WHEN l.demo_url IS NULL OR l.demo_url = '' THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END, l.id DESC LIMIT 30`).bind(...args).all();
     return json(results);
   }
+  if (path === '/video/edit' && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const instruction = str(body.instruction, 500);
+    if (!instruction) bad('Tell it what to fix');
+    if (!env.AI) bad('The editor is not switched on yet');
+    const cur = body.current && typeof body.current === 'object' ? body.current : {};
+    const sys = 'You edit a short vertical video script for a company that sells AI phone, text and review tools to med spas. The user will say what to fix. Return ONLY a JSON object containing just the fields that need to change. Allowed fields: hook, symptom, diagnosis, cost, fix, recovery, cta (each a spoken line, plain words, under 160 characters), and flow (an object that may hold: title, trigger, pain (array of exactly 3 short strings), why, lost, fix, steps (array of exactly 3 short strings), check, before, after; each under 60 characters). Rules: change only what the user asked. Never invent statistics, prices, clients or guarantees that are not in the current text, except numbers the user gives you. No hype words, no em dashes. If the user changes a spoken line that the board also shows, change the matching flow field too.';
+    let text = '';
+    try {
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: sys }, { role: 'user', content: 'CURRENT:\n' + JSON.stringify(cur).slice(0, 4000) + '\n\nFIX REQUEST: ' + instruction }], max_tokens: 900, temperature: 0.3 });
+      text = String((r && (r.response || r.result)) || '');
+    } catch (e) { console.error('vedit', e); bad('The editor is busy. Try again in a minute.'); }
+    let obj = null;
+    try { const m = text.match(/\{[\s\S]*\}/); obj = m ? JSON.parse(m[0]) : null; } catch { obj = null; }
+    if (!obj || typeof obj !== 'object') bad('It could not work out that fix. Try saying it another way.');
+    const cl = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').replace(/[\u2014\u2013]/g, ',').trim().slice(0, n);
+    const patch = {};
+    for (const k of ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta']) if (typeof obj[k] === 'string' && cl(obj[k], 200)) patch[k] = cl(obj[k], 200);
+    if (obj.flow && typeof obj.flow === 'object') {
+      const f = {};
+      for (const k of ['title', 'trigger', 'why', 'lost', 'fix', 'check', 'before', 'after']) if (typeof obj.flow[k] === 'string' && cl(obj.flow[k], 70)) f[k] = cl(obj.flow[k], 70);
+      for (const k of ['pain', 'steps']) if (Array.isArray(obj.flow[k]) && obj.flow[k].length === 3) f[k] = obj.flow[k].map((x) => cl(x, 50));
+      if (f.fix) f.fixAI = f.fix;
+      if (f.title) f.titleAI = f.title;
+      if (Object.keys(f).length) patch.flow = f;
+    }
+    return json({ patch });
+  }
   if (path === '/voice/tts' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
     const text = str(body.text, 1800);

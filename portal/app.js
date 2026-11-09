@@ -2815,7 +2815,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
 
   /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
   const VW = 720, VH = 1280, VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow' };
+  const VM = { voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {} };
+  const patchKey = (tid, seed) => tid + ':' + seed;
+  const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; } if (voiceToo) VM.voice = null; };
   const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
   function vidPlan(tid, seed, plain, voiceDur, style) {
@@ -2830,6 +2832,16 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       { kind: 'text', label: 'THE FIX', text: fix, sub: t.recovery, vo: fix + ' ' + t.recovery },
       { kind: 'cta', label: 'NEXT STEP', text: plain ? 'for a free audit' : 'for a free AI audit', vo: plain ? plainCta(VO_CTA) : VO_CTA },
     ];
+    const P = VM.patch[patchKey(tid, seed)] || null;
+    if (P) {
+      if (P.hook) { scenes[0].text = P.hook; scenes[0].vo = P.hook; }
+      if (P.symptom) { scenes[1].text = P.symptom; scenes[1].vo = P.symptom; }
+      if (P.diagnosis) { scenes[2].text = P.diagnosis; scenes[2].vo = P.diagnosis; }
+      if (P.cost) { scenes[3] = { kind: 'text', label: 'WHAT IT COSTS', text: P.cost, vo: P.cost }; }
+      if (P.fix) { scenes[4].text = P.fix; scenes[4].vo = P.fix + ' ' + (P.recovery || t.recovery); }
+      if (P.recovery) { scenes[4].sub = P.recovery; scenes[4].vo = (P.fix || fix) + ' ' + P.recovery; }
+      if (P.cta) scenes[5].vo = P.cta;
+    }
     const words = scenes.map((s) => Math.max(3, wordCount(s.vo)));
     let durs;
     if (voiceDur) {
@@ -2839,7 +2851,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       durs[0] += 0.4; durs[durs.length - 1] += 0.9;
     } else durs = words.map((w) => Math.min(5.8, Math.max(3, 1.3 + w * 0.27)));
     let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; });
-    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain) : null };
+    return { scenes, total: at, lead: voiceDur ? 0.4 : 0, topic: t.name, style: style || 'flow', graph: (style || 'flow') === 'flow' ? flowGraph(tid, plain, P) : null };
   }
   const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -3000,8 +3012,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     seg(x + w - r, y + h, x + r, y + h); arc(x + r, y + h - r, Math.PI / 2); seg(x, y + h - r, x, y + r); arc(x + r, y + r, Math.PI);
     pts.push(pts[0].slice()); return pts;
   }
-  function flowGraph(tid, plain) {
-    const t = GEN_TOPICS[tid], f = FLOW[tid], m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
+  function flowGraph(tid, plain, patch) {
+    const t = GEN_TOPICS[tid], f = Object.assign({}, FLOW[tid], (patch && patch.flow) || {}), m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0, cx = 450, N = {}, E = [];
     const add = (id, o) => { N[id] = Object.assign({ id, x: cx }, o); N[id].paths = [roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id), 1.6), roughRectPts(N[id].x - N[id].w / 2, N[id].y, N[id].w, N[id].h, 22, hashStr(id) + 7, 2.4)]; };
     add('trigger', { text: f.trigger, kind: 'warn', y: 80, w: 580, h: 130 });
     add('p1', { text: f.pain[0], kind: 'bad', y: 360, w: 580, h: 130 });
@@ -3144,6 +3156,25 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
           try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f) }; toast('Voice added'); parent(); } catch { toast('Could not read that audio file', true); }
         } })))].filter(Boolean));
     };
+    const editBox = () => {
+      const key = patchKey(tid, seed), P = VM.patch[key], ta = h('textarea', { rows: 3, placeholder: 'Tell it what to fix. Example: "make the hook shorter" or "change the cost line to say $800 a week" or "sound more casual"' });
+      const msg = h('p', { class: 'dim small' }, P ? 'Your fixes are applied to this video.' : '');
+      const go = h('button', { class: 'btn primary', onclick: async () => {
+        const instruction = ta.value.trim(); if (!instruction) return toast('Type what to fix first', true);
+        go.disabled = true; go.textContent = 'Fixing…';
+        try {
+          const cur = { hook: plan.scenes[0].vo, symptom: plan.scenes[1].vo, diagnosis: plan.scenes[2].vo, cost: plan.scenes[3].vo, fix: plan.scenes[4].text, recovery: plan.scenes[4].sub || '', cta: plan.scenes[5].vo, flow: Object.assign({}, FLOW[tid], (P && P.flow) || {}) };
+          const r = await api('POST', '/video/edit', { instruction, current: cur });
+          const np = Object.assign({}, P || {}), changed = [];
+          ['hook', 'symptom', 'diagnosis', 'cost', 'fix', 'recovery', 'cta'].forEach((k) => { if (r.patch[k] && r.patch[k] !== cur[k]) { np[k] = r.patch[k]; changed.push(k); } });
+          if (r.patch.flow) { np.flow = Object.assign({}, (P && P.flow) || {}, r.patch.flow); changed.push('board'); }
+          if (!changed.length) { toast('Nothing needed changing. Try saying it another way.', true); return; }
+          VM.patch[key] = np; vmClear(true); toast('Fixed: ' + changed.join(', ')); parent();
+        } catch (e) { fail(e); } finally { go.disabled = false; go.textContent = 'Fix it'; }
+      } }, 'Fix it');
+      const undo = P ? h('button', { class: 'btn small', onclick: () => { delete VM.patch[key]; vmClear(true); toast('Back to the original'); parent(); } }, 'Undo all fixes') : null;
+      return h('div', { class: 'cs-blk' }, h('b', null, 'Edit video'), h('p', { class: 'dim small' }, 'Tell it what to fix. It rewrites the words and the board, then you make the video again. If you already have a voice, record or make it again after a fix.'), ta, h('div', { class: 'row wrap' }, go, undo), msg);
+    };
     let aiBusy = false;
     const aiVoiceBtn = () => h('button', { class: 'btn primary', onclick: async (e) => {
       if (aiBusy) return; aiBusy = true; const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the voice…';
@@ -3192,7 +3223,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
       } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-' + tid + '.' + VM.result.ext }, 'Download'))) : null;
     wrap.append(...[h('p', { class: 'dim small' }, 'Preview. Flow map: a hand-drawn board the camera travels across, with captions that light up word by word.'), prev, voiceBox, teleprompter,
-      h('p', { class: 'dim small' }, '2. Look'), styleChips, h('p', { class: 'dim small' }, '3. Sound'), sfxChips, h('p', { class: 'dim small' }, '4. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
+      editBox(), h('p', { class: 'dim small' }, '2. Look'), styleChips, h('p', { class: 'dim small' }, '3. Sound'), sfxChips, h('p', { class: 'dim small' }, '4. Make it. About ' + Math.round(plan.total) + ' seconds' + (VM.voice ? ' to match your voice.' : '.')), genBtn, bar, status, res].filter(Boolean));
     return wrap;
   }
 
