@@ -2697,24 +2697,24 @@ async function api(request, env, url) {
     const kind = ['video', 'post', 'face'].includes(body.kind) ? body.kind : 'post';
     const msgs = Array.isArray(body.messages) ? body.messages.slice(-10).map((m) => ({ role: m && m.role === 'bot' ? 'assistant' : 'user', content: str(m && m.text, 900) })).filter((m) => m.content) : [];
     if (!msgs.length || msgs[msgs.length - 1].role !== 'user') bad('Say something to the bot first');
-    const business = str(body.business, 80);
+    const business = str(body.business, 80), secs = [30, 60, 90].includes(+body.secs) ? +body.secs : 60, words = Math.round(secs * 2.4), nBeats = secs === 30 ? '6 to 7' : secs === 60 ? '10 to 12' : '14 to 16';
     const TIDS = { missed: 'missed calls', slow: 'slow replies to new inquiries', quiet: 'quiet past customers', reviews: 'getting more reviews', noshow: 'no-shows and cancellations', afterhours: 'bookings and quotes after hours', website: 'website', crm: 'one place for every lead', chatbot: 'chat on the website', plates: 'tap-to-review NFC cards' };
     const tidList = Object.keys(TIDS).join('|') + '|custom';
     const flowShape = '{"title": string, "trigger": string, "pain": [3 strings], "why": string, "lost": string, "fix": string, "steps": [3 strings], "check": string, "before": string, "after": string}';
     const shapes = {
-      video: '{"business": string, "tid": one of ' + tidList + ' (closest pain point, or custom), "sol": same options (usually the same as tid), "hook": string, "symptom": string, "diagnosis": string, "cost": string, "fix": string, "recovery": string, "cta": string, "flow": ' + flowShape + ', "caption": string, "hashtags": string, "short": string}',
+      video: '{"business": string, "title": string (4 to 8 word title shown at the start), "beats": [{"kind": one of hook|setup|pain|why|cost|fix|step|proof|result|cta, "say": string (what is spoken, 1 to 3 short sentences), "text": string (short on-screen label under 50 characters, not a copy of say), "link": string (1 to 3 words connecting this beat to the one before it, like so, but then, which means)}], "caption": string, "hashtags": string, "short": string}',
       post: '{"business": string, "tid": one of ' + tidList + ', "post": string (the full caption post, 400 to 900 characters, short paragraphs), "hashtags": string (4 to 6 relevant hashtags), "short": string (under 260 characters, for X)}',
-      face: '{"business": string, "tid": one of ' + tidList + ', "script": string (a talk-to-camera script of about 45 seconds, written to be said out loud, with [bracketed] cues for the person on camera), "caption": string, "hashtags": string, "short": string (under 260 characters)}',
+      face: '{"business": string, "tid": one of ' + tidList + ', "script": string (a talk-to-camera script of about ' + secs + ' seconds (about ' + words + ' words), written to be said out loud, with [bracketed] cues for the person on camera), "caption": string, "hashtags": string, "short": string (under 260 characters)}',
     };
     let rules = '';
     try { const ar = await env.ASSETS.fetch(new Request('https://assets.local/bot-instructions.md')); if (ar.ok) rules = (await ar.text()).slice(0, 6000); } catch { /* use fallback */ }
     if (!rules) rules = 'Write social content for Marquise of Reekon Systems, who sells AI and automation to owners of small local businesses. Use the business Marquise names; never assume a different industry. Plain words, pain first, no invented numbers, DM AUDIT for a free audit.';
     const extra = ((await getSetting(env, 'bot_rules')) || '').slice(0, 3000);
-    const sys = 'You are the content bot inside Marquise\'s CRM. Always answer with ONLY a JSON object: {"reply": string, "result": object or null}. "reply" is one or two friendly sentences to Marquise. "result" is the finished content with exactly this shape: ' + shapes[kind] + '. Use null for result only when you must ask which business it is for. Video fields: "hook" grabs attention in the first two seconds; "symptom" is what the owner sees; "diagnosis" is why it happens; "cost" is what it costs them (always fill it; any numbers are examples); "fix" is one line for the solution; "recovery" is the after picture; "cta" is the call to action; "caption" is a post caption of 2 to 4 short lines. Every flow field is required, short (under 50 characters) and about this business. If a CURRENT result is given and he asks for a change, return the full updated result. Everything must be plain text.\n\nINSTRUCTIONS FROM THE RULEBOOK (follow them):\n' + rules + (extra ? '\n\nEXTRA RULES FROM MARQUISE (these win over everything above):\n' + extra : '') + '\n\nBUSINESS BOX: ' + (business || 'empty') + (business ? '. This is the business Marquise is making content for. Write for it unless his latest message clearly names a different one. Never pick a different industry yourself, even for Surprise me or a general request.' : '.');
+    const sys = 'You are the content bot inside Marquise\'s CRM. Always answer with ONLY a JSON object: {"reply": string, "result": object or null}. "reply" is one or two friendly sentences to Marquise. "result" is the finished content with exactly this shape: ' + shapes[kind] + '. Use null for result only when you must ask which business it is for. VIDEO RULES: the video is about ' + secs + ' seconds when read aloud, so all the "say" lines together must be about ' + words + ' words (' + nBeats + ' beats). Every video must feel different: choose a fresh structure each time, such as a day in the life of the owner, a myth vs the truth, three mistakes, one customer story (made up, no name, no fake stats), a countdown through the day, or a before and after. Do not reuse a stock skeleton. Be specific to the business: real situations, real objects, real numbers as examples. Beat kinds: hook (first beat, grabs attention in two seconds), setup (the scene), pain (a problem the owner feels), why (why it happens), cost (what it costs; include an example dollar figure at least once), fix (the solution, named plainly), step (how it works, one action per beat), proof (what you see when it works), result (before and after), cta (last beat; invite them to DM the word AUDIT for a free audit). Include at least one cost, one fix, two steps and one result. The "text" of each beat is a short punchy label for the on-screen board. If a CURRENT result is given and he asks for a change, return the full updated result. Everything must be plain text.\n\nINSTRUCTIONS FROM THE RULEBOOK (follow them):\n' + rules + (extra ? '\n\nEXTRA RULES FROM MARQUISE (these win over everything above):\n' + extra : '') + '\n\nBUSINESS BOX: ' + (business || 'empty') + (business ? '. This is the business Marquise is making content for. Write for it unless his latest message clearly names a different one. Never pick a different industry yourself, even for Surprise me or a general request.' : '.');
     const upr = (body.current ? 'CURRENT RESULT:\n' + JSON.stringify(body.current).slice(0, 4000) + '\n\n' : '') + 'Continue the chat.';
     let text = '';
     try {
-      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') }], max_tokens: 2400, temperature: 0.6 }, fmt ? { response_format: { type: 'json_object' } } : {}));
+      const run = (fmt) => env.AI.run(STUDIO_MODEL, Object.assign({ messages: [{ role: 'system', content: sys }, ...msgs.slice(0, -1), { role: 'user', content: upr + '\n\nMARQUISE SAYS: ' + msgs[msgs.length - 1].content + (business ? '\n(Business to write for: ' + business + ')' : '') }], max_tokens: 3400, temperature: 0.85 }, fmt ? { response_format: { type: 'json_object' } } : {}));
       let r; try { r = await run(true); } catch { r = await run(false); }
       text = typeof (r && r.response) === 'string' ? r.response : JSON.stringify((r && (r.response || r.result)) || '');
     } catch (e) { console.error('cbot', e); bad('The bot is busy. Try again in a minute.'); }
@@ -2728,19 +2728,15 @@ async function api(request, env, url) {
       const biz = cl1(R.business, 40).toLowerCase(), tid = TIDS[R.tid] ? R.tid : 'missed', sol = TIDS[R.sol] ? R.sol : tid, tags = cl1(R.hashtags, 160).split(/[\s,]+/).filter(Boolean).map((x) => (x[0] === '#' ? x : '#' + x)).slice(0, 8).join(' ');
       if (kind === 'post' && cl(R.post, 1400)) result = { business: biz, tid, tags, post: cl(R.post, 1400), short: cl1(R.short || R.post, 270) };
       else if (kind === 'face' && cl(R.script, 2200)) result = { business: biz, tid, tags, script: cl(R.script, 2200), caption: cl(R.caption, 500), short: cl1(R.short || R.caption, 270) };
-      else if (kind === 'video' && cl1(R.hook, 220)) {
-        const f = R.flow && typeof R.flow === 'object' ? R.flow : {}, arr3 = (a) => (Array.isArray(a) && a.length >= 3 ? a.slice(0, 3).map((x) => cl1(x, 60)) : null);
-        const flow = {};
-        for (const k of ['title', 'trigger', 'why', 'lost', 'fix', 'check', 'before', 'after']) if (cl1(f[k], 70)) flow[k] = cl1(f[k], 70);
-        if (arr3(f.pain)) flow.pain = arr3(f.pain); if (arr3(f.steps)) flow.steps = arr3(f.steps);
-        if (flow.fix) flow.fixAI = flow.fix; if (flow.title) flow.titleAI = flow.title;
-        const hook = cl1(R.hook, 220), symptom = cl1(R.symptom, 220) || hook, diagnosis = cl1(R.diagnosis, 220) || symptom, cost = cl1(R.cost, 220) || 'That adds up to real money every week.', fix = cl1(R.fix, 200) || 'Let the system handle it.', recovery = cl1(R.recovery, 200) || 'Now it runs without you.', sh = (x, n) => cl1(x, n).slice(0, n);
-        const dflt = { title: sh(hook, 50), trigger: sh(symptom, 50), why: sh(diagnosis, 50), lost: sh(cost, 50), fix: sh(fix, 50), check: sh(recovery, 50), before: 'Stuck doing it by hand', after: sh(recovery, 50) };
-        for (const k of Object.keys(dflt)) if (!flow[k]) flow[k] = dflt[k];
-        if (!flow.pain) flow.pain = [sh(symptom, 50), sh(diagnosis, 50), sh(cost, 50)];
-        if (!flow.steps) flow.steps = ['Set it up once', 'It runs on its own', 'You see the results'];
-        flow.fixAI = flow.fix; flow.titleAI = flow.title;
-        result = { business: biz, tid, sol, tags, hook, symptom, diagnosis, cost, fix, recovery, cta: cl1(R.cta, 200) || 'DM me AUDIT for a free audit.', flow, caption: cl(R.caption, 500), short: cl1(R.short || R.caption, 270) };
+      else if (kind === 'video' && Array.isArray(R.beats) && R.beats.length >= 4) {
+        const KINDS = ['hook', 'setup', 'pain', 'why', 'cost', 'fix', 'step', 'proof', 'result', 'cta'];
+        let beats = R.beats.slice(0, 20).map((x) => ({ kind: KINDS.includes(x && x.kind) ? x.kind : 'pain', say: cl1(x && x.say, 330), text: cl1(x && x.text, 60), link: cl1(x && x.link, 18) })).filter((x) => x.say);
+        if (beats.length >= 4) {
+          beats[0].kind = 'hook';
+          beats.forEach((x) => { if (!x.text) x.text = x.say.slice(0, 50); });
+          if (beats[beats.length - 1].kind !== 'cta') beats.push({ kind: 'cta', say: 'DM me the word AUDIT and I will show you where you are losing money.', text: 'DM me AUDIT', link: 'next' });
+          result = { business: biz, tid, tags, title: cl1(R.title, 70) || beats[0].text, beats, caption: cl(R.caption, 500), short: cl1(R.short || R.caption, 270), secs };
+        }
       }
     }
     return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result });
