@@ -135,6 +135,10 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS leads_next ON leads(next_action_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS site_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, vid TEXT, src TEXT, ref TEXT, day TEXT NOT NULL, created_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS site_events_day ON site_events(day, kind)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS demo_kits (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, user_id INTEGER, lead_id INTEGER, data TEXT NOT NULL DEFAULT '{}',
+      views INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, last_view_at TEXT, eleven_used INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS kit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kit_id INTEGER NOT NULL, kind TEXT NOT NULL, vid TEXT, detail TEXT, day TEXT NOT NULL, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS kit_events_kit ON kit_events(kit_id, kind, day)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS studio_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, lead_id INTEGER, theme TEXT, data TEXT NOT NULL DEFAULT '{}',
       messages TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS drafts_user ON studio_drafts(user_id, updated_at)'),
@@ -2668,6 +2672,7 @@ async function api(request, env, url) {
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
+  if (path === '/kits' || path.startsWith('/kits/')) { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
   if (path === '/studio' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const leadId = +url.searchParams.get('lead') || null;
@@ -4437,6 +4442,354 @@ async function sendDigest(env) {
   if (r.ok) await setSetting(env, 'digest_last', day);
 }
 
+/* ================= Demo Lab: one link per prospect, every offer as a live demo =================
+   Built for backyard and hardscape contractors. Public pages: /k/<slug> (the demo app) and
+   /k/<slug>/site (the sample website). Public API: /kit-api/<slug>/... (talk, tts, hit, lead).
+   Nothing a visitor types in a demo is stored except the "I want this" form. */
+const KIT_SERVICES = {
+  pavers:   { name: 'Pavers and driveways', unit: 'sq ft', lo: 18, hi: 32, q: 'About how many square feet?', blurb: 'Interlocking pavers for patios, driveways and walkways.' },
+  turf:     { name: 'Artificial turf', unit: 'sq ft', lo: 9, hi: 16, q: 'About how many square feet of lawn?', blurb: 'Low-maintenance turf that stays green all year.' },
+  patio:    { name: 'Concrete patios', unit: 'sq ft', lo: 8, hi: 15, q: 'About how many square feet?', blurb: 'Stamped, broom-finish and colored concrete patios.' },
+  deck:     { name: 'Decks', unit: 'sq ft', lo: 30, hi: 60, q: 'About how many square feet?', blurb: 'Wood and composite decks built to last.' },
+  fence:    { name: 'Fences and gates', unit: 'linear ft', lo: 35, hi: 65, q: 'About how many linear feet of fence?', blurb: 'Privacy fences, block walls and custom gates.' },
+  wall:     { name: 'Retaining walls', unit: 'sq ft', lo: 40, hi: 90, q: 'About how many square feet of wall face?', blurb: 'Retaining walls that hold the slope and look good doing it.' },
+  pergola:  { name: 'Pergolas and covers', unit: 'project', lo: 6000, hi: 18000, q: 'About what size, and attached to the house or freestanding?', blurb: 'Shade structures and patio covers.' },
+  kitchen:  { name: 'Outdoor kitchens', unit: 'project', lo: 8000, hi: 40000, q: 'What do you want in it: grill, counters, fridge, bar seating?', blurb: 'Built-in grills, counters and bars for backyard cooking.' },
+  drainage: { name: 'Drainage fixes', unit: 'project', lo: 2000, hi: 9000, q: 'Where does the water collect, and how long has it been a problem?', blurb: 'French drains and grading that keep water away from the house.' },
+  lighting: { name: 'Landscape lighting', unit: 'project', lo: 2500, hi: 8000, q: 'About how big is the area you want lit?', blurb: 'Path, wall and accent lighting for evenings outside.' },
+};
+const KIT_DEFAULT_SERVICES = ['pavers', 'turf', 'patio', 'wall', 'pergola', 'drainage'];
+const KIT_LOOKS = {
+  earth: { name: 'Earth', bg: '#f6f1e7', surface: '#ffffff', ink: '#1f2a1f', muted: '#5c6a5c', accent: '#2f6b3a', accentInk: '#ffffff', head: 'Fraunces', body: 'Inter', fonts: 'family=Fraunces:wght@600;700&family=Inter:wght@400;500;600' },
+  slate: { name: 'Slate', bg: '#14181c', surface: '#1d2328', ink: '#f2f4f5', muted: '#9aa5ad', accent: '#ff7a1a', accentInk: '#1a0f05', head: 'Barlow Condensed', body: 'Inter', fonts: 'family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600' },
+  sand:  { name: 'Sand', bg: '#f3e9dc', surface: '#fffaf3', ink: '#2b2118', muted: '#7a6857', accent: '#c2562b', accentInk: '#ffffff', head: 'DM Serif Display', body: 'DM Sans', fonts: 'family=DM+Serif+Display&family=DM+Sans:wght@400;500;700' },
+  night: { name: 'Night', bg: '#0b0f0c', surface: '#141b15', ink: '#eef5ee', muted: '#8fa392', accent: '#9be15d', accentInk: '#0b1a05', head: 'Space Grotesk', body: 'Inter', fonts: 'family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600' },
+  stone: { name: 'Stone', bg: '#eef1f3', surface: '#ffffff', ink: '#16222b', muted: '#5d6b76', accent: '#1f5fbf', accentInk: '#ffffff', head: 'Plus Jakarta Sans', body: 'Plus Jakarta Sans', fonts: 'family=Plus+Jakarta+Sans:wght@400;500;700;800' },
+  clay:  { name: 'Clay', bg: '#1c1512', surface: '#271d18', ink: '#f7efe8', muted: '#b09a8b', accent: '#e8b04a', accentInk: '#1d1405', head: 'Playfair Display', body: 'Lato', fonts: 'family=Playfair+Display:wght@600;700&family=Lato:wght@400;700' },
+};
+const KIT_AGENTS = [['Maya', 'asteria'], ['Sofia', 'luna'], ['Jade', 'stella'], ['Ethan', 'arcas'], ['Marcus', 'orion'], ['Diego', 'perseus']];
+const KIT_TAGLINES = ['Backyards built to last in {city}.', 'Turn your yard into the room you actually use.', "{city}'s backyard transformation crew.", 'Pavers, turf and patios. Done right the first time.', 'Your backyard, finished. On time, on budget.'];
+const KIT_HOURS = 'Mon to Sat, 7am to 6pm';
+const kpick = (arr, seed) => arr[Math.abs(seed) % arr.length];
+const seedOf = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
+
+function cleanKit(b, prev) {
+  const p = prev || {};
+  const business = oneLine(b.business ?? p.business, 80);
+  if (!business) bad('Add the business name');
+  const seed = seedOf(business + Date.now());
+  const city = oneLine(b.city ?? p.city, 40) || 'Los Angeles';
+  let services = (Array.isArray(b.services) ? b.services : p.services || KIT_DEFAULT_SERVICES).filter((x) => KIT_SERVICES[x]);
+  services = [...new Set(services)].slice(0, 8);
+  if (services.length < 2) services = KIT_DEFAULT_SERVICES.slice();
+  const agentIx = Number.isInteger(p.agent_ix) && !b.reroll ? p.agent_ix : Math.abs(seed) % KIT_AGENTS.length;
+  const look = KIT_LOOKS[b.look] ? b.look : (p.look && !b.reroll ? p.look : kpick(Object.keys(KIT_LOOKS), seed >> 3));
+  const tagline = oneLine(b.tagline, 100) || (b.reroll || !p.tagline ? kpick(KIT_TAGLINES, seed >> 5).replace('{city}', city) : p.tagline);
+  const avg = Math.round(Math.min(60000, Math.max(500, +(b.avg_job ?? p.avg_job) || 6500)));
+  return {
+    business, owner: oneLine(b.owner ?? p.owner, 40), city, phone: oneLine(b.phone ?? p.phone, 30) || '(310) 555-0123', services,
+    hours: oneLine(b.hours ?? p.hours, 80) || KIT_HOURS, tagline, look, agent_ix: agentIx, avg_job: avg,
+    voice: (b.voice ?? p.voice) === 'eleven' ? 'eleven' : 'aura',
+  };
+}
+function kitPublic(row) {
+  const d = JSON.parse(row.data || '{}');
+  const [agent, speaker] = KIT_AGENTS[(d.agent_ix | 0) % KIT_AGENTS.length];
+  return {
+    slug: row.slug, business: d.business, owner: d.owner || '', city: d.city, phone: d.phone, hours: d.hours, tagline: d.tagline,
+    look: KIT_LOOKS[d.look] ? d.look : 'earth', agent, speaker, avg_job: d.avg_job || 6500, premium_voice: d.voice === 'eleven',
+    services: (d.services || KIT_DEFAULT_SERVICES).filter((x) => KIT_SERVICES[x]).map((id) => ({ id, ...KIT_SERVICES[id] })),
+  };
+}
+const kitSlug = (business) => (String(business).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'demo') + '-' + Math.random().toString(36).slice(2, 6);
+const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
+function kitBallparks(k) {
+  return k.services.map((s) => s.unit === 'project' ? `${s.name}: ${money(s.lo)} to ${money(s.hi)} per project` : `${s.name}: ${money(s.lo)} to ${money(s.hi)} per ${s.unit}`).join('; ');
+}
+
+async function kitByUnique(env, slug) { return env.DB.prepare('SELECT * FROM demo_kits WHERE slug = ?').bind(slug).first(); }
+
+const KIT_PAGE_CSP = "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-src 'self'; media-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const KIT_SITE_CSP = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+function kitHeaders(res, csp) {
+  const r = new Response(res.body, res);
+  r.headers.set('X-Robots-Tag', 'noindex, nofollow'); r.headers.set('X-Content-Type-Options', 'nosniff');
+  r.headers.set('Referrer-Policy', 'same-origin'); r.headers.set('Content-Security-Policy', csp); r.headers.set('Cache-Control', 'no-store');
+  r.headers.delete('X-Frame-Options');
+  return r;
+}
+
+async function kitPage(request, env, slug, site) {
+  const row = await kitByUnique(env, slug);
+  if (!row) return kitHeaders(new Response('<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Not found</title><body style="font-family:system-ui;padding:40px;background:#000;color:#fff">This demo link is not available.</body>', { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }), KIT_PAGE_CSP);
+  if (site) return kitHeaders(new Response(renderKitSite(kitPublic(row)), { headers: { 'Content-Type': 'text/html; charset=utf-8' } }), KIT_SITE_CSP);
+  const asset = await env.ASSETS.fetch(new Request(new URL('/kit.html', request.url)));
+  return kitHeaders(new Response(asset.body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }), KIT_PAGE_CSP);
+}
+
+async function elevenSpeak(env, text) {
+  const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_64', {
+    method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }), signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error('eleven ' + r.status);
+  return r.arrayBuffer();
+}
+const b64buf = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+
+function kitPrompt(k, mode) {
+  const style = mode === 'voice' ? 'You are speaking out loud on a phone call: at most 2 short sentences, under 35 words, never read lists or say symbols.'
+    : mode === 'sms' ? 'You are texting: under 220 characters, one question at a time, no emojis.' : 'You are in a website chat: under 60 words, friendly and plain.';
+  const role = mode === 'voice' ? 'phone receptionist' : mode === 'sms' ? 'text-message assistant' : 'website chat assistant';
+  return `You are ${k.agent}, the AI ${role} for ${k.business}, a backyard and hardscape contractor in ${k.city}.
+This is a live DEMO shown to the owner${k.owner ? ' (' + k.owner + ')' : ''}. Treat the person writing as a homeowner who wants backyard work.
+Know only what is written here. Never invent licenses, years in business, street addresses, warranties, awards, discounts, crew names or past customers. If asked something you do not know, say ${k.owner || 'the owner'} will confirm it at the free estimate.
+SERVICES: ${k.services.map((s) => s.name).join(', ')}.
+EXAMPLE BALLPARKS (always say the free on-site estimate gives the exact price): ${kitBallparks(k)}.
+HOURS: ${k.hours}.
+YOUR JOB: answer their question in a sentence or two, then find out the project, rough size, their city or zip, and timeline (one question at a time). Then get their first name and best phone number, then book a free on-site estimate by offering two time slots like "tomorrow at 10 or 2". Use weekday names, never calendar dates.
+${style} Plain words. No markdown.
+Once they give name, phone and pick a time, confirm in one sentence, say a confirmation text is on its way, and fill in booking. Otherwise booking is null.
+Reply ONLY with JSON: {"reply": string, "booking": null or {"name": string, "phone": string, "project": string, "when": string}}`;
+}
+
+function kitParseAI(r) {
+  let raw = r && r.response !== undefined ? r.response : r;
+  if (raw && typeof raw === 'object') return raw;
+  raw = String(raw || '');
+  const a = raw.indexOf('{'), z = raw.lastIndexOf('}');
+  if (a >= 0 && z > a) { try { return JSON.parse(raw.slice(a, z + 1)); } catch { /* fall through */ } }
+  return { reply: raw.replace(/[{}"]/g, '').slice(0, 300), booking: null };
+}
+
+async function kitCount(env, kitId, kind, day, vid) {
+  const r = vid
+    ? await env.DB.prepare('SELECT COUNT(*) AS n FROM kit_events WHERE kit_id = ? AND kind = ? AND day = ? AND vid = ?').bind(kitId, kind, day, vid).first()
+    : await env.DB.prepare('SELECT COUNT(*) AS n FROM kit_events WHERE kit_id = ? AND kind = ? AND day = ?').bind(kitId, kind, day).first();
+  return r.n;
+}
+async function kitLog(env, kitId, kind, vid, detail) {
+  await env.DB.prepare('INSERT INTO kit_events (kit_id, kind, vid, detail, day, created_at) VALUES (?,?,?,?,?,?)').bind(kitId, kind, vid || '', detail ? String(detail).slice(0, 200) : null, ptParts().date, now()).run();
+}
+
+async function handleKitApi(request, env, url) {
+  const m = url.pathname.match(/^\/kit-api\/([a-z0-9-]{3,60})(?:\/([a-z]+))?\/?$/);
+  if (!m) return json({ error: 'Not found' }, 404);
+  const row = await kitByUnique(env, m[1]);
+  if (!row) return json({ error: 'This demo link is not available.' }, 404);
+  const k = kitPublic(row), op = m[2] || '';
+  const day = ptParts().date, ua = request.headers.get('User-Agent') || '';
+  const viewer = await getUser(request, env).catch(() => null);       // you previewing your own demo is never counted
+  const vid = await visitorId(request, env, day);
+  const count = !viewer && !BOT_UA.test(ua);
+
+  if (op === '' && request.method === 'GET') {
+    if (count && (await kitCount(env, row.id, 'view', day, vid)) === 0) {
+      await kitLog(env, row.id, 'view', vid);
+      await env.DB.prepare('UPDATE demo_kits SET views = views + 1, last_view_at = ? WHERE id = ?').bind(now(), row.id).run();
+      const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM kit_events WHERE kit_id = ? AND kind = 'view' AND created_at > ?").bind(row.id, new Date(Date.now() - 6 * 36e5).toISOString()).first();
+      if (recent.n <= 1) discordNotify(env, `👀 **${k.owner || 'Someone'} opened the demo for ${k.business}.** Message them while it is fresh.`).catch(() => {});
+    }
+    return json(k);
+  }
+  if (request.method !== 'POST') return json({ error: 'POST only' }, 405);
+  let body;
+  try { body = JSON.parse((await request.text()).slice(0, 8000)); } catch { return json({ error: 'Bad request' }, 400); }
+  if (!body || typeof body !== 'object') return json({ error: 'Bad request' }, 400);
+
+  if (op === 'hit') {
+    const tab = oneLine(body.d, 30).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (count && tab) {
+      const seen = await env.DB.prepare("SELECT COUNT(*) AS n FROM kit_events WHERE kit_id = ? AND kind = 'tab' AND day = ? AND vid = ? AND detail = ?").bind(row.id, day, vid, tab).first();
+      if (!seen.n) await kitLog(env, row.id, 'tab', vid, tab);
+    }
+    return json({ ok: true });
+  }
+
+  if (op === 'talk') {
+    const mode = ['voice', 'chat', 'sms'].includes(body.mode) ? body.mode : 'chat';
+    const text = oneLine(body.text, 300);
+    if (!text) return json({ error: 'Say or type something first.' }, 400);
+    if ((await kitCount(env, row.id, 'talk', day, vid)) >= 70 || (await kitCount(env, row.id, 'talk', day)) >= 400) return json({ reply: 'This demo has hit its daily limit. Message ' + (k.owner ? 'Marquise' : 'us') + ' and we will keep going.', booking: null, limited: true });
+    if (!env.AI) return json({ error: 'The AI is not switched on yet.' }, 503);
+    const hist = (Array.isArray(body.history) ? body.history : []).slice(-12).map((x) => ({ role: x && x.r === 'a' ? 'assistant' : 'user', content: oneLine(x && x.t, 400) })).filter((x) => x.content);
+    let out;
+    try {
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: kitPrompt(k, mode) }, ...hist, { role: 'user', content: text }], max_tokens: 220, temperature: 0.5, response_format: { type: 'json_object' } });
+      out = kitParseAI(r);
+    } catch (e) {
+      console.error('kit talk', e);
+      return json({ reply: 'Sorry, I missed that. Could you say it again?', booking: null });
+    }
+    const reply = oneLine(out.reply, 420) || 'Sorry, could you say that again?';
+    const bk = out.booking && typeof out.booking === 'object' && out.booking.name && out.booking.phone && out.booking.when
+      ? { name: oneLine(out.booking.name, 40), phone: oneLine(out.booking.phone, 30), project: oneLine(out.booking.project, 80), when: oneLine(out.booking.when, 40) } : null;
+    if (count) {
+      const first = (await kitCount(env, row.id, 'talk', day)) === 0;
+      await kitLog(env, row.id, 'talk', vid, mode);
+      await env.DB.prepare('UPDATE demo_kits SET talks = talks + 1 WHERE id = ?').bind(row.id).run();
+      if (first) discordNotify(env, `🎙️ **${k.owner || 'A prospect'} is talking to the AI demo for ${k.business} right now.**`).catch(() => {});
+      if (bk) await kitLog(env, row.id, 'booking', vid, bk.when);
+    }
+    return json({ reply, booking: bk });
+  }
+
+  if (op === 'tts') {
+    const text = oneLine(body.text, 420);
+    if (!text) return json({ error: 'Nothing to say' }, 400);
+    if ((await kitCount(env, row.id, 'tts', day)) >= 160) return json({ error: 'Voice limit reached for today. The text still works.' }, 429);
+    await kitLog(env, row.id, 'tts', vid);
+    if (k.premium_voice && env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && row.eleven_used < 40) {
+      try {
+        const buf = await elevenSpeak(env, text);
+        await env.DB.prepare('UPDATE demo_kits SET eleven_used = eleven_used + 1 WHERE id = ?').bind(row.id).run();
+        return json({ audio: b64buf(buf), mime: 'audio/mpeg', engine: 'eleven' });
+      } catch (e) { console.error('kit eleven', e); }
+    }
+    if (!env.AI) return json({ error: 'No voice engine' }, 503);
+    try {
+      const r = await env.AI.run('@cf/deepgram/aura-1', { text, speaker: k.speaker, encoding: 'mp3' }, { returnRawResponse: true });
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 1500) throw new Error('empty audio');
+      return json({ audio: b64buf(buf), mime: 'audio/mpeg', engine: 'aura' });
+    } catch (e) { console.error('kit aura', e); return json({ error: 'The voice could not play. The text still works.' }, 502); }
+  }
+
+  if (op === 'lead') {
+    if (str(body.hp, 100)) return json({ ok: true });
+    const name = oneLine(body.name, 80), phone = oneLine(body.phone, 30), note = oneLine(body.note, 400), pn = normPhone(phone);
+    if (!name) return json({ error: 'Add your name so we know who to call.' }, 400);
+    if (pn.length < 10 || pn.length > 15) return json({ error: 'Add a phone number we can call.' }, 400);
+    if (!count && !viewer) return json({ ok: true });
+    if ((await kitCount(env, row.id, 'lead', day, vid)) >= 3) return json({ ok: true });
+    const t = now(), action = 'Asked for the real thing after opening their demo. Call them today.';
+    const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
+    let leadId = row.lead_id || null;
+    if (leadId) {
+      await env.DB.prepare("UPDATE leads SET heat = 'hot', next_action = ?, next_action_at = ?, updated_at = ?, phone_norm = COALESCE(NULLIF(phone_norm,''), ?) WHERE id = ?").bind(action, t, t, pn, leadId).run();
+    } else {
+      const have = await env.DB.prepare('SELECT id FROM leads WHERE phone_norm = ? LIMIT 1').bind(pn).first();
+      if (have) { leadId = have.id; await env.DB.prepare("UPDATE leads SET heat = 'hot', next_action = ?, next_action_at = ?, updated_at = ? WHERE id = ?").bind(action, t, t, leadId).run(); }
+      else {
+        let batch = await env.DB.prepare("SELECT id FROM batches WHERE name = 'Website sign-ups' ORDER BY id DESC LIMIT 1").first();
+        if (!batch) { const b = await env.DB.prepare("INSERT INTO batches (name, created_by, created_at) VALUES ('Website sign-ups', ?, ?)").bind(admin ? admin.id : null, t).run(); batch = { id: b.meta.last_row_id }; }
+        const r = await env.DB.prepare(`INSERT INTO leads (batch_id, business, owner, phone, phone_norm, category, status, assigned_to, created_at, updated_at, heat, source, call_notes, next_action, next_action_at)
+          VALUES (?,?,?,?,?,?,'new',?,?,?,'hot','demo',?,?,?)`).bind(batch.id, k.business, name, phone, pn, 'Backyard contractor', admin ? admin.id : null, t, t, note || null, action, t).run();
+        leadId = r.meta.last_row_id;
+      }
+    }
+    await kitLog(env, row.id, 'lead', vid, name);
+    discordNotify(env, `🔥 **${name} (${k.business}) wants the real thing.**\n**Phone:** ${phone}${note ? '\n**Note:** ' + note : ''}\nCall them now. They just played with their demo.`).catch(() => {});
+    return json({ ok: true });
+  }
+  return json({ error: 'Not found' }, 404);
+}
+
+/* ---- the sample website ---- */
+const jsStr = (v) => JSON.stringify(String(v)).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, ' ');
+function renderKitSite(k) {
+  const L = KIT_LOOKS[k.look], svc = k.services, E = esc;
+  const phoneHref = 'tel:' + k.phone.replace(/[^\d+]/g, '');
+  const projects = svc.slice(0, 3).map((s, i) => `<div class="proj"><div class="ph p${i}"><span>Your photo here</span></div><b>${E(s.name)}</b><small>${E(k.city)}</small></div>`).join('');
+  const cards = svc.map((s) => `<div class="card"><h3>${E(s.name)}</h3><p>${E(s.blurb)}</p></div>`).join('');
+  const opts = svc.map((s) => `<option>${E(s.name)}</option>`).join('');
+  const rev = [['Showed up on time, kept the yard clean, and the finished patio looks better than the drawing.', 'Sample review'], ['Quick quote, fair price, and they answered every question. Would hire again.', 'Sample review'], ['The crew was respectful and the drainage problem is finally gone.', 'Sample review']]
+    .map((r) => `<blockquote>${E(r[0])}<cite>${r[1]} · replace with your real reviews</cite></blockquote>`).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${E(k.business)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?${L.fonts}&display=swap" rel="stylesheet">
+<style>
+:root{--bg:${L.bg};--s:${L.surface};--ink:${L.ink};--mut:${L.muted};--ac:${L.accent};--acink:${L.accentInk}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 '${L.body}',system-ui,sans-serif}
+h1,h2,h3{font-family:'${L.head}',Georgia,serif;line-height:1.1;margin:0}
+.bar{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 18px;background:var(--bg);border-bottom:1px solid color-mix(in srgb,var(--ink) 12%,transparent)}
+.bar b{font:700 18px '${L.head}',serif}.call{background:var(--ac);color:var(--acink);text-decoration:none;font-weight:700;padding:9px 14px;border-radius:99px;font-size:14px;white-space:nowrap}
+.wrap{max-width:980px;margin:0 auto;padding:0 18px}
+.hero{padding:54px 0 40px}.hero h1{font-size:clamp(34px,8vw,64px);max-width:14ch}.hero p{color:var(--mut);max-width:46ch;font-size:18px;margin:16px 0 24px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-block;padding:14px 22px;border-radius:12px;font-weight:700;text-decoration:none;border:2px solid var(--ac);color:var(--ink)}.btn.p{background:var(--ac);color:var(--acink)}
+.trust{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px;color:var(--mut);font-size:14px}
+section{padding:34px 0}section h2{font-size:clamp(26px,5vw,38px);margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:var(--s);padding:20px;border-radius:14px;border:1px solid color-mix(in srgb,var(--ink) 10%,transparent)}.card h3{font-size:20px;margin-bottom:6px}.card p{margin:0;color:var(--mut);font-size:15px}
+.proj .ph{aspect-ratio:4/3;border-radius:14px;display:grid;place-items:center;color:var(--mut);font-size:13px;background:linear-gradient(135deg,color-mix(in srgb,var(--ac) 28%,var(--s)),var(--s))}.proj .p1{background:linear-gradient(200deg,color-mix(in srgb,var(--ac) 18%,var(--s)),color-mix(in srgb,var(--ink) 10%,var(--s)))}.proj .p2{background:linear-gradient(60deg,color-mix(in srgb,var(--ink) 12%,var(--s)),color-mix(in srgb,var(--ac) 24%,var(--s)))}
+.proj b{display:block;margin-top:10px}.proj small{color:var(--mut)}
+.steps{counter-reset:n;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}.steps div{background:var(--s);border-radius:14px;padding:18px;border:1px solid color-mix(in srgb,var(--ink) 10%,transparent)}.steps div:before{counter-increment:n;content:counter(n);display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--ac);color:var(--acink);font-weight:700;margin-bottom:10px}
+blockquote{margin:0;background:var(--s);border-radius:14px;padding:20px;border-left:4px solid var(--ac)}blockquote cite{display:block;margin-top:8px;color:var(--mut);font-size:13px;font-style:normal}
+form{background:var(--s);border-radius:16px;padding:22px;display:grid;gap:12px;max-width:520px;border:1px solid color-mix(in srgb,var(--ink) 10%,transparent)}
+input,select,textarea{font:inherit;padding:13px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 25%,transparent);background:var(--bg);color:var(--ink);width:100%}
+form button{font:inherit;font-weight:700;padding:14px;border:0;border-radius:12px;background:var(--ac);color:var(--acink);cursor:pointer}
+.ok{display:none;background:color-mix(in srgb,var(--ac) 18%,var(--s));padding:14px;border-radius:10px;font-size:14px}
+footer{padding:30px 0 90px;color:var(--mut);font-size:13px}
+.demo-note{background:color-mix(in srgb,var(--ac) 14%,var(--bg));color:var(--ink);text-align:center;font-size:12px;padding:7px}
+#cb{position:fixed;right:16px;bottom:16px;z-index:9;background:var(--ac);color:var(--acink);border:0;border-radius:99px;padding:14px 18px;font:700 15px '${L.body}',sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28);cursor:pointer}
+#cw{position:fixed;right:12px;bottom:12px;z-index:10;width:min(360px,calc(100vw - 24px));height:min(520px,calc(100vh - 24px));background:var(--s);color:var(--ink);border-radius:18px;box-shadow:0 14px 44px rgba(0,0,0,.4);display:none;flex-direction:column;overflow:hidden;border:1px solid color-mix(in srgb,var(--ink) 14%,transparent)}
+#cw header{background:var(--ac);color:var(--acink);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700}#cw header button{background:none;border:0;color:inherit;font-size:22px;cursor:pointer;line-height:1}
+#cm{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}.m{max-width:84%;padding:10px 12px;border-radius:14px;font-size:15px}.m.a{background:color-mix(in srgb,var(--ink) 9%,var(--s));align-self:flex-start}.m.u{background:var(--ac);color:var(--acink);align-self:flex-end}
+#cf{display:flex;gap:8px;padding:10px;border-top:1px solid color-mix(in srgb,var(--ink) 12%,transparent)}#cf input{flex:1}#cf button{background:var(--ac);color:var(--acink);border:0;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer}
+</style></head><body>
+<div class="demo-note">Sample website built for ${E(k.business)}. Photos and reviews are placeholders.</div>
+<div class="bar"><b>${E(k.business)}</b><a class="call" href="${E(phoneHref)}">Call ${E(k.phone)}</a></div>
+<div class="wrap"><div class="hero"><h1>${E(k.tagline)}</h1><p>${E(svc.slice(0, 4).map((s) => s.name.toLowerCase()).join(', '))} and more across ${E(k.city)}. Free on-site estimates.</p>
+<div class="btns"><a class="btn p" href="#quote">Get a free estimate</a><a class="btn" href="${E(phoneHref)}">Call now</a></div>
+<div class="trust"><span>Free estimates</span><span>Clear written quotes</span><span>${E(k.hours)}</span></div></div>
+<section><h2>What we build</h2><div class="grid">${cards}</div></section>
+<section><h2>Recent work</h2><div class="grid">${projects}</div></section>
+<section><h2>How it works</h2><div class="steps"><div><b>Tell us the project</b><br>Call, text or fill in the form.</div><div><b>Free on-site estimate</b><br>We measure and give you a clear price.</div><div><b>We build it</b><br>On schedule, with the yard left clean.</div></div></section>
+<section><h2>What neighbors say</h2><div class="grid">${rev}</div></section>
+<section id="quote"><h2>Get your free estimate</h2><form id="qf"><input name="n" placeholder="Your name" required><input name="p" placeholder="Phone" inputmode="tel" required><select name="s">${opts}</select><textarea name="m" rows="3" placeholder="Tell us about your yard"></textarea><button>Request my estimate</button><div class="ok" id="qok">Demo only. On the real site this sends ${E(k.owner || 'the owner')} a text and adds you to the lead tracker in seconds.</div></form></section>
+<footer>${E(k.business)} · ${E(k.city)} · ${E(k.hours)}</footer></div>
+<button id="cb" type="button">Chat with us</button>
+<div id="cw"><header><span>${E(k.agent)} · ${E(k.business)}</span><button id="cx" type="button" aria-label="Close">×</button></header><div id="cm"></div><form id="cf"><input id="ci" placeholder="Type your question" autocomplete="off" maxlength="300"><button>Send</button></form></div>
+<script>
+(function(){var S=${JSON.stringify(k.slug)},hist=[],cm=document.getElementById('cm'),cw=document.getElementById('cw'),cb=document.getElementById('cb'),busy=false;
+function add(c,t){var d=document.createElement('div');d.className='m '+c;d.textContent=t;cm.appendChild(d);cm.scrollTop=cm.scrollHeight;return d}
+cb.onclick=function(){cw.style.display='flex';cb.style.display='none';if(!hist.length&&!cm.children.length)add('a',${jsStr('Hi, this is ' + k.agent + ' with ' + k.business + '. What are you thinking of building?')})};
+document.getElementById('cx').onclick=function(){cw.style.display='none';cb.style.display='block'};
+document.getElementById('qf').onsubmit=function(e){e.preventDefault();document.getElementById('qok').style.display='block'};
+document.getElementById('cf').onsubmit=function(e){e.preventDefault();var i=document.getElementById('ci'),t=i.value.trim();if(!t||busy)return;i.value='';add('u',t);busy=true;var w=add('a','…');
+fetch('/kit-api/'+S+'/talk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'chat',text:t,history:hist})}).then(function(r){return r.json()}).then(function(j){w.textContent=j.reply||j.error||'Sorry, try again.';hist.push({r:'u',t:t},{r:'a',t:j.reply||''});if(j.booking)add('a','Booked: '+j.booking.when+' for '+j.booking.project+'. A confirmation text is on its way (demo).')}).catch(function(){w.textContent='Sorry, something went wrong.'}).then(function(){busy=false})};
+})();
+</script></body></html>`;
+}
+
+/* ---- CRM side: build, list, edit, delete demo kits (admin only) ---- */
+async function kitAdmin(env, user, path, method, body, url) {
+  need(user, 'admin');
+  let m;
+  if (path === '/kits' && method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT id, slug, lead_id, data, views, talks, last_view_at, created_at FROM demo_kits ORDER BY id DESC LIMIT 100').all()).results;
+    const tabs = (await env.DB.prepare("SELECT kit_id, detail, COUNT(*) AS n FROM kit_events WHERE kind = 'tab' GROUP BY kit_id, detail").all()).results;
+    return json({ kits: rows.map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, business: d.business, owner: d.owner, city: d.city, look: d.look, views: r.views, talks: r.talks, last_view_at: r.last_view_at, created_at: r.created_at, tabs: tabs.filter((t) => t.kit_id === r.id).map((t) => t.detail) }; }),
+      services: Object.entries(KIT_SERVICES).map(([id, s]) => ({ id, name: s.name })), looks: Object.entries(KIT_LOOKS).map(([id, l]) => ({ id, name: l.name, accent: l.accent, bg: l.bg })),
+      eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), origin: url.origin });
+  }
+  if (path === '/kits' && method === 'POST') {
+    const data = cleanKit(body, null);
+    let leadId = null;
+    if (body.lead_id) { const l = await env.DB.prepare('SELECT id FROM leads WHERE id = ?').bind(+body.lead_id).first(); if (l) leadId = l.id; }
+    const slug = kitSlug(data.business), t = now();
+    const r = await env.DB.prepare('INSERT INTO demo_kits (slug, user_id, lead_id, data, created_at, updated_at) VALUES (?,?,?,?,?,?)').bind(slug, user.id, leadId, JSON.stringify(data), t, t).run();
+    if (leadId) await env.DB.prepare("UPDATE leads SET demo_url = ?, updated_at = ? WHERE id = ? AND COALESCE(demo_url,'') = ''").bind(url.origin + '/k/' + slug, t, leadId).run();
+    return json({ id: r.meta.last_row_id, slug, link: url.origin + '/k/' + slug });
+  }
+  if ((m = path.match(/^\/kits\/(\d+)$/))) {
+    const row = await env.DB.prepare('SELECT * FROM demo_kits WHERE id = ?').bind(+m[1]).first();
+    if (!row) throw new HttpError(404, 'Demo not found');
+    if (method === 'GET') {
+      const ev = (await env.DB.prepare('SELECT kind, detail, created_at FROM kit_events WHERE kit_id = ? AND kind != \'tts\' ORDER BY id DESC LIMIT 40').bind(row.id).all()).results;
+      return json({ id: row.id, slug: row.slug, lead_id: row.lead_id, data: JSON.parse(row.data || '{}'), views: row.views, talks: row.talks, events: ev, link: url.origin + '/k/' + row.slug });
+    }
+    if (method === 'PATCH') {
+      const data = cleanKit(body, JSON.parse(row.data || '{}'));
+      await env.DB.prepare('UPDATE demo_kits SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), row.id).run();
+      return json({ ok: true, data });
+    }
+    if (method === 'DELETE') {
+      await env.DB.batch([env.DB.prepare('DELETE FROM kit_events WHERE kit_id = ?').bind(row.id), env.DB.prepare('DELETE FROM demo_kits WHERE id = ?').bind(row.id)]);
+      return json({ ok: true });
+    }
+  }
+  return null;
+}
+
 const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Frame-Options': 'DENY',
@@ -4508,6 +4861,15 @@ export default {
         r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
         return r;
       } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
+    }
+    const km = url.pathname.match(/^\/k\/([a-z0-9-]{3,60})(\/site)?\/?$/);
+    if (km && request.method === 'GET') {
+      try { await ensureSchema(env); return await kitPage(request, env, km[1], !!km[2]); }
+      catch (e) { console.error(e); return new Response('This demo is not available right now.', { status: 500 }); }
+    }
+    if (url.pathname.startsWith('/kit-api/')) {
+      try { if (!env.DB) throw new Error('no db'); await ensureSchema(env); return await handleKitApi(request, env, url); }
+      catch (e) { console.error(e); return json({ error: 'Something went wrong. Please try again.' }, 500); }
     }
     if (url.pathname.startsWith('/site/')) {
       try {

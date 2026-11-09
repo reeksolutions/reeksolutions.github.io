@@ -164,7 +164,7 @@
       ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart'],
       ['script', 'Call script', 'What to say', 'script']]],
     create: ['Create', 'Posts, videos and demos', [
-      ['content', 'Content', 'Start posting', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'],
+      ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['content', 'Content', 'Start posting', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'],
       ['demos', 'Demo queue', 'Demos to build and send', 'demos'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
     crew: ['Team', 'Reps, devs and lead lists', [
       ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
@@ -287,7 +287,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -303,6 +303,7 @@
         case 'cards': return await viewCards();
         case 'settings': return await viewSettings();
         case 'studio': return await viewStudio(+arg || null);
+        case 'lab': return await viewLab(arg);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
         case 'deals': return await viewDeals();
@@ -654,6 +655,7 @@
       L.phone ? (dialer && dialer.ready && seller ? h('button', { class: 'btn ok wide', onclick: () => startCall(L, () => { if (D || location.hash === '#/lead/' + L.id) reload(); }) }, icon('phone'), 'Call ' + L.phone) : h('button', { class: 'btn ok wide', onclick: gvCall }, icon('phone'), 'Call ' + L.phone + ' (Google Voice)')) : h('div', { class: 'btn wide', style: 'opacity:.5' }, 'No phone number'),
       L.phone && seller ? (dialer && dialer.ready ? h('button', { class: 'btn small', onclick: gvCall }, 'Call with Google Voice instead') : h('a', { class: 'btn small', href: telHref(L.phone) }, 'Use my phone dialer')) : null,
       L.email && seller ? h('button', { class: 'btn ' + (L.emailed_at ? '' : 'primary ') + (L.phone ? '' : 'wide'), onclick: () => emailSheet(L, reload) }, icon('mail'), L.emailed_at ? 'Email again' : 'Email first') : null,
+      S.me.role === 'admin' ? h('a', { class: 'btn primary', href: '#/lab/' + L.id }, icon('spark'), 'Demo Lab') : null,
       h('a', { class: 'btn', href: '#/studio/' + L.id }, icon('spark'), L.demo_url ? 'Edit in Studio' : 'Demo Studio'),
       L.demo_url && L.phone ? h('a', { class: 'btn primary', href: 'sms:' + String(L.phone).replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent(smsBody) }, icon('sms'), 'Text demo') : null,
       L.demo_url ? h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(L.demo_url); toast('Demo link copied'); } catch { prompt('Copy the demo link:', L.demo_url); } } }, icon('copy'), 'Copy link') : null,
@@ -1447,6 +1449,55 @@
 
   /* ================= Demo Studio ================= */
   const ENGINE_NAME = { 'workers-ai': 'Cloudflare AI · free', claude: 'Claude AI', basic: 'Basic builder · AI not connected' };
+  /* ================= Demo Lab: one link per prospect, every offer live ================= */
+  async function viewLab(arg) {
+    const [{ kits, services, looks, eleven, origin }, leadRes] = await Promise.all([api('GET', '/kits'), +arg ? api('GET', '/leads/' + (+arg)).catch(() => null) : Promise.resolve(null)]);
+    const L = leadRes && leadRes.lead;
+    const DEFAULT_SERVICES = ['pavers', 'turf', 'patio', 'wall', 'pergola', 'drainage'];
+    const f = { business: L ? L.business : '', owner: L && L.owner ? L.owner : '', city: L && L.city ? L.city : '', phone: L && L.phone ? L.phone : '', avg: 6500, look: '', voice: 'aura', services: new Set(DEFAULT_SERVICES) };
+    const copy = async (text, msg) => { try { await navigator.clipboard.writeText(text); toast(msg || 'Copied'); } catch { prompt('Copy this:', text); } };
+    const linkOf = (k) => (origin || location.origin) + '/k/' + k.slug;
+    const dm = (k) => { const fn = (k.owner || '').split(' ')[0] || 'there'; return `Hey ${fn}, I put together a quick demo for ${k.business}: an AI receptionist that answers your calls, a website, and texts that follow up on every quote. It is live, tap through it and talk to it: ${linkOf(k)}`; };
+    const input = (label, key, attrs) => { const el = h('input', Object.assign({ type: 'text', value: f[key] }, attrs || {})); el.addEventListener('input', () => { f[key] = el.value; }); return h('div', { class: 'field' }, h('label', null, label), el); };
+    const svcChips = h('div', { class: 'stagechips' }, services.map((s) => { const b = h('button', { type: 'button', class: 'schip' + (f.services.has(s.id) ? ' on' : ''), onclick: () => { if (f.services.has(s.id)) f.services.delete(s.id); else f.services.add(s.id); b.classList.toggle('on', f.services.has(s.id)); } }, s.name); return b; }));
+    const lookChips = h('div', { class: 'stagechips' }, [{ id: '', name: 'Surprise me' }, ...looks].map((l) => { const b = h('button', { type: 'button', class: 'schip' + (f.look === l.id ? ' on' : ''), onclick: () => { f.look = l.id; [...lookChips.children].forEach((x) => x.classList.remove('on')); b.classList.add('on'); } }, l.name); return b; }));
+    const voiceRow = eleven ? h('div', { class: 'stagechips' }, [['aura', 'Standard voice (free)'], ['eleven', 'Premium voice (uses ElevenLabs credits)']].map(([id, label]) => { const b = h('button', { type: 'button', class: 'schip' + (f.voice === id ? ' on' : ''), onclick: () => { f.voice = id; [...voiceRow.children].forEach((x) => x.classList.remove('on')); b.classList.add('on'); } }, label); return b; })) : null;
+    const result = h('div');
+    const build = h('button', { class: 'btn primary block', type: 'button', onclick: async () => {
+      if (!f.business.trim()) return toast('Add the business name', true);
+      build.disabled = true;
+      try {
+        const r = await api('POST', '/kits', { business: f.business, owner: f.owner, city: f.city, phone: f.phone, avg_job: f.avg, look: f.look, voice: f.voice, services: [...f.services], lead_id: L ? L.id : null });
+        toast('Demo built');
+        const k = { slug: r.slug, business: f.business, owner: f.owner };
+        result.replaceChildren(h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, 'Ready to send')), h('p', { class: 'dim small' }, r.link),
+          h('div', { class: 'row wrap' }, h('a', { class: 'btn primary', href: r.link, target: '_blank', rel: 'noopener' }, 'Open it'), h('button', { class: 'btn', onclick: () => copy(r.link, 'Link copied') }, 'Copy link'), h('button', { class: 'btn', onclick: () => copy(dm(k), 'DM copied') }, 'Copy DM with link'))));
+        setTimeout(() => viewLab(arg), 1800);
+      } catch (e) { fail(e); build.disabled = false; }
+    } }, icon('spark'), 'Build the demo');
+    const list = kits.length ? kits.map((k) => h('div', { class: 'card', style: 'margin-bottom:10px' },
+      h('div', { class: 'row wrap', style: 'justify-content:space-between;gap:8px' }, h('div', { style: 'min-width:0' }, h('b', null, k.business), h('div', { class: 'dim small' }, [k.owner, k.city].filter(Boolean).join(' · ') + ' · built ' + ago(k.created_at))),
+        h('div', { class: 'dim small', style: 'text-align:right' }, k.views ? h('b', { style: 'color:var(--ink)' }, k.views + ' open' + (k.views === 1 ? '' : 's')) : 'Not opened yet', h('div', null, k.talks ? k.talks + ' chats with the AI' : '', k.last_view_at ? ' · ' + ago(k.last_view_at) : ''))),
+      k.tabs && k.tabs.length ? h('p', { class: 'dim small', style: 'margin:8px 0 0' }, 'Looked at: ' + k.tabs.join(', ')) : null,
+      h('div', { class: 'row wrap', style: 'margin-top:10px' },
+        h('a', { class: 'btn small primary', href: linkOf(k), target: '_blank', rel: 'noopener' }, 'Open'),
+        h('button', { class: 'btn small', onclick: () => copy(linkOf(k), 'Link copied') }, 'Copy link'),
+        h('button', { class: 'btn small', onclick: () => copy(dm(k), 'DM copied') }, 'Copy DM'),
+        k.lead_id ? h('a', { class: 'btn small', href: '#/lead/' + k.lead_id }, 'Lead') : null,
+        h('button', { class: 'btn small', onclick: async () => { try { await api('PATCH', '/kits/' + k.id, { reroll: true }); toast('New look'); viewLab(arg); } catch (e) { fail(e); } } }, 'New look'),
+        h('button', { class: 'btn small', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to delete'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Delete'; }, 3000); return; } try { await api('DELETE', '/kits/' + k.id); toast('Deleted'); viewLab(arg); } catch (e2) { fail(e2); } } }, 'Delete')))) : [h('p', { class: 'dim' }, 'No demos yet. Build the first one above.')];
+    shell('lab', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Demo Lab'), h('h1', null, 'Demo Lab'), h('p', { class: 'sub' }, 'Type a contractor in. Get one link with every offer working: voice receptionist, website, chat, text-back, quote follow-up, reviews, win-back, reminders, ballpark estimates, job-done automation and a lead tracker.'))),
+      h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, L ? 'New demo for ' + L.business : 'New demo')),
+        input('Business name', 'business', { placeholder: "Torres Pavers & Turf" }), input('Owner name', 'owner', { placeholder: 'Mike Torres' }), input('City', 'city', { placeholder: 'Torrance' }), input('Business phone (shown on the sample site)', 'phone', { type: 'tel' }),
+        input('Average job ($, for the money math)', 'avg', { type: 'number', inputmode: 'numeric' }),
+        h('div', { class: 'field' }, h('label', null, 'What they build'), svcChips), h('div', { class: 'field' }, h('label', null, 'Look of the sample website'), lookChips),
+        voiceRow ? h('div', { class: 'field' }, h('label', null, 'Receptionist voice'), voiceRow) : null, build),
+      result,
+      h('div', { class: 'page-head', style: 'margin-top:18px' }, h('div', null, h('h2', null, 'Your demos'), h('p', { class: 'sub' }, 'You get a Discord alert the first time they open it and when they talk to the AI.'))), list,
+    ]);
+  }
+
   async function viewStudio(leadId) {
     const r = await api('GET', '/studio' + (leadId ? '?lead=' + leadId : ''));
     let lead = r.lead, draft = r.draft, engine = r.engine, busy = false;
@@ -4781,7 +4832,7 @@ function api(method, path, body) {
         ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
       ['Tools', [
         ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['content', 'Content', 'Posts and demo videos', 'spark'],
-        ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos'],
+        ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos'],
         ['cards', 'Review cards', 'NFC plates stock and sales', 'deals'], ['script', 'Call script', 'What to say', 'script']]],
       ['Team', [
         ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
