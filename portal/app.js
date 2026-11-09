@@ -382,7 +382,7 @@
     const isAdmin = S.me.role === 'admin';
     const opts = await getOptions(true);
     const F = S.leadFilters;
-    const mode = lsGet('rs_leads_mode', 'list');
+    const mode = lsGet('rs_leads_mode2', 'list');
     const FKEYS = ['status', 'rep', 'batch', 'city', 'q', 'heat', 'contact', 'tag', 'due', 'source'];
     const BLANK = { status: 'open', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '' };
     const qsFrom = (extra) => { const qs = new URLSearchParams(extra || {}); for (const k of FKEYS) if (F[k] && k !== 'status') qs.set(k, F[k]); return qs; };
@@ -399,7 +399,7 @@
     const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
     const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
     const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['list', 'List'], ['board', 'Board'], ['table', 'Table']].map(([k, l]) =>
-      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode', k); viewLeads(); } }, l)));
+      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode2', k); viewLeads(); } }, l)));
 
     async function filterSheet() {
       const sel = (id, label, key, first, items) => {
@@ -434,7 +434,7 @@
           const st = r.stages.find((x) => x.key === cur);
           chips.replaceChildren(...r.stages.map((x) => h('button', { class: 'stab' + (x.key === cur ? ' on' : ''), onclick: () => { cur = x.key; lsSet('rs_leads_stage', cur); draw(); } }, x.label, h('i', null, x.count.toLocaleString()))));
           list.replaceChildren(...(st.leads.length ? st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); return c; }) : [h('div', { class: 'bempty' }, 'No leads in ' + st.label)]),
-            ...(st.count > st.leads.length ? [h('button', { class: 'btn block', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →')] : []));
+            ...(st.count > st.leads.length ? [h('button', { class: 'btn block', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →')] : []));
           const on = chips.querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ inline: 'center', block: 'nearest' });
         };
         draw(); body.replaceChildren(chips, list); return;
@@ -443,7 +443,7 @@
         const col = h('div', { class: 'bcol', 'data-stage': st.key },
           h('div', { class: 'bhead' }, h('b', null, st.label), h('span', null, st.count.toLocaleString())),
           h('div', { class: 'bcards' }, st.leads.length ? st.leads.map(boardCard) : h('div', { class: 'bempty' }, 'Drop leads here')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('over'); });
         col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
         col.addEventListener('drop', (e) => { e.preventDefault(); col.classList.remove('over'); const id = +e.dataTransfer.getData('text/plain'); if (id) moveLead(id, st.key); });
@@ -467,7 +467,7 @@
           h('b', null, LBL[st.key] || st.label), h('span', { class: 'lcount' }, st.count.toLocaleString()), h('i', { class: 'chev' }, '▾'));
         const cards = st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); if (mover && mover === l.id) c.classList.add('just-moved'); return c; });
         sec.append(head, h('div', { class: 'lstage-b' }, cards.length ? cards : h('div', { class: 'bempty' }, 'Nobody here yet')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode2', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
         return sec;
       });
       body.replaceChildren(h('div', { class: 'lstages' }, secs));
@@ -500,7 +500,7 @@
 
     // ---- table ----
     let offset = 0, rows = [];
-    const sort = S.leadSort || (S.leadSort = { key: '', dir: 'asc' });
+    const sort = S.leadSort || (S.leadSort = { key: 'stage', dir: 'asc' });
     async function loadTable(more) {
       if (!more) { offset = 0; rows = []; body.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'spinner', style: 'margin:auto' }))); }
       const qs = qsFrom({ limit: 100, offset });
@@ -515,16 +515,17 @@
         const s = h('select', { class: 'stage-sel s-' + STAGE_OF(l.status), 'aria-label': 'Stage for ' + l.business, onclick: (e) => e.stopPropagation() },
           STAGES.map(([k, lab]) => h('option', { value: k }, lab)), l.status === 'dnc' ? h('option', { value: 'dnc' }, 'Do Not Call') : null);
         s.value = STAGE_OF(l.status);
-        s.onchange = async () => { try { await api('PATCH', '/leads/' + l.id, { status: s.value }); l.status = s.value; s.className = 'stage-sel s-' + s.value; toast('Moved to ' + STAGE_NAME[s.value]); } catch (e) { fail(e); s.value = STAGE_OF(l.status); } };
+        s.onchange = async () => { try { await api('PATCH', '/leads/' + l.id, { status: s.value }); l.status = s.value; s.className = 'stage-sel s-' + s.value; toast('Moved to ' + STAGE_NAME[s.value]); S.justMoved = l.id; loadTable(); } catch (e) { fail(e); s.value = STAGE_OF(l.status); } };
         return s;
       };
       const tbl = h('table', { class: 'ltable' },
         h('thead', null, h('tr', null,
           isAdmin ? h('th', { class: 'ck' }, h('input', { type: 'checkbox', 'aria-label': 'Select all', onchange: (e) => { tbl.querySelectorAll('tbody input[type=checkbox]').forEach((c) => { c.checked = e.target.checked; c.checked ? S.selected.add(+c.dataset.id) : S.selected.delete(+c.dataset.id); }); renderBulk(); } })) : null,
-          th('business', 'Business'), th('', 'Phone', 'hide-sm'), th('status', 'Stage'), th('city', 'City', 'hide-sm'),
+          th('business', 'Business'), th('', 'Phone', 'hide-sm'), th('stage', 'Stage'), th('city', 'City', 'hide-sm'),
           isAdmin ? th('rep', 'Rep', 'hide-sm') : null, th('last_call', 'Last call', 'hide-md'), th('next', 'Next step', 'hide-md'))),
-        h('tbody', null, rows.map((l) => {
-          const tr = h('tr', { onclick: (e) => { if (!e.target.closest('select,input,a,button')) openLeadDrawer(l.id); } },
+        h('tbody', null, rows.map((l, ri) => {
+          const stg = STAGE_OF(l.status), newGroup = sort.key === 'stage' && (ri === 0 || STAGE_OF(rows[ri - 1].status) !== stg);
+          const tr = h('tr', { class: S.justMoved === l.id ? 'just-moved-row' : null, onclick: (e) => { if (!e.target.closest('select,input,a,button')) openLeadDrawer(l.id); } },
             isAdmin ? h('td', { class: 'ck' }, h('input', { type: 'checkbox', 'data-id': l.id, 'aria-label': 'Select ' + l.business, checked: S.selected.has(l.id), onchange: (e) => { e.target.checked ? S.selected.add(l.id) : S.selected.delete(l.id); renderBulk(); } })) : null,
             h('td', { class: 'biz' }, h('div', { class: 'bn' }, HEAT_DOT(l.heat), h('a', { href: '#/lead/' + l.id }, l.business)), h('small', null, [l.owner, l.category].filter(Boolean).join(' · '))),
             h('td', { class: 'hide-sm mono' }, l.phone ? h('a', { href: telHref(l.phone) }, l.phone) : l.email ? h('small', null, l.email) : '—'),
@@ -533,8 +534,9 @@
             isAdmin ? h('td', { class: 'hide-sm' }, l.rep_name || h('small', null, 'Unassigned')) : null,
             h('td', { class: 'hide-md' }, l.last_call_at ? ago(l.last_call_at) : h('small', null, 'Never')),
             h('td', { class: 'hide-md' }, l.next_action ? h('span', { class: l.next_action_at && new Date(l.next_action_at) < new Date() ? 'due' : null }, l.next_action) : h('small', null, '—')));
-          return tr;
-        })));
+          return newGroup ? [h('tr', { class: 'stage-div s-' + stg }, h('td', { colspan: 9 }, (stg === 'new' ? 'Not reached out' : stg === 'called' ? 'Reached out' : STAGE_NAME[stg]))), tr] : tr;
+        }).flat()));
+      S.justMoved = null;
       body.replaceChildren(...[h('div', { class: 'twrap' }, tbl), r.more ? h('button', { class: 'btn block', style: 'margin-top:10px', onclick: () => loadTable(true) }, 'Load more') : null, bulk].filter(Boolean));
       renderBulk();
     }
