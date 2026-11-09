@@ -1285,6 +1285,52 @@ function csvCell(v) {
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+
+/* ---------------- Google Calendar + Meet ---------------- */
+const G_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email';
+const gRedirect = (url) => url.origin + '/google/callback';
+const gConfigured = (env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+async function gAccessToken(env) {
+  const refresh = await getSetting(env, 'google_refresh');
+  if (!refresh) throw new HttpError(400, 'Google is not connected yet. Connect it under Integrations.');
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, refresh_token: refresh, grant_type: 'refresh_token' }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) {
+    if (j.error === 'invalid_grant') { await setSetting(env, 'google_refresh', ''); throw new HttpError(400, 'Google access expired. Connect Google again under Integrations.'); }
+    throw new HttpError(502, 'Google would not give access (' + (j.error || r.status) + ')');
+  }
+  return j.access_token;
+}
+async function gCreateMeetEvent(env, o) {
+  const tok = await gAccessToken(env);
+  const body = { summary: o.title, description: o.notes || '', start: { dateTime: o.start }, end: { dateTime: o.end },
+    conferenceData: { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } } };
+  if (o.email) body.attendees = [{ email: o.email }];
+  const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=' + (o.email ? 'all' : 'none'),
+    { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new HttpError(502, 'Google Calendar said: ' + ((j.error && j.error.message) || r.status));
+  return { meet: j.hangoutLink || (j.conferenceData && (j.conferenceData.entryPoints || []).find((e) => e.entryPointType === 'video') || {}).uri || '', html: j.htmlLink || '' };
+}
+async function googleCallback(request, env, url) {
+  const back = (q) => new Response(null, { status: 302, headers: { Location: '/?google=' + q + '#/integrations' } });
+  const user = await getUser(request, env);
+  if (!user || user.role !== 'admin') return back('login');
+  const state = url.searchParams.get('state') || '', code = url.searchParams.get('code');
+  const saved = (await getSetting(env, 'google_state')) || '';
+  await setSetting(env, 'google_state', '');
+  const [sv, ts] = saved.split('.');
+  if (!code || !sv || sv !== state.split('.')[0] || Date.now() - (+ts || 0) > 15 * 60 * 1000) return back('denied');
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: gRedirect(url), grant_type: 'authorization_code' }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.refresh_token) return back('norefresh');
+  await setSetting(env, 'google_refresh', j.refresh_token);
+  try { const u = await (await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: 'Bearer ' + j.access_token } })).json(); await setSetting(env, 'google_email', u.email || ''); } catch { /* optional */ }
+  return back('ok');
+}
+
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
   const path = url.pathname.replace(/^\/api/, '');
@@ -2253,6 +2299,34 @@ async function api(request, env, url) {
 
   /* ---- calendar ---- */
   const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup', 'posted'];
+  if (path === '/google/status' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    return json({ configured: gConfigured(env), connected: !!(await getSetting(env, 'google_refresh')), email: (await getSetting(env, 'google_email')) || '', redirect_uri: gRedirect(url) });
+  }
+  if (path === '/google/auth' && method === 'POST') {
+    need(user, 'admin');
+    if (!gConfigured(env)) bad('Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Cloudflare first');
+    const st = crypto.randomUUID().replace(/-/g, '');
+    await setSetting(env, 'google_state', st + '.' + Date.now());
+    const q = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: gRedirect(url), response_type: 'code', scope: G_SCOPES, access_type: 'offline', prompt: 'consent', state: st });
+    return json({ url: 'https://accounts.google.com/o/oauth2/v2/auth?' + q });
+  }
+  if (path === '/google' && method === 'DELETE') {
+    need(user, 'admin');
+    await setSetting(env, 'google_refresh', ''); await setSetting(env, 'google_email', '');
+    return json({ ok: true });
+  }
+  if (path === '/google/meet' && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const title = str(body.title, 120) || 'Call', start = validIso(body.starts_at);
+    if (!start) bad('Pick the start time first');
+    const end = validIso(body.ends_at) || new Date(new Date(start).getTime() + 30 * 6e4).toISOString();
+    const email = str(body.email, 120);
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) bad('That email does not look right');
+    const r = await gCreateMeetEvent(env, { title, start, end, email, notes: str(body.notes, 1000) });
+    if (!r.meet) throw new HttpError(502, 'Google made the event but no Meet link came back');
+    return json({ ok: true, meet: r.meet, html: r.html, invited: !!email });
+  }
   if (path === '/calendar' && method === 'GET') {
     need(user, 'admin', 'rep');
     const from = validIso(url.searchParams.get('from')), until = validIso(url.searchParams.get('until'));
@@ -4875,6 +4949,10 @@ export default {
         r.headers.set('Content-Security-Policy', r.headers.get('Content-Security-Policy').replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
         return r;
       } catch (e) { console.error(e); return new Response('Preview unavailable', { status: 500 }); }
+    }
+    if (url.pathname === '/google/callback' && request.method === 'GET') {
+      try { if (!env.DB) throw new Error('no db'); await ensureSchema(env); return await googleCallback(request, env, url); }
+      catch (e) { console.error(e); return new Response('Google connection failed. Go back to the portal and try again.', { status: 500 }); }
     }
     const km = url.pathname.match(/^\/k\/([a-z0-9-]{3,60})(\/site)?\/?$/);
     if (km && request.method === 'GET') {

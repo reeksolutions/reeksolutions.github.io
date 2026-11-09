@@ -1076,6 +1076,7 @@
 
     const openEditor = async (ev, presetDay, presetKind, pre) => {
       pre = pre || {};
+      let gst = null; try { gst = await api('GET', '/google/status'); } catch { /* not connected */ }
       const base = ev ? new Date(ev.starts_at) : pre.start ? new Date(pre.start) : new Date(presetDay + 'T09:00');
       const done = await sheet((box, close) => {
         const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Torres Pavers', value: ev ? ev.title : pre.title || '' });
@@ -1083,7 +1084,20 @@
         const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
         const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
         const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : pre.link || '' });
-        const meetBtn = h('a', { class: 'btn small', href: 'https://meet.google.com/new', target: '_blank', rel: 'noopener' }, '+ Create Google Meet');
+        const guest = h('input', { type: 'email', inputmode: 'email', placeholder: 'Guest email (optional, sends them the invite)', autocomplete: 'off' });
+        const meetBtn = gst && gst.connected ? h('button', { type: 'button', class: 'btn small primary', onclick: async () => {
+          if (!starts.value) { toast('Pick the start time first'); return; }
+          meetBtn.disabled = true; meetBtn.textContent = 'Creating…';
+          try {
+            const st = new Date(starts.value).toISOString();
+            const en = ends.value ? new Date(ends.value).toISOString() : new Date(new Date(st).getTime() + (CAL_MINS[kind.value] || 30) * 6e4).toISOString();
+            const r = await api('POST', '/google/meet', { title: title.value || 'Call', starts_at: st, ends_at: en, email: guest.value.trim(), notes: notes.value });
+            link.value = r.meet; toast(r.invited ? 'Meet made and invite sent ✓' : 'Meet made and added to Google Calendar ✓');
+            meetBtn.textContent = 'Meet created ✓';
+          } catch (e) { fail(e); meetBtn.disabled = false; meetBtn.textContent = '+ Create Meet + Google event'; }
+        } }, '+ Create Meet + Google event')
+          : gst && gst.configured ? h('a', { class: 'btn small primary', href: '#/integrations' }, 'Connect Google first')
+          : h('a', { class: 'btn small', href: 'https://meet.google.com/new', target: '_blank', rel: 'noopener' }, '+ Create Google Meet');
         const notes = h('textarea', { rows: 3, maxlength: 1000, placeholder: 'Notes, what to cover, who is on the call' }, ev && ev.notes ? ev.notes : pre.notes || '');
         const save = h('button', { class: 'btn primary block', onclick: async () => {
           save.disabled = true;
@@ -1098,7 +1112,8 @@
           h('div', { class: 'two' }, h('label', { class: 'field' }, h('span', null, 'Type'), kind), h('label', { class: 'field' }, h('span', null, 'Starts'), starts)),
           h('label', { class: 'field' }, h('span', null, 'Ends (optional, filled in for you)'), ends),
           h('label', { class: 'field' }, h('span', null, 'Meeting link (optional)'), link),
-          h('div', { class: 'row', style: 'margin:-4px 0 10px;gap:8px' }, meetBtn, h('small', { class: 'dim' }, 'Opens Meet in a new tab. Copy the link, come back, paste it above.')),
+          h('div', { class: 'row', style: 'margin:-4px 0 10px;gap:8px' }, meetBtn, gst && gst.connected ? null : h('small', { class: 'dim' }, 'Not connected to Google yet, so this just opens Meet. Copy the link, come back, paste it above.')),
+          gst && gst.connected && !(ev && ev.link) ? h('label', { class: 'field' }, h('span', null, 'Guest'), guest) : null,
           ev && ev.link ? h('a', { class: 'btn ok block', style: 'margin-bottom:10px', href: ev.link, target: '_blank', rel: 'noopener' }, 'Join the call') : null,
           h('label', { class: 'field' }, h('span', null, 'Notes'), notes),
           save,
@@ -1489,9 +1504,28 @@
           h('span', { class: 'ell' }, x.error ? x.error : [x.duplicates ? x.duplicates + ' dupes' : null, x.dnc ? x.dnc + ' DNC' : null, x.has_site ? x.has_site + ' have site' : null, x.invalid ? x.invalid + ' bad' : null].filter(Boolean).join(', ') || '—')))) :
         h('div', { class: 'empty-sm' }, 'Nothing yet. Requests show up here as soon as they arrive.'));
 
+    let gs = { configured: false, connected: false, email: '', redirect_uri: location.origin + '/google/callback' };
+    try { gs = await api('GET', '/google/status'); } catch { /* keep defaults */ }
+    const gq = new URLSearchParams(location.search).get('google');
+    if (gq) { history.replaceState(null, '', location.pathname + location.hash); toast(gq === 'ok' ? 'Google connected ✓' : 'Google did not connect (' + gq + '). Try again.'); }
+    const gStep = (n, t, kids) => h('div', { class: 'step' }, h('i', null, String(n)), h('div', null, h('b', null, t), kids || null));
+    const googleP = panel('Google Calendar + Meet', gs.connected ? h('span', { class: 'tag' }, 'Connected' + (gs.email ? ' · ' + gs.email : '')) : null,
+      gs.connected ? h('div', null,
+        h('p', { class: 'sub' }, 'Making a calendar event here can now create a Google Calendar event with a Meet link and email the invite to your lead.'),
+        h('button', { class: 'btn small danger', onclick: async () => { if (!(await confirmSheet('Disconnect Google?', 'The Create Meet button stops working until you connect again.', 'Disconnect', true))) return; try { await api('DELETE', '/google'); viewIntegrations(); } catch (e) { fail(e); } } }, 'Disconnect'))
+      : gs.configured ? h('div', null,
+        h('p', { class: 'sub' }, 'Sign in with the Google account you take audits on. Google will ask you to allow calendar access.'),
+        h('button', { class: 'btn primary', onclick: async () => { try { const r = await api('POST', '/google/auth'); location.href = r.url; } catch (e) { fail(e); } } }, 'Connect Google'))
+      : h('div', { class: 'steps' },
+        h('p', { class: 'sub' }, 'One-time setup in Google Cloud (free). Do it on any browser.'),
+        gStep(1, 'Open console.cloud.google.com, make a new project, then turn on the Google Calendar API (APIs & Services → Library).'),
+        gStep(2, 'APIs & Services → OAuth consent screen: choose External, fill in the app name and your email, then add your Gmail as a Test user.'),
+        gStep(3, 'Credentials → Create credentials → OAuth client ID → Web application. Add this as an Authorized redirect URI:', codeBox(gs.redirect_uri, 'Redirect address')),
+        gStep(4, 'Copy the Client ID and Client secret. In Cloudflare open this Worker → Settings → Variables and Secrets, and add two secrets named GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Then come back here and tap Connect Google.')));
     shell('integrations', [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tools'), h('h1', null, 'Scraper & n8n'),
         h('p', { class: 'sub' }, 'Send leads in automatically. Duplicates, Do Not Call numbers and businesses that already have a website are skipped, same as CSV upload.'))),
+      googleP,
       h('div', { class: 'dash-grid' }, h('div', { class: 'col' }, keysP, howP), h('div', { class: 'col' }, logP)),
     ]);
   }
