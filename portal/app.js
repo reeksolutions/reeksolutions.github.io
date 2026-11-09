@@ -166,19 +166,25 @@
   const TAB_ICON = { sell: 'phone', create: 'spark', crew: 'users', calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
   const CATS = {
-    sell: ['Sell', 'Leads, calls and deals', [
-      ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
-      ['calendar', 'Calendar', 'Audits, closings, posts', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
-      ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
+    sell: ['Sell', 'Leads, calls and money', [
+      ['Pipeline', [['leads', 'Leads', 'Board of every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'], ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'], ['batches', 'Batches', 'Lead lists', 'batches']]],
+      ['Schedule', [['calendar', 'Calendar', 'Audits, closings, posts', 'calendar']]],
+      ['Money', [['deals', 'Deals', 'Closes, payouts, commission', 'deals'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
+      ['Score', [['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
+      ['Outreach tools', [['script', 'Call script', 'What to say', 'script'], ['emailbot', 'Email bot', 'Cold email robot', 'mail']]]]],
     create: ['Create', 'Posts, videos and demos', [
-      ['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['content', 'Content', 'Start posting', 'spark']]],
-    crew: ['Team', 'Reps, devs and lead lists', [
-      ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
-      ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
+      ['Content', [['content', 'Content', 'Start posting and video maker', 'spark']]],
+      ['Demos', [['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos']]]]],
+    crew: ['Team', 'Reps, devs and recordings', [
+      ['People', [['users', 'Team', 'Reps, devs and logins', 'users']]],
+      ['Calls', [['recordings', 'Recordings', 'Call recordings', 'phone']]]]],
+    more: ['System', 'Connections and settings', [
+      ['Connections', [['integrations', 'Integrations', 'Google, Discord, API keys', 'bolt']]],
+      ['Setup', [['settings', 'Settings', 'Targets, theme, checklist', 'account'], ['account', 'Account', 'Password and log out', 'account']]]]],
   };
+  const catItems = (k) => CATS[k][2].flatMap((g) => g[1]);
   const CAT_OF = { lead: 'sell', rep: 'crew', demo: 'create' };
-  Object.entries(CATS).forEach(([k, c]) => c[2].forEach((i) => { CAT_OF[i[0]] = k; }));
-  CAT_OF.finder = 'sell';
+  Object.keys(CATS).forEach((k) => catItems(k).forEach((i) => { CAT_OF[i[0]] = k; }));
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
   /* ---- slot-machine page switch: pages sit on a reel in tab order; going to a later page rolls up, an earlier one rolls down ---- */
@@ -189,7 +195,7 @@
     if (route === 'rep' || route === 'users') cat = 'crew';
     const base = Math.max(0, SLOT_CATS.indexOf(cat)) * 100;
     if (route === cat) return base;
-    const at = CATS[cat] ? CATS[cat][2].findIndex((i) => i[0] === route) : -1;
+    const at = CATS[cat] ? catItems(cat).findIndex((i) => i[0] === route) : -1;
     return base + (at >= 0 ? 1 + at : 60);
   }
   function slotDir(fromHash, toHash) {
@@ -280,7 +286,7 @@
     document.documentElement.classList.toggle('nonav', isAdmin);
     const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label)
       : catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0])
-      : isAdmin && !['home', 'sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/more' }, icon('chev'), 'More')
+      : isAdmin && !['home', 'sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home')
       : isAdmin && ['sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home') : null;
     const sideActive = active === 'rep' ? 'users' : active;
     const nav = h('nav', { class: 'tabs', 'aria-label': 'Main' },
@@ -345,7 +351,7 @@
         case 'rep': return await viewRep(+arg);
         case 'deals': return await viewDeals();
         case 'earnings': return await viewEarnings();
-        case 'more': return viewMore();
+        case 'more': return viewCategory('more');
         case 'sell': case 'create': case 'crew': return viewCategory(route);
         case 'script': return await viewScript();
         case 'leads': return await viewLeads();
@@ -4266,7 +4272,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
 
   // phone home: the four categories as big buttons (there is no bottom bar for the admin)
   function catLauncher() {
-    const tiles = [['sell', 'Sell', 'Leads, calls, deals', 'phone', true], ['create', 'Create', 'Posts, videos, demos', 'spark'], ['crew', 'Team', 'Reps, devs, lead lists', 'users'], ['more', 'More', 'Everything and settings', 'more']];
+    const tiles = [['sell', 'Sell', 'Leads, calls, deals', 'phone', true], ['create', 'Create', 'Posts, videos, demos', 'spark'], ['crew', 'Team', 'Reps, devs, lead lists', 'users'], ['more', 'System', 'Connections and settings', 'more']];
     return h('section', { class: 'cat-launch' },
       h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
       h('div', { class: 'hub-grid' }, tiles.map(([k, t, sub, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + k }, h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, sub)))));
@@ -5167,57 +5173,13 @@ function api(method, path, body) {
   }
 
   function viewCategory(key) {
-    const [title, sub, items] = CATS[key];
+    const [title, sub, groups] = CATS[key];
     shell(key, [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Category'), h('h1', null, title), h('p', { class: 'sub' }, sub))),
       key === 'create' ? h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting') : null,
-      h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
-        h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s)))),
-    ]);
-  }
-
-  function viewMore() {
-    const GROUPS = [
-      ['Sell', [
-        ['leads', 'Leads', 'Pipeline and every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'],
-        ['calendar', 'Calendar', 'Audits, closings, meetings', 'calendar'], ['deals', 'Deals', 'Closes, payouts, commission', 'deals'],
-        ['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
-      ['Tools', [
-        ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['content', 'Content', 'Posts and demo videos', 'spark'],
-        ['lab', 'Demo Lab', 'One link, every offer live', 'spark']]],
-      ['Parked (not in this month\'s plan)', [
-        ['studio', 'Demo Studio', 'Older demo builder', 'spark'], ['demos', 'Demo queue', 'Older demo queue', 'demos'],
-        ['cards', 'Review cards', 'NFC plates stock and sales', 'deals'], ['script', 'Call script', 'What to say', 'script'], ['emailbot', 'Email bot', 'Cold email robot', 'mail']]],
-      ['Team', [
-        ['users', 'Team', 'Reps, devs and logins', 'users'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'],
-        ['batches', 'Batches', 'Lead lists and who has them', 'batches'], ['recordings', 'Recordings', 'Call recordings', 'phone']]],
-      ['System', [
-        ['integrations', 'Integrations', 'Connections and API keys', 'bolt'], ['settings', 'Settings', 'Targets, theme, checklist', 'account'],
-        ['account', 'Account', 'Password and log out', 'account']]],
-    ];
-    const search = h('input', { type: 'search', placeholder: 'Search pages', 'aria-label': 'Search pages', autocomplete: 'off' });
-    const sections = GROUPS.map(([label, items]) => {
-      const tiles = items.map(([href, title, sub, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href, 'data-q': (title + ' ' + sub).toLowerCase() },
-        h('span', { class: 'hub-ic' }, icon(ic)),
-        badge ? h('span', { class: 'count cb-count', hidden: true }) : null,
-        h('b', null, title), h('small', null, sub)));
-      return h('section', { class: 'hub-sec' }, h('span', { class: 'eyebrow' }, label), h('div', { class: 'hub-grid' }, tiles));
-    });
-    const empty = h('p', { class: 'dim', hidden: true, style: 'text-align:center;margin-top:24px' }, 'No page matches that.');
-    search.addEventListener('input', () => {
-      const q = search.value.trim().toLowerCase(); let any = false;
-      document.querySelectorAll('.hub-sec').forEach((sec) => {
-        let n = 0;
-        sec.querySelectorAll('.hub-tile').forEach((t) => { const show = !q || t.dataset.q.includes(q); t.hidden = !show; if (show) n++; });
-        sec.hidden = !n; if (n) any = true;
-      });
-      empty.hidden = any;
-    });
-    shell('more', [
-      h('a', { class: 'hub-me', href: '#/account' }, h('span', { class: 'avatar big' }, initials(S.me.name)),
-        h('div', { style: 'min-width:0;flex:1' }, h('b', null, S.me.name), h('small', null, ROLE_NAME[S.me.role] || S.me.role)), icon('chev')),
-      h('div', { class: 'hub-search' }, icon('search'), search),
-      sections, empty,
+      groups.map(([label, items]) => h('section', { class: 'hub-sec' }, h('span', { class: 'eyebrow' }, label),
+        h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s2, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
+          h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s2)))))),
     ]);
   }
 
