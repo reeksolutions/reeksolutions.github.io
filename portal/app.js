@@ -4211,7 +4211,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   async function viewAdminHome() {
     const ov = await api('GET', '/overview');
     const trk = ov;
-    const niche = ov.focus_niche || 'backyard contractor';
+    const niche = ov.focus_niche || 'med spa';
     const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
     const labels = C.days.map(shortDay);
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });

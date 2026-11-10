@@ -2810,6 +2810,7 @@ async function api(request, env, url) {
         (SELECT data FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_data
       FROM leads l WHERE l.status IN ('booked','call2','callback','demo_needed','demo_ready')
       ORDER BY CASE l.status WHEN 'booked' THEN 0 WHEN 'call2' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'callback' THEN 3 ELSE 4 END, l.booked_at, l.id DESC LIMIT 60`).all();
+    results.sort((a, b) => (isMedCat((b.category || '') + ' ' + (b.business || '')) ? 1 : 0) - (isMedCat((a.category || '') + ' ' + (a.business || '')) ? 1 : 0));
     return json({ origin: url.origin, leads: results.map((r) => {
       let kd = null; try { kd = r.kit_data ? JSON.parse(r.kit_data) : null; } catch { /* ignore */ }
       const want = kitNicheFor(r.category, r.business), have = kd ? (kd.niche || 'contractor') : '';
@@ -4688,7 +4689,7 @@ function kitNicheFor(category, business) {
   if (JUNK_RE.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
-  return String(category || '').trim() ? 'custom' : 'contractor';
+  return String(category || '').trim() ? 'custom' : 'medspa';
 }
 const KIT_TAGLINES_MED = ['Look and feel your best in {city}.', "{city}'s med spa for glowing skin.", 'Botox, filler and laser, done right.', 'Skin you feel good in. Book a free consultation.'];
 const isMedCat = (t) => /med(ical|i)?\s*spa|aesthetic|botox|injector|laser|skin|facial|wellness/i.test(String(t || ''));
@@ -4712,7 +4713,7 @@ function cleanKit(b, prev) {
   if (!business) bad('Add the business name');
   const seed = seedOf(business + Date.now());
   const city = oneLine(b.city ?? p.city, 40) || 'Los Angeles';
-  const niche = ['medspa', 'contractor', 'custom'].includes(b.niche) ? b.niche : (p.niche || 'contractor'), med = niche === 'medspa', cus = niche === 'custom';
+  const niche = ['medspa', 'contractor', 'custom'].includes(b.niche) ? b.niche : (p.niche || 'medspa'), med = niche === 'medspa', cus = niche === 'custom';
   const custom = cus ? (b._profile || (p.niche === 'custom' ? p.custom : null)) : null;
   if (cus && !custom) bad('Tell me what kind of business this is');
   let services = cus ? [] : (Array.isArray(b.services) ? b.services : p.services || (med ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => (med ? KIT_SERVICES_MED : KIT_SERVICES)[x]);
@@ -5064,7 +5065,7 @@ async function kitAdmin(env, user, path, method, body, url) {
     if (body.lead_id) { const l = await env.DB.prepare('SELECT id, category, business FROM leads WHERE id = ?').bind(+body.lead_id).first(); if (l) { leadId = l.id; leadCat = (l.category || '') + ' ' + (l.business || ''); } }
     const bizType = oneLine(body.biz_type, 60);
     if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
-    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : 'contractor';
+    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : 'medspa';
     if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     const slug = kitSlug(data.business), t = now();
