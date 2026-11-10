@@ -31,7 +31,28 @@
     [/\bhomeowners\b/g, 'clients'], [/\bHomeowner\b/g, 'Client'], [/\bhomeowner\b/g, 'client'], [/\bcontractor\b/g, 'med spa'], [/\bon a job\b/g, 'with a client'],
   ];
   const medOn = () => !!(K && K.niche === 'medspa');
-  const T = (t) => { if (!medOn() || typeof t !== 'string') return t; let o = t; for (const [a, b] of MED_MAP) o = o.replace(a, b); return o; };
+  /* any other business type (junk removal, plumbing, cleaning...): neutral wording that uses the business's own visit word */
+  const genOn = () => !!(K && K.niche === 'custom');
+  let GEN_MAP = null;
+  const genMap = () => {
+    const v = K.visit || 'free estimate', V = v[0].toUpperCase() + v.slice(1), c = K.customer || 'customer', C = c[0].toUpperCase() + c.slice(1);
+    return [
+      ['How can I help with your backyard?', 'How can I help you today?'], ['Free on-site estimate', V], ['Estimate booked', v === 'free consultation' ? 'Consultation booked' : 'Booked'],
+      ['we are on a job site. What are you looking to build?', 'we are on a job. What do you need help with?'],
+      [/We would love to look at your (.+?) project\. What is your zip code, and what days work for a free estimate\?/, 'We would love to help with your $1. What is your zip code, and what days work for a ' + v + '?'],
+      ['Loved your new yard? Tap to leave a review.', 'Loved the service? Tap to leave a review.'], ['Another yard finished. Want yours next? Message us for a free estimate.', 'Another job done. Need us next? Message us for a ' + v + '.'],
+      ['know a neighbor thinking about a project?', 'know someone who could use us?'], ['always gets a free estimate for the exact number', 'always gets a ' + v + ' for the exact price'],
+      ['Book my free estimate', 'Book my ' + v], ['Free estimate · tomorrow', V + ' · tomorrow'], ['Confirmed: free estimate at your place', 'Confirmed: ' + v + ' at your place'],
+      ['Instant ballpark for homeowners', 'Instant price range for ' + c + 's'], ['Homeowners want a number before they call.', C + 's want a number before they call.'],
+      [/\bhomeowners\b/g, c + 's'], [/\bHomeowner\b/g, C], [/\bhomeowner\b/g, c], [/\bcontractor\b/g, 'business'], ['Finished project', 'Finished job'],
+    ];
+  };
+  const T = (t) => {
+    if (typeof t !== 'string') return t;
+    if (medOn()) { let o = t; for (const [a, b] of MED_MAP) o = o.replace(a, b); return o; }
+    if (genOn()) { GEN_MAP = GEN_MAP || genMap(); let o = t; for (const [a, b] of GEN_MAP) o = o.replace(a, b); return o; }
+    return t;
+  };
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -54,7 +75,7 @@
   const svc = (id) => K.services.find((s) => s.id === id) || K.services[0];
   const lower = (s) => s.toLowerCase();
   const mid = (s, qty) => s.unit === 'project' ? (s.lo + s.hi) / 2 : ((s.lo + s.hi) / 2) * qty;
-  const typicalQty = (s) => s.unit === 'sq ft' ? (s.id === 'deck' ? 300 : s.id === 'wall' ? 150 : 400) : s.unit === 'linear ft' ? 120 : 1;
+  const typicalQty = (s) => s.unit === 'room' ? 3 : s.unit === 'hour' ? 3 : s.unit === 'sq ft' ? (s.id === 'deck' ? 300 : s.id === 'wall' ? 150 : 400) : s.unit === 'linear ft' ? 120 : 1;
   const slider = (min, max, step, value, onInput) => { const el = h('input', { type: 'range', min, max, step, value }); el.addEventListener('input', () => onInput(+el.value)); return el; };
 
   /* ---------- audio (WebAudio so iOS lets us play after async work) ---------- */
@@ -76,7 +97,54 @@
       await new Promise((res) => { const u = new SpeechSynthesisUtterance(text); u.onend = res; u.onerror = res; speechSynthesis.speak(u); });
     }
   }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  /* ---------- microphone: record a clip, detect when the visitor stops talking, send it to the server to transcribe ---------- */
+  const SR = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+  const IN_APP = /FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|TikTok|MicroMessenger/i.test(navigator.userAgent);
+  let micStream = null, stopListen = null;
+  async function getMic() {
+    if (micStream && micStream.getTracks().some((t) => t.readyState === 'live')) return micStream;
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    return micStream;
+  }
+  function releaseMic() { try { micStream && micStream.getTracks().forEach((t) => t.stop()); } catch { /* ok */ } micStream = null; }
+  function wavOf(chunks, inRate) {
+    const ratio = inRate / 16000, total = chunks.reduce((n, c) => n + c.length, 0), flat = new Float32Array(total);
+    let o = 0; for (const c of chunks) { flat.set(c, o); o += c.length; }
+    const n = Math.floor(total / ratio), pcm = new Int16Array(n);
+    for (let i = 0; i < n; i++) { const a = Math.floor(i * ratio), b = Math.min(total, Math.floor((i + 1) * ratio)); let sum = 0; for (let j = a; j < b; j++) sum += flat[j]; const v = Math.max(-1, Math.min(1, sum / Math.max(1, b - a))); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+    const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf), w = (off, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(off + i, str.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    new Int16Array(buf, 44).set(pcm);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  // resolves a WAV Blob once the visitor has spoken and gone quiet, or null if they said nothing
+  async function listenClip(onHeard) {
+    unlockAudio();
+    const stream = await getMic();
+    return new Promise((resolve) => {
+      const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+      const pre = [], chunks = []; let speaking = false, lastVoice = 0, voiced = 0, floor = 0.006, done = false; const t0 = performance.now();
+      const finish = (blob) => { if (done) return; done = true; stopListen = null; try { proc.onaudioprocess = null; src.disconnect(); proc.disconnect(); mute.disconnect(); } catch { /* ok */ } resolve(blob); };
+      stopListen = () => finish(null);
+      proc.onaudioprocess = (e) => {
+        if (done) return;
+        const d = new Float32Array(e.inputBuffer.getChannelData(0)); let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+        const rms = Math.sqrt(sum / d.length), now = performance.now(), thr = Math.max(0.014, floor * 3.2);
+        if (rms > thr) { if (!speaking) { speaking = true; onHeard && onHeard(); chunks.push(...pre); } lastVoice = now; voiced += d.length / ctx.sampleRate; }
+        else if (!speaking) floor = floor * 0.95 + rms * 0.05;
+        if (speaking) { chunks.push(d); if (now - lastVoice > 1000 && voiced > 0.25) return finish(wavOf(chunks, ctx.sampleRate)); if (now - t0 > 16000) return finish(wavOf(chunks, ctx.sampleRate)); }
+        else { pre.push(d); if (pre.length > 3) pre.shift(); if (now - t0 > 9000) finish(null); }
+      };
+      src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+    });
+  }
+  async function transcribe(blob) {
+    const r = await fetch('/kit-api/' + slug + '/stt', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: blob });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Could not hear that. Type instead.');
+    return j.text || '';
+  }
 
   /* ---------- reusable text thread (phone mock) ---------- */
   function phone(title) {
@@ -108,7 +176,7 @@
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
     const compose = h('div', { class: 'compose' }, input, h('button', { class: 'btn sm pri', onclick: send }, 'Send'));
     compose.hidden = true; p.node.append(compose);
-    return { ...p, compose, hist, start(text) { const msg = text || opener; p.add('in', msg); hist.push({ r: 'a', t: msg }); compose.hidden = false; }, reset() { p.clear(); hist.length = 0; ended = false; compose.hidden = true; p.node.querySelectorAll('.book').forEach((b) => b.remove()); } };
+    return { ...p, compose, hist, start(text) { const msg = T(text || opener); p.add('in', msg); hist.push({ r: 'a', t: msg }); compose.hidden = false; }, reset() { p.clear(); hist.length = 0; ended = false; compose.hidden = true; p.node.querySelectorAll('.book').forEach((b) => b.remove()); } };
   }
   function bookingCard(b, sms) {
     return h('div', { class: 'book' }, h('b', null, 'Estimate booked'),
@@ -129,7 +197,7 @@
       h('p', { class: 'lead' }, 'Move the sliders to your real numbers. This is example math, not a promise.'),
       h('div', { class: 'card' },
         row('Calls you miss each week', slider(1, 30, 1, miss, (v) => { miss = v; v1.textContent = v; upd(); }), v1),
-        row('Average job', slider(medOn() ? 50 : 500, medOn() ? 3000 : 30000, medOn() ? 50 : 500, avg, (v) => { avg = v; v2.textContent = money(v); upd(); }), v2),
+        row('Average job', slider(medOn() ? 50 : genOn() ? 25 : 500, medOn() ? 3000 : genOn() ? Math.max(1500, Math.round(avg * 6 / 100) * 100) : 30000, medOn() ? 50 : genOn() ? 25 : 500, avg, (v) => { avg = v; v2.textContent = money(v); upd(); }), v2),
         row('How many of those callers would have hired you', slider(10, 60, 5, close, (v) => { close = v; v3.textContent = v + '%'; upd(); }), v3)),
       h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Walking out the door each month'), out, yr),
       h('p', { class: 'lead' }, 'Everything on the next tabs is a working example for ' + K.business + '. Tap through it. Talk to the receptionist first.'),
@@ -137,8 +205,9 @@
     ];
   }
 
+  const greet = () => 'Thanks for calling ' + K.business + ', this is ' + K.agent + '. How can I help with your backyard?';
   function pVoice() {
-    let active = false, busy = false, hist = [], empties = 0, rec = null;
+    let active = false, busy = false, hist = [], empties = 0;
     const avatar = h('div', { class: 'avatar' }, K.agent[0]);
     const status = h('div', { class: 'status' }, 'Tap to start the call');
     const thread = h('div', { class: 'thread card', style: 'min-height:80px' });
@@ -155,38 +224,44 @@
       say('Speaking…', 'live'); await speak(j.reply); busy = false;
       if (j.limited) hang();
     }
-    function listen() {
-      return new Promise((res) => {
-        let finalText = ''; const r = new SR(); rec = r; r.lang = 'en-US'; r.interimResults = true;
-        r.onresult = (e) => { let t = ''; for (const x of e.results) t += x[0].transcript; finalText = t; status.textContent = '“' + t + '”'; };
-        r.onerror = () => res(''); r.onend = () => res(finalText.trim());
-        try { r.start(); say('Listening… talk now', 'live'); } catch { res(''); }
-      });
+    async function listen() {
+      say('Listening… talk now', 'live');
+      let clip;
+      try { clip = await listenClip(() => say('Hearing you…', 'live')); }
+      catch (e) { micBlocked = true; throw e; }
+      if (!clip) return '';
+      say('Got it…');
+      try { return await transcribe(clip); } catch (e) { addMsg('sys', e.message); return ''; }
     }
+    let micBlocked = false;
     async function loop() {
       while (active) {
         if (busy) { await wait(200); continue; }
-        const t = await listen(); if (!active) break;
-        if (!t) { if (++empties >= 3) { say('Tap to talk again'); hang(); } continue; }
-        empties = 0; await turn(t);
+        let t = '';
+        try { t = await listen(); } catch (e) { mic.classList.remove('rec'); active = false; mic.textContent = 'Tap to call'; avatar.classList.remove('live');
+          say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap to call. Or type below.'); return; }
+        if (!active) break;
+        if (!t) { if (++empties >= 3) { say('I did not hear anything. Tap to call again.'); hang(true); } continue; }
+        empties = 0; await turn(t); await wait(250);
       }
     }
-    function hang() { active = false; mic.classList.remove('rec'); mic.textContent = SR ? 'Tap to call' : 'Start'; try { rec && rec.abort(); } catch { /* ok */ } stopAudio(); say('Call ended. Tap to call again.'); avatar.classList.remove('live'); }
+    function hang(quiet) { active = false; mic.classList.remove('rec'); mic.textContent = 'Tap to call'; try { stopListen && stopListen(); } catch { /* ok */ } releaseMic(); stopAudio(); if (!quiet) say('Call ended. Tap to call again.'); avatar.classList.remove('live'); }
     async function toggle() {
       unlockAudio();
       if (active) return hang();
-      active = true; mic.classList.add('rec'); mic.textContent = 'Hang up';
-      if (!hist.length) { const g = 'Thanks for calling ' + K.business + ', this is ' + K.agent + '. How can I help with your backyard?'; addMsg('in', g); hist.push({ r: 'a', t: g }); say('Speaking…', 'live'); await speak(g); }
+      active = true; empties = 0; mic.classList.add('rec'); mic.textContent = 'Hang up';
+      if (SR) { try { await getMic(); } catch (e) { active = false; mic.classList.remove('rec'); mic.textContent = 'Tap to call'; say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap to call. Or type below.'); return; } }
+      if (!hist.length) { const g = T(greet()); addMsg('in', g); hist.push({ r: 'a', t: g }); say('Speaking…', 'live'); await speak(g); }
       if (SR) loop(); else { say('Type your reply below'); active = false; mic.classList.remove('rec'); mic.textContent = 'Start'; }
     }
-    const sendTyped = async () => { const t = input.value.trim(); if (!t || busy) return; input.value = ''; unlockAudio(); if (!hist.length) { const g = 'Thanks for calling ' + K.business + ', this is ' + K.agent + '. How can I help with your backyard?'; addMsg('in', g); hist.push({ r: 'a', t: g }); } await turn(t); say(active ? 'Listening…' : 'Type or tap to talk'); };
+    const sendTyped = async () => { const t = input.value.trim(); if (!t || busy) return; input.value = ''; unlockAudio(); if (!hist.length) { const g = T(greet()); addMsg('in', g); hist.push({ r: 'a', t: g }); } await turn(t); say(active ? 'Listening…' : 'Type or tap to talk'); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendTyped(); } });
-    const ideas = medOn() ? ['How much is Botox?', 'Can I come in this week?', 'Do you do laser hair removal?', 'What helps with acne scars?'] : ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
+    const ideas = genOn() && K.ideas ? K.ideas : medOn() ? ['How much is Botox?', 'Can I come in this week?', 'Do you do laser hair removal?', 'What helps with acne scars?'] : ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
     return [
       h('h2', null, 'Call ' + K.business + ' after hours'),
-      h('p', { class: 'lead' }, 'This is a live AI voice receptionist. Tap the button, talk like a homeowner, and watch it book the estimate. ' + (K.premium_voice ? '' : 'Voice is a standard demo voice. The real one is custom.')),
+      h('p', { class: 'lead' }, 'This is a live AI voice receptionist. Tap the button, talk out loud like a customer, and watch it book the estimate. It listens, answers in a real voice, and keeps going until you hang up.'),
       h('div', { class: 'card call-card' }, avatar, h('b', null, K.agent + ' · AI receptionist'), h('div', { class: 'note' }, K.business), status, mic,
-        SR ? null : h('p', { class: 'note', style: 'margin-top:12px' }, 'This browser cannot listen. Type below and ' + K.agent + ' will answer out loud.')),
+        SR && !IN_APP ? null : h('p', { class: 'note', style: 'margin-top:12px' }, IN_APP ? 'If the mic does not start, this app is blocking it. Open the link in Safari or Chrome, or type below.' : 'This browser cannot listen. Type below and ' + K.agent + ' will answer out loud.')),
       h('div', { class: 'chips' }, ideas.map((t) => h('button', { class: 'chip', onclick: () => { unlockAudio(); input.value = t; sendTyped(); } }, t))),
       h('div', { class: 'compose', style: 'padding:0 0 10px' }, input, h('button', { class: 'btn sm pri', onclick: sendTyped }, 'Send')),
       thread, box,
@@ -302,7 +377,12 @@
   }
 
   function pWinback() {
-    const camps = medOn() ? [
+    const camps = genOn() ? [
+      ['Time for a refresh', (n) => 'Hi {first}, it is ' + n + ' at ' + K.business + '. It has been a while since we helped you out. Need anything this month? Reply YES and I will send open times.'],
+      ['Seasonal check', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. This is a good time of year to get ahead of ' + (K.biz_type || 'the work') + '. Want a ' + (K.visit || 'free estimate') + '? Reply YES.'],
+      ['Open spots this week', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. We have a few openings this week. Want one held for you? Reply YES.'],
+      ['Refer a friend', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Know someone who could use us? Send them my way and I will thank you both. Reply YES for details.'],
+    ] : medOn() ? [
       ['Skin refresh', (n) => 'Hi {first}, it is ' + n + ' at ' + K.business + '. It has been a while since your last visit. Want to book a skin refresh this month? Reply YES and I will send open times.'],
       ['Touch-up reminder', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Your results are due for a touch-up check. Want me to hold a time this week? Reply YES.'],
       ['Summer ready', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Summer is close. Laser and facials are easiest to start now. Want a free consultation? Reply YES.'],
@@ -396,7 +476,7 @@
         ['2 hours later · review ask', 'Hi Sarah, it is ' + who + ' at ' + K.business + '. Thanks for trusting us with your ' + n + '. Would you share a quick Google review? g.page/your-business'],
         ['Same day · before and after post (draft for you to approve)', 'Before and after: ' + n + ' in ' + K.city + '. Another yard finished. Want yours next? Message us for a free estimate.'],
         ['3 days later · referral ask', 'Sarah, know a neighbor thinking about a project? Send them my way and I will thank you both when they book.'],
-        ['Later · ' + (medOn() ? KEEP_MED[sid] : KEEP[sid]), medOn() ? 'Hi Sarah, ' + who + ' here. Time for your ' + KEEP_MED[sid] + '. Want me to schedule it? (Suggested timing. You set it.)' : 'Hi Sarah, ' + who + ' here. Time for a ' + KEEP[sid] + ' on your ' + n + '. Want me to schedule it? (Suggested timing. You set it.)'],
+        ['Later · ' + (medOn() ? KEEP_MED[sid] : genOn() ? 'follow-up check' : KEEP[sid]), genOn() ? 'Hi Sarah, ' + who + ' here at ' + K.business + '. Checking in after your ' + n + '. Need anything else, or want to book the next one? (Suggested timing. You set it.)' : medOn() ? 'Hi Sarah, ' + who + ' here. Time for your ' + KEEP_MED[sid] + '. Want me to schedule it? (Suggested timing. You set it.)' : 'Hi Sarah, ' + who + ' here. Time for a ' + KEEP[sid] + ' on your ' + n + '. Want me to schedule it? (Suggested timing. You set it.)'],
       ];
       for (const [w, m] of steps) { tl.append(h('div', { class: 'step' }, h('div', { class: 'when' }, w), h('div', { class: 'msg' }, m))); await wait(450); }
     };
@@ -408,7 +488,7 @@
   }
 
   function pTracker() {
-    const cols = ['New', 'Consult booked', 'Plan sent', 'Won'];
+    const cols = ['New', genOn() ? 'Booked' : 'Consult booked', genOn() ? 'Quote sent' : 'Plan sent', 'Won'];
     const names = ['Sarah M.', 'Carlos R.', 'Dana W.', 'Mike T.', 'Priya S.', 'Jordan L.'];
     const cards = names.map((n, i) => { const s = K.services[i % K.services.length]; return { n, s: s.name, amt: Math.round(mid(s, typicalQty(s)) / 100) * 100, c: [0, 0, 1, 1, 2, 3][i], src: ['Missed call', 'Website chat', 'Facebook ad', 'Voice receptionist', 'Website form', 'Referral'][i] }; });
     const board = h('div', { class: 'board' });

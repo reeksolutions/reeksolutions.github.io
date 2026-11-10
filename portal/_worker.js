@@ -2805,10 +2805,18 @@ async function api(request, env, url) {
   if (path === '/studio/demo-leads' && method === 'GET') {
     need(user, 'admin');
     const { results } = await env.DB.prepare(`SELECT l.id, l.business, l.owner, l.city, l.category, l.phone, l.status, l.booked_at, l.demo_url, COALESCE(l.heat,'cold') AS heat,
-        (SELECT slug FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_slug
+        (SELECT slug FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_slug,
+        (SELECT id FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_id,
+        (SELECT data FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_data
       FROM leads l WHERE l.status IN ('booked','call2','callback','demo_needed','demo_ready')
       ORDER BY CASE l.status WHEN 'booked' THEN 0 WHEN 'call2' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'callback' THEN 3 ELSE 4 END, l.booked_at, l.id DESC LIMIT 60`).all();
-    return json({ origin: url.origin, leads: results.map((r) => ({ ...r, med: isMedCat((r.category || '') + ' ' + (r.business || '')) })) });
+    return json({ origin: url.origin, leads: results.map((r) => {
+      let kd = null; try { kd = r.kit_data ? JSON.parse(r.kit_data) : null; } catch { /* ignore */ }
+      const want = kitNicheFor(r.category, r.business), have = kd ? (kd.niche || 'contractor') : '';
+      const kit_type = kd ? (kd.niche === 'custom' && kd.custom ? kd.custom.type : kd.niche === 'medspa' ? 'med spa' : 'backyard contractor') : '';
+      const { kit_data, ...rest } = r;
+      return { ...rest, med: isMedCat((r.category || '') + ' ' + (r.business || '')), kit_type, kit_stale: !!kd && (have !== want || (want === 'custom' && !!r.category && kd.custom && JUNK_RE.test(r.category) !== JUNK_RE.test(kd.custom.type || ''))) };
+    }) });
   }
   if (path === '/studio/leads' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
@@ -4598,6 +4606,70 @@ const KIT_SERVICES_MED = {
 };
 const KIT_DEFAULT_MED = ['botox', 'filler', 'laser', 'facial', 'needle', 'contour'];
 const KIT_ALL = { ...KIT_SERVICES, ...KIT_SERVICES_MED };
+const KIT_UNITS = ['project', 'sq ft', 'linear ft', 'room', 'hour'];
+const KIT_JUNK = {
+  type: 'junk removal', visit: 'free estimate', customer: 'customer',
+  tagline: 'Gone in a day. Hauled away in {city}.',
+  services: [
+    { name: 'Furniture and mattress removal', unit: 'project', lo: 99, hi: 350, q: 'What pieces need to go, and are they inside or at the curb?', blurb: 'Couches, beds, dressers and more, carried out and hauled away.' },
+    { name: 'Appliance haul-away', unit: 'project', lo: 75, hi: 250, q: 'Which appliances, and are they hooked up?', blurb: 'Fridges, washers, dryers and water heaters removed safely.' },
+    { name: 'Garage and attic cleanouts', unit: 'project', lo: 250, hi: 900, q: 'About how full is the space: a quarter, half or all of it?', blurb: 'We do the lifting and sorting so you do not have to.' },
+    { name: 'Construction and remodel debris', unit: 'project', lo: 350, hi: 1500, q: 'What kind of debris and about how many truck loads?', blurb: 'Drywall, wood, tile and concrete cleared from your job site.' },
+    { name: 'Estate and full-house cleanouts', unit: 'project', lo: 800, hi: 4500, q: 'About how many rooms, and is there a deadline?', blurb: 'Respectful, thorough cleanouts for moves and estates.' },
+    { name: 'Yard waste and storm cleanup', unit: 'project', lo: 150, hi: 700, q: 'What needs to go: branches, brush, soil, old fencing?', blurb: 'Green waste and outdoor debris gone in one trip.' },
+  ],
+  ideas: ['How much to haul a couch?', 'Can you come out today?', 'I need a garage cleaned out', 'Do you take old appliances?'],
+};
+const JUNK_RE = /junk|haul|trash|debris|clean\s?-?out|dumpster|waste removal|garbage|rubbish|disposal/i;
+const CONTRACTOR_RE = /landscap|paver|turf|patio|hardscape|backyard|fence|deck\b|concrete|pergola|artificial grass|masonry|retaining|outdoor living/i;
+const KIT_VISITS = ['free estimate', 'free consultation', 'free quote', 'free assessment', 'free inspection'];
+function kitProfileClean(o, type) {
+  o = o && typeof o === 'object' ? o : {};
+  const services = (Array.isArray(o.services) ? o.services : []).map((x) => {
+    x = x || {};
+    const name = oneLine(x.name, 44); if (!name) return null;
+    const unit = KIT_UNITS.includes(x.unit) ? x.unit : 'project';
+    let lo = Math.round(Math.abs(+x.lo) || 0), hi = Math.round(Math.abs(+x.hi) || 0);
+    if (!lo || !hi) return null; if (hi < lo) [lo, hi] = [hi, lo]; if (hi === lo) hi = Math.round(lo * 1.6);
+    return { name, unit, lo, hi, q: oneLine(x.q, 120) || 'Tell me a little about what you need.', blurb: oneLine(x.blurb, 120) || name + ' done right.' };
+  }).filter(Boolean).slice(0, 6);
+  if (services.length < 3) return null;
+  const visit = KIT_VISITS.includes(String(o.visit || '').toLowerCase()) ? String(o.visit).toLowerCase() : 'free estimate';
+  const ideas = (Array.isArray(o.ideas) ? o.ideas : []).map((x) => oneLine(x, 60)).filter(Boolean).slice(0, 4);
+  return {
+    type: oneLine(o.type, 40).toLowerCase() || type, visit, customer: oneLine(o.customer, 16).toLowerCase() || 'customer',
+    tagline: oneLine(o.tagline, 80) || 'Local service you can count on in {city}.',
+    services, ideas: ideas.length >= 3 ? ideas : ['How much does it cost?', 'Can you come out this week?', 'Do you serve my area?', 'How soon can you start?'],
+  };
+}
+// Ask Workers AI for a believable service menu for any local business type. Falls back to a plain generic menu.
+async function kitProfileAI(env, type, business, city) {
+  if (JUNK_RE.test(type)) return kitProfileClean(KIT_JUNK, 'junk removal');
+  if (env.AI) {
+    try {
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [
+        { role: 'system', content: 'You write realistic demo data for a sales demo of an AI receptionist for one local service business. Reply ONLY with JSON: {"type": string (short lowercase business type), "customer": "customer" or "client" or "patient", "visit": one of "free estimate","free consultation","free quote","free assessment","free inspection", "tagline": string under 70 chars that may contain {city}, "services": exactly 6 objects {"name": string (under 40 chars), "unit": one of "project","sq ft","linear ft","room","hour", "lo": number, "hi": number (realistic US dollars for Los Angeles, hi greater than lo), "q": the one question the receptionist asks to size the job, "blurb": one plain sentence}, "ideas": 4 short things a customer would say when calling}. Only services this exact type of business really sells.' },
+        { role: 'user', content: `Business type: ${type}\nBusiness name: ${business}\nCity: ${city}` },
+      ], max_tokens: 900, temperature: 0.4, response_format: { type: 'json_object' } });
+      const out = kitProfileClean(kitParseAI(r), type);
+      if (out) return out;
+    } catch (e) { console.error('kit profile', e); }
+  }
+  return kitProfileClean({ type, visit: 'free quote', services: [
+    { name: 'Standard service', unit: 'project', lo: 150, hi: 450, q: 'Tell me what you need done.', blurb: 'Our most requested service.' },
+    { name: 'Premium service', unit: 'project', lo: 400, hi: 1200, q: 'What result are you after?', blurb: 'The full treatment, start to finish.' },
+    { name: 'Repairs and fixes', unit: 'project', lo: 100, hi: 600, q: 'What is not working right now?', blurb: 'Quick, honest fixes.' },
+    { name: 'Same-day help', unit: 'project', lo: 200, hi: 700, q: 'What is going on, and when do you need us?', blurb: 'When it cannot wait.' },
+  ] }, type);
+}
+// which kind of demo does this business get?
+function kitNicheFor(category, business) {
+  const t = String(category || '') + ' ' + String(business || '');
+  if (JUNK_RE.test(t)) return 'custom';
+  if (isMedCat(t)) return 'medspa';
+  if (CONTRACTOR_RE.test(t)) return 'contractor';
+  return String(category || '').trim() ? 'custom' : 'contractor';
+}
 const KIT_TAGLINES_MED = ['Look and feel your best in {city}.', "{city}'s med spa for glowing skin.", 'Botox, filler and laser, done right.', 'Skin you feel good in. Book a free consultation.'];
 const isMedCat = (t) => /med(ical|i)?\s*spa|aesthetic|botox|injector|laser|skin|facial|wellness/i.test(String(t || ''));
 const KIT_LOOKS = {
@@ -4620,18 +4692,20 @@ function cleanKit(b, prev) {
   if (!business) bad('Add the business name');
   const seed = seedOf(business + Date.now());
   const city = oneLine(b.city ?? p.city, 40) || 'Los Angeles';
-  const niche = b.niche === 'medspa' || b.niche === 'contractor' ? b.niche : (p.niche || 'contractor'), med = niche === 'medspa';
-  let services = (Array.isArray(b.services) ? b.services : p.services || (med ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => (med ? KIT_SERVICES_MED : KIT_SERVICES)[x]);
-  services = [...new Set(services)].slice(0, 8);
-  if (services.length < 2) services = (med ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES).slice();
+  const niche = ['medspa', 'contractor', 'custom'].includes(b.niche) ? b.niche : (p.niche || 'contractor'), med = niche === 'medspa', cus = niche === 'custom';
+  const custom = cus ? (b._profile || (p.niche === 'custom' ? p.custom : null)) : null;
+  if (cus && !custom) bad('Tell me what kind of business this is');
+  let services = cus ? [] : (Array.isArray(b.services) ? b.services : p.services || (med ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => (med ? KIT_SERVICES_MED : KIT_SERVICES)[x]);
+  if (!cus) { services = [...new Set(services)].slice(0, 8); if (services.length < 2) services = (med ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES).slice(); }
   const agentIx = Number.isInteger(p.agent_ix) && !b.reroll ? p.agent_ix : Math.abs(seed) % KIT_AGENTS.length;
   const look = KIT_LOOKS[b.look] ? b.look : (p.look && !b.reroll ? p.look : kpick(Object.keys(KIT_LOOKS), seed >> 3));
-  const tagline = oneLine(b.tagline, 100) || (b.reroll || !p.tagline ? kpick(med ? KIT_TAGLINES_MED : KIT_TAGLINES, seed >> 5).replace('{city}', city) : p.tagline);
-  const avg = Math.round(Math.min(60000, Math.max(med ? 50 : 500, +(b.avg_job ?? p.avg_job) || (med ? 450 : 6500))));
+  const tagline = oneLine(b.tagline, 100) || (cus ? (b._profile || !p.tagline ? custom.tagline.replace('{city}', city) : p.tagline) : b.reroll || !p.tagline ? kpick(med ? KIT_TAGLINES_MED : KIT_TAGLINES, seed >> 5).replace('{city}', city) : p.tagline);
+  const custAvg = cus ? Math.round(custom.services.reduce((a, x) => a + (x.lo + x.hi) / 2, 0) / custom.services.length) : 0;
+  const avg = Math.round(Math.min(60000, Math.max(cus ? 25 : med ? 50 : 500, +(b.avg_job ?? (b._profile ? 0 : p.avg_job)) || (cus ? custAvg : med ? 450 : 6500))));
   return {
     business, owner: oneLine(b.owner ?? p.owner, 40), city, phone: oneLine(b.phone ?? p.phone, 30) || '(310) 555-0123', services,
-    hours: oneLine(b.hours ?? p.hours, 80) || (med ? 'Tue to Sat, 10am to 7pm' : KIT_HOURS), niche, tagline, look, agent_ix: agentIx, avg_job: avg,
-    voice: (b.voice ?? p.voice) === 'eleven' ? 'eleven' : 'aura',
+    hours: oneLine(b.hours ?? p.hours, 80) || (med ? 'Tue to Sat, 10am to 7pm' : cus ? 'Mon to Sat, 8am to 6pm' : KIT_HOURS), niche, custom, tagline, look, agent_ix: agentIx, avg_job: avg,
+    voice: (b.voice ?? p.voice) === 'aura' && b.voice === 'aura' ? 'aura' : 'eleven',
   };
 }
 function kitPublic(row) {
@@ -4639,8 +4713,11 @@ function kitPublic(row) {
   const [agent, speaker] = KIT_AGENTS[(d.agent_ix | 0) % KIT_AGENTS.length];
   return {
     slug: row.slug, business: d.business, owner: d.owner || '', city: d.city, phone: d.phone, hours: d.hours, tagline: d.tagline,
-    niche: d.niche === 'medspa' ? 'medspa' : 'contractor', look: KIT_LOOKS[d.look] ? d.look : 'earth', agent, speaker, avg_job: d.avg_job || (d.niche === 'medspa' ? 450 : 6500), premium_voice: d.voice === 'eleven',
-    services: (d.services || (d.niche === 'medspa' ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => KIT_ALL[x]).map((id) => ({ id, ...KIT_ALL[id] })),
+    niche: d.niche === 'medspa' ? 'medspa' : d.niche === 'custom' && d.custom ? 'custom' : 'contractor', look: KIT_LOOKS[d.look] ? d.look : 'earth', agent, speaker, avg_job: d.avg_job || (d.niche === 'medspa' ? 450 : 6500), premium_voice: d.voice !== 'aura',
+    services: d.niche === 'custom' && d.custom ? d.custom.services.map((x, i) => ({ id: 'c' + (i + 1), ...x }))
+      : (d.services || (d.niche === 'medspa' ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => KIT_ALL[x]).map((id) => ({ id, ...KIT_ALL[id] })),
+    biz_type: d.niche === 'custom' && d.custom ? d.custom.type : '', visit: d.niche === 'custom' && d.custom ? d.custom.visit : d.niche === 'medspa' ? 'free consultation' : 'free estimate',
+    customer: d.niche === 'custom' && d.custom ? d.custom.customer : d.niche === 'medspa' ? 'client' : 'homeowner', ideas: d.niche === 'custom' && d.custom ? d.custom.ideas : null,
   };
 }
 const kitSlug = (business) => (String(business).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'demo') + '-' + Math.random().toString(36).slice(2, 6);
@@ -4677,6 +4754,27 @@ async function elevenSpeak(env, text) {
   if (!r.ok) throw new Error('eleven ' + r.status);
   return r.arrayBuffer();
 }
+async function kitTranscribe(env, buf) {
+  const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  if (key) {
+    try {
+      const fd = new FormData();
+      fd.append('model_id', 'scribe_v1'); fd.append('language_code', 'en'); fd.append('tag_audio_events', 'false');
+      fd.append('file', new Blob([buf], { type: 'audio/wav' }), 'clip.wav');
+      const r = await fetch('https://api.elevenlabs.io/v1/speech-to-text', { method: 'POST', headers: { 'xi-api-key': key }, body: fd, signal: AbortSignal.timeout(20000) });
+      if (r.ok) { const j = await r.json(); return String(j.text || '').trim(); }
+      console.error('scribe', r.status);
+    } catch (e) { console.error('scribe', e); }
+  }
+  if (env.AI) {
+    try {
+      const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      const r = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: btoa(s), language: 'en' });
+      return String((r && (r.text || (r.result && r.result.text))) || '').trim();
+    } catch (e) { console.error('whisper', e); }
+  }
+  throw new HttpError(503, 'Could not hear that. Type instead.');
+}
 const b64buf = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 
 function kitPrompt(k, mode) {
@@ -4691,6 +4789,19 @@ TREATMENTS: ${k.services.map((s) => s.name).join(', ')}.
 EXAMPLE PRICE RANGES (always say the free consultation gives the exact price): ${kitBallparks(k).replace(/ per project/g, ' per visit')}.
 HOURS: ${k.hours}.
 YOUR JOB: answer their question in a sentence or two, then find out which treatment they want, any area or concern, and their timeline (one question at a time). Then get their first name and best phone number, then book a free consultation by offering two time slots like "tomorrow at 11 or 3". Use weekday names, never calendar dates.
+${style} Plain words. No markdown.
+Once they give name, phone and pick a time, confirm in one sentence, say a confirmation text is on its way, and fill in booking. Otherwise booking is null.
+Reply ONLY with JSON: {"reply": string, "booking": null or {"name": string, "phone": string, "project": string, "when": string}}`;
+  }
+  if (k.niche === 'custom') {
+    return `You are ${k.agent}, the AI ${role} for ${k.business}, a ${k.biz_type} business in ${k.city}.
+This is a live DEMO shown to the owner${k.owner ? ' (' + k.owner + ')' : ''}. Treat the person writing as a ${k.customer} who needs ${k.biz_type}.
+Know only what is written here. Never invent licenses, years in business, street addresses, warranties, awards, discounts, crew names or past customers. Never talk about services that are not listed. If asked something you do not know, say ${k.owner || 'the owner'} will confirm it at the ${k.visit}.
+SERVICES: ${k.services.map((s) => s.name).join(', ')}.
+EXAMPLE PRICE RANGES (always say the ${k.visit} gives the exact price): ${kitBallparks(k)}.
+HOURS: ${k.hours}.
+HOW TO SIZE A JOB, ask the matching question: ${k.services.map((s) => s.name + ' -> ' + s.q).join(' | ')}.
+YOUR JOB: answer their question in a sentence or two, then find out what they need, how big the job is, their city or zip, and their timeline (one question at a time). Then get their first name and best phone number, then book a ${k.visit} by offering two time slots like "tomorrow at 10 or 2". Use weekday names, never calendar dates.
 ${style} Plain words. No markdown.
 Once they give name, phone and pick a time, confirm in one sentence, say a confirmation text is on its way, and fill in booking. Otherwise booking is null.
 Reply ONLY with JSON: {"reply": string, "booking": null or {"name": string, "phone": string, "project": string, "when": string}}`;
@@ -4747,6 +4858,16 @@ async function handleKitApi(request, env, url) {
     return json(k);
   }
   if (request.method !== 'POST') return json({ error: 'POST only' }, 405);
+  if (op === 'stt') {
+    // the visitor's microphone: a short WAV clip in, the words out
+    const buf = await request.arrayBuffer();
+    if (buf.byteLength < 2000) return json({ text: '' });
+    if (buf.byteLength > 1_400_000) return json({ error: 'That was too long. Say it in a sentence or two.' }, 413);
+    if ((await kitCount(env, row.id, 'stt', day)) >= 240) return json({ error: 'Voice limit reached for today. Type instead.' }, 429);
+    await kitLog(env, row.id, 'stt', vid);
+    let text; try { text = await kitTranscribe(env, buf); } catch (e) { return json({ error: e.message || 'Could not hear that. Type instead.' }, 503); }
+    return json({ text: oneLine(text, 300) });
+  }
   let body;
   try { body = JSON.parse((await request.text()).slice(0, 8000)); } catch { return json({ error: 'Bad request' }, 400); }
   if (!body || typeof body !== 'object') return json({ error: 'Bad request' }, 400);
@@ -4793,7 +4914,7 @@ async function handleKitApi(request, env, url) {
     if (!text) return json({ error: 'Nothing to say' }, 400);
     if ((await kitCount(env, row.id, 'tts', day)) >= 160) return json({ error: 'Voice limit reached for today. The text still works.' }, 429);
     await kitLog(env, row.id, 'tts', vid);
-    if (k.premium_voice && env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && row.eleven_used < 40) {
+    if (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && row.eleven_used < 80) {
       try {
         const buf = await elevenSpeak(env, text);
         await env.DB.prepare('UPDATE demo_kits SET eleven_used = eleven_used + 1 WHERE id = ?').bind(row.id).run();
@@ -4847,8 +4968,9 @@ function renderKitSite(k) {
   const projects = svc.slice(0, 3).map((s, i) => `<div class="proj"><div class="ph p${i}"><span>Your photo here</span></div><b>${E(s.name)}</b><small>${E(k.city)}</small></div>`).join('');
   const cards = svc.map((s) => `<div class="card"><h3>${E(s.name)}</h3><p>${E(s.blurb)}</p></div>`).join('');
   const opts = svc.map((s) => `<option>${E(s.name)}</option>`).join('');
-  const med = k.niche === 'medspa';
-  const rev = (med ? [['Felt welcome from the first minute. The results look natural and the staff explained everything.', 'Sample review'], ['Easy to book, clear pricing, and I never felt rushed in my consultation.', 'Sample review'], ['My skin has never looked better. Already booked my next visit.', 'Sample review']]
+  const med = k.niche === 'medspa', gen = k.niche === 'custom';
+  const V = gen ? k.visit : med ? 'free consultation' : 'free estimate', Vc = V[0].toUpperCase() + V.slice(1);
+  const rev = (gen ? [['On time, friendly, and the price matched what they told me up front.', 'Sample review'], ['Quick to answer, easy to book, and they left everything clean. Would use again.', 'Sample review'], ['Honest quote and great work. Exactly what I was hoping for.', 'Sample review']] : med ? [['Felt welcome from the first minute. The results look natural and the staff explained everything.', 'Sample review'], ['Easy to book, clear pricing, and I never felt rushed in my consultation.', 'Sample review'], ['My skin has never looked better. Already booked my next visit.', 'Sample review']]
     : [['Showed up on time, kept the yard clean, and the finished patio looks better than the drawing.', 'Sample review'], ['Quick quote, fair price, and they answered every question. Would hire again.', 'Sample review'], ['The crew was respectful and the drainage problem is finally gone.', 'Sample review']])
     .map((r) => `<blockquote>${E(r[0])}<cite>${r[1]} · replace with your real reviews</cite></blockquote>`).join('');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${E(k.business)}</title>
@@ -4883,21 +5005,21 @@ footer{padding:30px 0 90px;color:var(--mut);font-size:13px}
 </style></head><body>
 <div class="demo-note">Sample website built for ${E(k.business)}. Photos and reviews are placeholders.</div>
 <div class="bar"><b>${E(k.business)}</b><a class="call" href="${E(phoneHref)}">Call ${E(k.phone)}</a></div>
-<div class="wrap"><div class="hero"><h1>${E(k.tagline)}</h1><p>${E(svc.slice(0, 4).map((s) => s.name.toLowerCase()).join(', '))} and more in ${E(k.city)}. ${med ? 'Free consultations.' : 'Free on-site estimates.'}</p>
-<div class="btns"><a class="btn p" href="#quote">${med ? 'Book a free consultation' : 'Get a free estimate'}</a><a class="btn" href="${E(phoneHref)}">Call now</a></div>
-<div class="trust"><span>${med ? 'Free consultations' : 'Free estimates'}</span><span>${med ? 'Clear pricing' : 'Clear written quotes'}</span><span>${E(k.hours)}</span></div></div>
-<section><h2>${med ? 'Treatments' : 'What we build'}</h2><div class="grid">${cards}</div></section>
+<div class="wrap"><div class="hero"><h1>${E(k.tagline)}</h1><p>${E(svc.slice(0, 4).map((s) => s.name.toLowerCase()).join(', '))} and more in ${E(k.city)}. ${gen ? Vc + 's.' : med ? 'Free consultations.' : 'Free on-site estimates.'}</p>
+<div class="btns"><a class="btn p" href="#quote">${med ? 'Book a free consultation' : 'Get a ' + V}</a><a class="btn" href="${E(phoneHref)}">Call now</a></div>
+<div class="trust"><span>${gen ? Vc + 's' : med ? 'Free consultations' : 'Free estimates'}</span><span>${med ? 'Clear pricing' : 'Clear written quotes'}</span><span>${E(k.hours)}</span></div></div>
+<section><h2>${med ? 'Treatments' : gen ? 'What we do' : 'What we build'}</h2><div class="grid">${cards}</div></section>
 <section><h2>${med ? 'Our space' : 'Recent work'}</h2><div class="grid">${projects}</div></section>
-<section><h2>How it works</h2>${med ? '<div class="steps"><div><b>Tell us what you want</b><br>Call, text or fill in the form.</div><div><b>Free consultation</b><br>We talk through your goals and give you a clear price.</div><div><b>Your treatment</b><br>Comfortable, unhurried, and followed up on.</div></div>' : '<div class="steps"><div><b>Tell us the project</b><br>Call, text or fill in the form.</div><div><b>Free on-site estimate</b><br>We measure and give you a clear price.</div><div><b>We build it</b><br>On schedule, with the yard left clean.</div></div>'}</section>
-<section><h2>${med ? 'What clients say' : 'What neighbors say'}</h2><div class="grid">${rev}</div></section>
-<section id="quote"><h2>${med ? 'Book your free consultation' : 'Get your free estimate'}</h2><form id="qf"><input name="n" placeholder="Your name" required><input name="p" placeholder="Phone" inputmode="tel" required><select name="s">${opts}</select><textarea name="m" rows="3" placeholder="${med ? 'What would you like to improve?' : 'Tell us about your yard'}"></textarea><button>${med ? 'Request my consultation' : 'Request my estimate'}</button><div class="ok" id="qok">Demo only. On the real site this sends ${E(k.owner || 'the owner')} a text and adds you to the lead tracker in seconds.</div></form></section>
+<section><h2>How it works</h2>${gen ? `<div class="steps"><div><b>Tell us what you need</b><br>Call, text or fill in the form.</div><div><b>${E(Vc)}</b><br>We look at the job and give you a clear price.</div><div><b>We take care of it</b><br>On time, and everything left clean.</div></div>` : med ? '<div class="steps"><div><b>Tell us what you want</b><br>Call, text or fill in the form.</div><div><b>Free consultation</b><br>We talk through your goals and give you a clear price.</div><div><b>Your treatment</b><br>Comfortable, unhurried, and followed up on.</div></div>' : '<div class="steps"><div><b>Tell us the project</b><br>Call, text or fill in the form.</div><div><b>Free on-site estimate</b><br>We measure and give you a clear price.</div><div><b>We build it</b><br>On schedule, with the yard left clean.</div></div>'}</section>
+<section><h2>${med ? 'What clients say' : gen ? 'What customers say' : 'What neighbors say'}</h2><div class="grid">${rev}</div></section>
+<section id="quote"><h2>${med ? 'Book your free consultation' : gen ? 'Get your ' + V : 'Get your free estimate'}</h2><form id="qf"><input name="n" placeholder="Your name" required><input name="p" placeholder="Phone" inputmode="tel" required><select name="s">${opts}</select><textarea name="m" rows="3" placeholder="${med ? 'What would you like to improve?' : gen ? 'Tell us about the job' : 'Tell us about your yard'}"></textarea><button>${med ? 'Request my consultation' : gen ? 'Request my ' + V.replace('free ', '') : 'Request my estimate'}</button><div class="ok" id="qok">Demo only. On the real site this sends ${E(k.owner || 'the owner')} a text and adds you to the lead tracker in seconds.</div></form></section>
 <footer>${E(k.business)} · ${E(k.city)} · ${E(k.hours)}</footer></div>
 <button id="cb" type="button">Chat with us</button>
 <div id="cw"><header><span>${E(k.agent)} · ${E(k.business)}</span><button id="cx" type="button" aria-label="Close">×</button></header><div id="cm"></div><form id="cf"><input id="ci" placeholder="Type your question" autocomplete="off" maxlength="300"><button>Send</button></form></div>
 <script>
 (function(){var S=${JSON.stringify(k.slug)},hist=[],cm=document.getElementById('cm'),cw=document.getElementById('cw'),cb=document.getElementById('cb'),busy=false;
 function add(c,t){var d=document.createElement('div');d.className='m '+c;d.textContent=t;cm.appendChild(d);cm.scrollTop=cm.scrollHeight;return d}
-cb.onclick=function(){cw.style.display='flex';cb.style.display='none';if(!hist.length&&!cm.children.length)add('a',${jsStr('Hi, this is ' + k.agent + ' with ' + k.business + (med ? '. Which treatment are you curious about?' : '. What are you thinking of building?'))})};
+cb.onclick=function(){cw.style.display='flex';cb.style.display='none';if(!hist.length&&!cm.children.length)add('a',${jsStr('Hi, this is ' + k.agent + ' with ' + k.business + (med ? '. Which treatment are you curious about?' : gen ? '. How can we help today?' : '. What are you thinking of building?'))})};
 document.getElementById('cx').onclick=function(){cw.style.display='none';cb.style.display='block'};
 document.getElementById('qf').onsubmit=function(e){e.preventDefault();document.getElementById('qok').style.display='block'};
 document.getElementById('cf').onsubmit=function(e){e.preventDefault();var i=document.getElementById('ci'),t=i.value.trim();if(!t||busy)return;i.value='';add('u',t);busy=true;var w=add('a','…');
@@ -4920,7 +5042,10 @@ async function kitAdmin(env, user, path, method, body, url) {
   if (path === '/kits' && method === 'POST') {
     let leadId = null, leadCat = '';
     if (body.lead_id) { const l = await env.DB.prepare('SELECT id, category, business FROM leads WHERE id = ?').bind(+body.lead_id).first(); if (l) { leadId = l.id; leadCat = (l.category || '') + ' ' + (l.business || ''); } }
-    if (!body.niche && leadId) body.niche = isMedCat(leadCat) ? 'medspa' : 'contractor';
+    const bizType = oneLine(body.biz_type, 60);
+    if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
+    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : 'contractor';
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     const slug = kitSlug(data.business), t = now();
     const r = await env.DB.prepare('INSERT INTO demo_kits (slug, user_id, lead_id, data, created_at, updated_at) VALUES (?,?,?,?,?,?)').bind(slug, user.id, leadId, JSON.stringify(data), t, t).run();
@@ -4935,7 +5060,9 @@ async function kitAdmin(env, user, path, method, body, url) {
       return json({ id: row.id, slug: row.slug, lead_id: row.lead_id, data: JSON.parse(row.data || '{}'), views: row.views, talks: row.talks, events: ev, link: url.origin + '/k/' + row.slug });
     }
     if (method === 'PATCH') {
-      const data = cleanKit(body, JSON.parse(row.data || '{}'));
+      const prevData = JSON.parse(row.data || '{}'), bt = oneLine(body.biz_type, 60);
+      if (bt) { const nn = kitNicheFor(bt, ''); body.niche = nn; if (nn === 'custom') body._profile = await kitProfileAI(env, bt, oneLine(body.business ?? prevData.business, 80), oneLine(body.city ?? prevData.city, 40) || 'Los Angeles'); }
+      const data = cleanKit(body, prevData);
       await env.DB.prepare('UPDATE demo_kits SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), row.id).run();
       return json({ ok: true, data });
     }

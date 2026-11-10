@@ -1792,30 +1792,39 @@
     const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
     const pickBox = h('div', { class: 'sp-leads' });
     const resultBox = h('div');
+    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. junk removal, plumber, med spa', maxlength: 60, class: 'sp-type' });
     const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready' }[st] || st);
     const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
     const dmFor = (L, link) => 'Hey ' + ((L.owner || '').split(' ')[0] || 'there') + ', it\'s ' + first(S.me.name) + '. I put together a quick live demo of ' + name.toLowerCase() + ' for ' + L.business + '. Tap it and try it yourself: ' + link;
     function drawLeads() {
-      pickBox.replaceChildren(...(r.leads.length ? r.leads.map((L) => h('button', { type: 'button', class: 'sp-lead' + (lead && lead.id === L.id ? ' on' : ''), onclick: () => { lead = L; built = null; drawLeads(); drawResult(); } },
+      pickBox.replaceChildren(...(r.leads.length ? r.leads.map((L) => h('button', { type: 'button', class: 'sp-lead' + (lead && lead.id === L.id ? ' on' : ''), onclick: () => { lead = L; built = null; bizType.value = ''; drawLeads(); drawResult(); } },
         h('div', null, h('b', null, L.business), h('small', null, [L.city, L.category].filter(Boolean).join(' · ') + (L.status === 'booked' && L.booked_at ? ' · ' + dayWord(L.booked_at) : ''))),
         h('span', { class: 'tag ' + (L.status === 'booked' || L.status === 'call2' ? 'good' : '') }, tag(L.status)))) : [h('p', { class: 'dim' }, 'No leads yet who booked an audit or asked for a demo. Log an audit booked on a lead and they show up here.')]));
     }
-    async function build(btn) {
+    async function build(btn, rebuild) {
       btn.disabled = true;
       try {
         let slug = lead.kit_slug;
         if (!slug) {
-          const k = await api('POST', '/kits', { business: lead.business, owner: lead.owner || '', city: lead.city || '', phone: lead.phone || '', lead_id: lead.id, niche: lead.med ? 'medspa' : 'contractor' });
-          slug = k.slug; lead.kit_slug = slug;
+          const k = await api('POST', '/kits', { business: lead.business, owner: lead.owner || '', city: lead.city || '', phone: lead.phone || '', lead_id: lead.id, biz_type: bizType.value.trim() });
+          slug = k.slug; lead.kit_slug = slug; lead.kit_id = k.id; lead.kit_stale = false;
+        } else if (rebuild) {
+          await api('PATCH', '/kits/' + lead.kit_id, { biz_type: bizType.value.trim() || lead.category || 'local service' });
+          lead.kit_stale = false;
         }
         built = linkFor(slug); drawResult(); toast('Demo ready');
       } catch (e) { fail(e); btn.disabled = false; }
     }
     function drawResult() {
       if (!lead) { resultBox.replaceChildren(h('p', { class: 'dim small' }, 'Pick a lead to connect it to this demo.')); return; }
-      if (!built) { const b = h('button', { class: 'btn primary block', type: 'button', onclick: () => build(b) }, icon('spark'), (lead.kit_slug ? 'Open the demo for ' : 'Build the demo for ') + lead.business);
-        resultBox.replaceChildren(b, lead.med ? null : h('p', { class: 'dim small', style: 'margin-top:8px' }, 'This lead does not look like a med spa, so the demo will use contractor wording.')); return; }
+      if (!built) {
+        if (!bizType.value) bizType.value = lead.kit_type && !lead.kit_stale ? lead.kit_type : (lead.category || '');
+        const b = h('button', { class: 'btn primary block', type: 'button', onclick: () => build(b, lead.kit_slug && lead.kit_stale) }, icon('spark'), lead.kit_slug && lead.kit_stale ? 'Rebuild the demo for ' + lead.business : (lead.kit_slug ? 'Open the demo for ' : 'Build the demo for ') + lead.business);
+        const rb = lead.kit_slug && !lead.kit_stale ? h('button', { class: 'btn block', type: 'button', style: 'margin-top:8px', onclick: () => build(rb, true) }, 'Rebuild it for the business type above') : null;
+        resultBox.replaceChildren(...[
+          lead.kit_slug && lead.kit_stale ? h('p', { class: 'dim small', style: 'margin-bottom:8px' }, 'The old demo was built for the wrong kind of business (' + (lead.kit_type || 'other') + '). Rebuild it so it talks about ' + (lead.category || 'their services') + '.') : null,
+          h('label', { class: 'dim small' }, 'What kind of business is it? The demo, prices and receptionist are written for this.'), bizType, b, rb].filter(Boolean)); return; }
       const msg = dmFor(lead, built);
       resultBox.replaceChildren(h('section', { class: 'sp-ready' }, h('b', null, 'Ready for ' + lead.business), h('small', null, built),
         h('div', { class: 'row wrap' },
