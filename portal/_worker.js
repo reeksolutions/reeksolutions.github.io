@@ -2945,6 +2945,34 @@ async function api(request, env, url) {
     }
     return json({ patch });
   }
+  if (path === '/video/transcribe' && method === 'POST') {
+    // your own recording: words with timestamps, so captions match what you actually said
+    need(user, 'admin', 'rep', 'dev');
+    const b64 = String(body.audio || '');
+    if (b64.length < 3000) return json({ words: [], text: '' });
+    if (b64.length > 7_500_000) bad('That recording is too long. Keep it under about 3 minutes.');
+    const bin = atob(b64), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return json(await transcribeWords(env, buf.buffer));
+  }
+  if (path === '/video/postcopy' && method === 'POST') {
+    need(user, 'admin', 'rep', 'dev');
+    const transcript = str(body.transcript, 3000), biz = str(body.business, 60) || 'med spa';
+    if (!transcript) bad('No words to write a caption from');
+    const fallbackTags = ['#medspa', '#medspamarketing', '#aiforbusiness', '#smallbusiness', '#automation', '#reekonsystems'];
+    let caption = '', tags = [];
+    if (env.AI) {
+      try {
+        const r = await env.AI.run(STUDIO_MODEL, { messages: [
+          { role: 'system', content: 'You write the caption and hashtags for a short vertical video posted by a founder who sells AI and automation to ' + biz + ' owners. Reply ONLY with JSON {"caption": string, "hashtags": [6 strings starting with #]}. Caption: 1 to 3 short sentences in a straight, plain voice, based only on what he says in the video, ending with a one-line call to action to comment or DM. No emojis, no dashes, no hype words, no invented statistics.' },
+          { role: 'user', content: 'WHAT HE SAID:\n' + transcript }], max_tokens: 350, temperature: 0.5, response_format: { type: 'json_object' } });
+        const j = parseJsonLoose(typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
+        if (j) { caption = str(j.caption, 400).replace(/[—–]/g, ','); tags = (Array.isArray(j.hashtags) ? j.hashtags : []).map((x) => '#' + String(x).replace(/[^A-Za-z0-9_]/g, '')).filter((x) => x.length > 2).slice(0, 8); }
+      } catch (e) { console.error('postcopy', e); }
+    }
+    if (!caption) caption = transcript.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ').slice(0, 220) + ' Comment DEMO and I will show you.';
+    return json({ caption, hashtags: tags.length >= 3 ? tags : fallbackTags });
+  }
   if (path === '/voice/status' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     return json({ eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID) });
@@ -4774,6 +4802,35 @@ async function elevenSpeak(env, text) {
     body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }), signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('eleven ' + r.status);
   return r.arrayBuffer();
+}
+async function transcribeWords(env, buf) {
+  const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  const fromText = (text, dur) => { const ws = String(text || '').split(/\s+/).filter(Boolean); return ws.map((w, i) => ({ w, s: (dur * i) / ws.length, e: (dur * (i + 1)) / ws.length })); };
+  const dur = Math.max(0.5, (buf.byteLength - 44) / 32000);
+  if (key) {
+    try {
+      const fd = new FormData();
+      fd.append('model_id', 'scribe_v1'); fd.append('language_code', 'en'); fd.append('tag_audio_events', 'false'); fd.append('timestamps_granularity', 'word');
+      fd.append('file', new Blob([buf], { type: 'audio/wav' }), 'clip.wav');
+      const r = await fetch('https://api.elevenlabs.io/v1/speech-to-text', { method: 'POST', headers: { 'xi-api-key': key }, body: fd, signal: AbortSignal.timeout(60000) });
+      if (r.ok) {
+        const j = await r.json();
+        const words = (j.words || []).filter((x) => x.type === 'word' || !x.type).map((x) => ({ w: String(x.text || x.word || '').trim(), s: +x.start || 0, e: +x.end || 0 })).filter((x) => x.w);
+        return { text: String(j.text || '').trim(), words: words.length ? words : fromText(j.text, dur) };
+      }
+      console.error('scribe words', r.status);
+    } catch (e) { console.error('scribe words', e); }
+  }
+  if (env.AI) {
+    try {
+      const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      const r = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: btoa(s), language: 'en' });
+      const res = (r && r.result) || r || {};
+      const words = (res.words || []).map((x) => ({ w: String(x.word || '').trim(), s: +x.start || 0, e: +x.end || 0 })).filter((x) => x.w);
+      return { text: String(res.text || '').trim(), words: words.length ? words : fromText(res.text, dur) };
+    } catch (e) { console.error('whisper words', e); }
+  }
+  throw new HttpError(503, 'Could not hear the recording right now. Captions will use your script instead.');
 }
 async function kitTranscribe(env, buf) {
   const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');

@@ -3217,7 +3217,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
   const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker'], ['ballpark', 'Instant ballpark'], ['jobdone', 'Job-done automation']];
-  const CS = { business: (function () { try { return localStorage.getItem('rs_biz2') || 'backyard contractor'; } catch { return 'backyard contractor'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' ? 'med spa' : v; } catch { return 'med spa'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
   const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
@@ -3425,6 +3425,58 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf; } finally { try { ac.close(); } catch { /* ignore */ } }
   }
   const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+  /* ---- auto-edit for your own recording: cut dead air, word-for-word captions from what you said, post caption ---- */
+  // finds the stretches where you are talking. Pauses longer than 0.7s are cut down to about a quarter second.
+  function speechSegments(buf) {
+    const d = buf.getChannelData(0), sr = buf.sampleRate, hop = Math.round(sr * 0.02), n = Math.floor(d.length / hop), rms = new Float32Array(n);
+    for (let i = 0; i < n; i++) { let a = 0; for (let j = i * hop; j < (i + 1) * hop; j++) a += d[j] * d[j]; rms[i] = Math.sqrt(a / hop); }
+    const sorted = Array.from(rms).sort((a, b) => a - b), floor = sorted[Math.floor(n * 0.1)] || 0.002, thr = Math.max(0.01, floor * 3.5);
+    const voiced = Array.from(rms, (x) => x > thr), runs = []; let st = -1;
+    for (let i = 0; i <= n; i++) { if (i < n && voiced[i]) { if (st < 0) st = i; } else if (st >= 0) { if (i - st >= 3) runs.push([st, i]); st = -1; } }
+    if (!runs.length) return [{ a: 0, b: buf.duration }];
+    const gap = 0.7 / 0.02, pad = 0.13, merged = [runs[0].slice()];
+    for (let i = 1; i < runs.length; i++) { const m = merged[merged.length - 1]; if (runs[i][0] - m[1] <= gap) m[1] = runs[i][1]; else merged.push(runs[i].slice()); }
+    return merged.map(([a, b]) => ({ a: Math.max(0, a * 0.02 - pad), b: Math.min(buf.duration, b * 0.02 + pad) }));
+  }
+  function stitchAudio(buf, segs) {
+    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), sr = buf.sampleRate;
+    const len = segs.reduce((n, x) => n + Math.round((x.b - x.a) * sr), 0), out = ac.createBuffer(buf.numberOfChannels, Math.max(1, len), sr);
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const src = buf.getChannelData(c), dst = out.getChannelData(c); let o = 0;
+      for (const x of segs) { const a = Math.round(x.a * sr), b = Math.round(x.b * sr), f = Math.round(sr * 0.008); for (let i = a; i < b && o < dst.length; i++, o++) { let g = 1; if (i - a < f) g = (i - a) / f; else if (b - i < f) g = (b - i) / f; dst[o] = src[i] * g; } }
+    }
+    try { ac.close(); } catch { /* ignore */ } return out;
+  }
+  function wav16b64(buf) {
+    const d = buf.getChannelData(0), ratio = buf.sampleRate / 16000, n = Math.floor(d.length / ratio), ab = new ArrayBuffer(44 + n * 2), dv = new DataView(ab), w = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)); let sum = 0; for (let j = a; j < b; j++) sum += d[j]; const v = Math.max(-1, Math.min(1, sum / (b - a))); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
+    const u = new Uint8Array(ab); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin);
+  }
+  // output time -> where to read in your original recording
+  const srcTime = (segs, t) => { let acc = 0; for (let i = 0; i < segs.length; i++) { const len = segs[i].b - segs[i].a; if (t < acc + len || i === segs.length - 1) return { i, t: segs[i].a + Math.min(len, Math.max(0, t - acc)) }; acc += len; } return { i: 0, t: 0 }; };
+  async function autoEdit(buf, onStep) {
+    onStep('Cutting the dead air…');
+    const segs = speechSegments(buf), edited = stitchAudio(buf, segs), cut = Math.max(0, buf.duration - edited.duration);
+    const edit = { segs, dur: edited.duration, cut, words: null, text: '', copy: null };
+    try {
+      onStep('Listening to what you said…');
+      const r = await api('POST', '/video/transcribe', { audio: wav16b64(edited) });
+      if (r.words && r.words.length) { edit.words = r.words.map((x) => ({ w: x.w, t: x.s })); edit.text = r.text || r.words.map((x) => x.w).join(' '); }
+    } catch (e) { edit.err = e.message || 'Could not transcribe'; }
+    if (edit.text) {
+      try { onStep('Writing your caption…'); edit.copy = await api('POST', '/video/postcopy', { transcript: edit.text, business: CS.business }); } catch { /* optional */ }
+    }
+    return { edit, edited };
+  }
+  // word captions that follow your real words (chunks of up to 4, break on sentence ends and long pauses)
+  function voiceCaps(edit, lead) {
+    if (edit.capsCache && edit.capsLead === lead) return edit.capsCache;
+    const chunks = []; let cur = [];
+    edit.words.forEach((w, i) => { const x = { w: w.w, t: w.t + lead }; cur.push(x); const nx = edit.words[i + 1]; if (cur.length >= 4 || /[.!?]$/.test(w.w) || (nx && nx.t - w.t > 0.9)) { chunks.push({ t0: cur[0].t, words: cur }); cur = []; } });
+    if (cur.length) chunks.push({ t0: cur[0].t, words: cur });
+    edit.capsCache = { chunks }; edit.capsLead = lead; return edit.capsCache;
+  }
   // your camera video: full screen for the hook, then it shrinks into a circle in a corner while the board plays
   function drawFaceLayer(c, fv, face, tv) {
     if (tv < -0.05 || !fv.videoWidth) return;
@@ -3462,8 +3514,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       fv.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.02;pointer-events:none'; document.body.append(fv);
       await new Promise((res) => { fv.onloadeddata = res; fv.onerror = res; setTimeout(res, 4000); });
     }
-    let faceOn = false;
-    const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); if (fv) { if (!faceOn && t >= plan.lead) { faceOn = true; try { fv.currentTime = 0; fv.play().catch(() => {}); } catch { /* ignore */ } } c.setTransform(SC, 0, 0, SC, 0, 0); drawFaceLayer(c, fv, face, t - plan.lead); } };
+    let faceOn = false, segI = 0;
+    const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); if (fv) { if (!faceOn && t >= plan.lead) { faceOn = true; segI = 0; try { fv.currentTime = face.edit ? face.edit.segs[0].a : 0; fv.play().catch(() => {}); } catch { /* ignore */ } }
+      if (faceOn && face.edit) { const m = srcTime(face.edit.segs, t - plan.lead); if (m.i !== segI || Math.abs(fv.currentTime - m.t) > 0.35) { segI = m.i; try { fv.currentTime = m.t; } catch { /* ignore */ } } } c.setTransform(SC, 0, 0, SC, 0, 0); drawFaceLayer(c, fv, face, t - plan.lead); } };
     let bg = 0, lastVis = performance.now(), errN = 0;
     const draw0 = VM.style === 'site' ? drawSite : drawFlow; draw(ctx, plan, 0, cache); rec.start(250);
     const start = performance.now() + 250;
@@ -3600,8 +3653,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
   // karaoke captions that always fit the picture: shrink first, then split into two lines, placed where the apps do not cover them
   function drawCaps(ctx, plan, tt) {
-    if (VM.face && !VM.face.caps) return;
-    const W = VW, H = VH, cap = plan.caps || (plan.caps = karaoke(plan)), cy = Math.round(H * VCAP.capY), maxW = VCAP.capW - 40;
+    const vc = VM.face && VM.face.edit && VM.face.edit.words && VM.face.vc !== false;
+    if (VM.face && !VM.face.caps && !vc) return;
+    const W = VW, H = VH, cap = vc ? voiceCaps(VM.face.edit, plan.lead) : (plan.caps || (plan.caps = karaoke(plan))), cy = Math.round(H * VCAP.capY), maxW = VCAP.capW - 40;
     let ci = 0; for (let i = 0; i < cap.chunks.length; i++) if (tt >= cap.chunks[i].t0) ci = i;
     const ch = cap.chunks[ci];
     if (!ch || tt < cap.chunks[0].t0 - 0.05) return;
@@ -3637,7 +3691,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const bs = fixI >= 0 ? plan.scenes[fixI].start + 0.15 : plan.total * 0.45;
     const endI = plan.scenes.findIndex((x, i) => i > fixI && (x.kind === 'result' || x.kind === 'cta'));
     const be = Math.max(bs + 3, Math.min(bs + 12, (endI >= 0 ? plan.scenes[endI].start : plan.total) - 0.2));
-    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'backyard contractor'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
+    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'med spa'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
     ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
     const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, Math.max(W, H) * 0.6); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
     // phone
@@ -3795,16 +3849,33 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const buf = await decodeVoice(f), url = URL.createObjectURL(f);
         const keep = VM.face; vmClear(true);
         VM.voice = { blob: f, buf, dur: buf.duration, name: 'Audio from your video', url, manual: true };
-        VM.face = { blob: f, url, dur: buf.duration, pos: keep ? keep.pos : 'tr', caps: keep ? keep.caps : false };
-        toast('Video added. It will start full screen, then shrink to the corner.'); parent();
+        VM.face = { blob: f, url, dur: buf.duration, pos: keep ? keep.pos : 'tr', caps: keep ? keep.caps : false, vc: true, auto: keep ? keep.auto !== false : true };
+        if (VM.face.auto) {
+          L.el.hidden = false; L.set('Editing your recording', '', null);
+          try {
+            const r = await autoEdit(buf, (m) => L.set('Editing your recording', m, null));
+            VM.face.edit = r.edit; VM.face.dur = r.edit.dur;
+            VM.voice = { blob: f, buf: r.edited, dur: r.edited.duration, name: 'Edited audio from your video', url, manual: true };
+          } catch (x) { console.error(x); toast('Could not auto-edit that one. Using it as it is.', true); }
+          L.el.hidden = true;
+          const ed = VM.face.edit; toast(ed ? 'Edited: ' + ed.cut.toFixed(1) + ' sec of dead air cut' + (ed.words ? ', captions from your voice ready' : ', captions need your script (could not hear it)') : 'Video added');
+        } else toast('Video added. It will start full screen, then shrink to the corner.');
+        parent();
       } catch (x) { toast('Could not read that video. Try recording it again on your phone.', true); }
     } });
     const faceBox = h('div', { class: 'cs-blk' }, h('b', null, 'Your camera video'),
-      h('p', { class: 'dim small' }, VM.face ? 'Added (' + VM.face.dur.toFixed(1) + ' sec). You start full screen for the first few seconds, then shrink to a circle in the corner while the board plays. Your own voice is used.' : 'Record yourself on your phone reading the script, then add it here. You start full screen, then shrink to the corner while the board plays.'),
+      h('p', { class: 'dim small' }, VM.face ? 'Added (' + VM.face.dur.toFixed(1) + ' sec). You start full screen for the first few seconds, then shrink to a circle in the corner while the board plays. Your own voice is used.' : 'Record yourself talking (computer or phone), then add it here. It cuts the dead air, captions your real words, writes the post caption, and puts you over the board: full screen for the hook, then a circle in the corner.'),
       h('div', { class: 'row wrap' }, h('label', { class: 'btn small primary' }, VM.face ? 'Replace my video' : 'Add my camera video', faceIn),
         VM.face ? h('button', { class: 'btn small', onclick: () => { VM.face = null; vmClear(true); toast('Removed'); parent(); } }, 'Remove') : null),
       VM.face ? [h('p', { class: 'dim small' }, 'Where to put you'), chips(VM.face.pos, [['tr', 'Top right'], ['bl', 'Lower left']], (v) => { VM.face.pos = v; parent(); }),
-        h('p', { class: 'dim small' }, 'Captions'), chips(VM.face.caps, [[false, 'Off (safe if you ad-lib)'], [true, 'Script captions (only if you read it word for word)']], (v) => { VM.face.caps = v; parent(); })] : null);
+        h('p', { class: 'dim small' }, 'Captions'), (() => {
+          const ed = VM.face.edit, hasV = !!(ed && ed.words), cur = hasV && VM.face.vc !== false ? 'voice' : VM.face.caps ? 'script' : 'off';
+          return chips(cur, [...(hasV ? [['voice', 'From your voice (matches what you said)']] : []), ['script', 'Script captions (only if word for word)'], ['off', 'Off']], (v) => { VM.face.vc = v === 'voice'; VM.face.caps = v === 'script'; vmClear(false); parent(); });
+        })(),
+        VM.face.edit ? h('p', { class: 'dim small' }, 'Auto-edit: cut ' + VM.face.edit.cut.toFixed(1) + ' sec of dead air' + (VM.face.edit.words ? ', ' + VM.face.edit.words.length + ' words captioned from your voice.' : '. ' + (VM.face.edit.err || 'Could not hear it, so use script captions or none.'))) : null,
+        VM.face.edit && VM.face.edit.copy ? h('div', { class: 'cs-blk' }, h('b', null, 'Post caption'), h('p', { style: 'white-space:pre-wrap' }, VM.face.edit.copy.caption + '\n\n' + VM.face.edit.copy.hashtags.join(' ')),
+          h('button', { class: 'btn small', onclick: async () => { try { await navigator.clipboard.writeText(VM.face.edit.copy.caption + '\n\n' + VM.face.edit.copy.hashtags.join(' ')); toast('Caption copied'); } catch { toast('Could not copy. Press and hold the text to copy it.', true); } } }, 'Copy caption and hashtags')) : null,
+        h('p', { class: 'dim small' }, 'Auto-edit for the next recording you add'), chips(VM.face.auto !== false, [[true, 'On (cut dead air, caption, write post)'], [false, 'Off']], (v) => { VM.face.auto = v; parent(); })] : null);
     const more = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'More options'), h('small', { class: 'dim' }, 'quality, voice speed, your own voice file')),
       h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips,
       VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }), h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remake the voice')) : null, upload);
