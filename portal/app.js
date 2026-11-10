@@ -3210,6 +3210,12 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   /* ================= content: start posting (guided editor), posted log, library ================= */
   const PN = Object.fromEntries(CPLAT);
   const FMT_LABEL = { post: 'Text post', video: 'Voiceover video', face: 'Face video', news: 'AI news post' };
+  const CS_APPS = [
+    ['meta', 'Instagram + Facebook', 'Post on Instagram and cross-post to Facebook', 'users', ['ig', 'fb']],
+    ['tt', 'TikTok', 'Short vertical video', 'spark', ['tt']],
+    ['x', 'X', 'Short text, 280 characters max', 'copy', ['x']],
+  ];
+  const appPlats = (k) => (CS_APPS.find((a) => a[0] === k) || CS_APPS[0])[4];
   const CS_FMT = [
     ['video', 'Voiceover video', 'A story video with a voice', 'spark'],
     ['post', 'Text post', 'A caption for any platform', 'copy'],
@@ -3217,8 +3223,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
   const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker'], ['ballpark', 'Instant ballpark'], ['jobdone', 'Job-done automation']];
-  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' ? 'med spa' : v; } catch { return 'med spa'; } })(), offers: [], cardFmt: null, cardLines: null, step: 'fmt', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
-  const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'fmt', fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
+  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' ? 'med spa' : v; } catch { return 'med spa'; } })(), offers: [], cardFmt: null, cardLines: null, app: null, step: 'app', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'app', app: null, fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
 
@@ -3244,15 +3250,16 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   })();
   const csSave = () => {
     try {
-      if (CS.step === 'fmt' && !CS.chat.length && !CS.idea) { localStorage.removeItem(CS_KEY); return; }
+      if ((CS.step === 'fmt' || CS.step === 'app') && !CS.chat.length && !CS.idea) { localStorage.removeItem(CS_KEY); return; }
       const idea = CS.idea && !CS.idea.byPlat ? JSON.parse(JSON.stringify(CS.idea)) : null;
-      localStorage.setItem(CS_KEY, JSON.stringify({ t: Date.now(), business: CS.business, offers: CS.offers, cardFmt: CS.cardFmt, cardLines: CS.cardLines, step: CS.step, fmt: CS.fmt, topic: CS.topic, plat: CS.plat, secs: CS.secs, edits: CS.edits, posted: CS.posted, ideaN: CS.ideaN, chat: CS.chat.slice(-24), idea, vm: { style: VM.style, fmt: VM.fmt } }));
+      localStorage.setItem(CS_KEY, JSON.stringify({ t: Date.now(), business: CS.business, offers: CS.offers, cardFmt: CS.cardFmt, cardLines: CS.cardLines, app: CS.app, step: CS.step, fmt: CS.fmt, topic: CS.topic, plat: CS.plat, secs: CS.secs, edits: CS.edits, posted: CS.posted, ideaN: CS.ideaN, chat: CS.chat.slice(-24), idea, vm: { style: VM.style, fmt: VM.fmt } }));
     } catch { /* storage can be blocked */ }
   };
   (function csLoad() {
     try {
       const d = JSON.parse(localStorage.getItem(CS_KEY) || 'null'); if (!d || Date.now() - d.t > 3 * 864e5) return;
-      ['business', 'offers', 'cardFmt', 'cardLines', 'step', 'fmt', 'topic', 'plat', 'secs', 'edits', 'posted', 'ideaN'].forEach((k) => { if (d[k] !== undefined && d[k] !== null) CS[k] = d[k]; });
+      ['business', 'offers', 'cardFmt', 'cardLines', 'app', 'step', 'fmt', 'topic', 'plat', 'secs', 'edits', 'posted', 'ideaN'].forEach((k) => { if (d[k] !== undefined && d[k] !== null) CS[k] = d[k]; });
+      if (!CS.app && CS.step !== 'app') CS.app = CS.plat === 'tt' ? 'tt' : CS.plat === 'x' ? 'x' : 'meta';
       CS.chat = Array.isArray(d.chat) ? d.chat : []; CS.idea = d.idea || null; if (!CS.idea && CS.step === 'edit') CS.step = 'idea';
       if (d.vm) { VM.style = d.vm.style === 'site' ? 'site' : 'flow'; VM.fmt = VFMT[d.vm.fmt] ? d.vm.fmt : '9x16'; }
     } catch { /* start fresh */ }
@@ -3914,7 +3921,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       ta.oninput = () => { CS.edits[k] = ta.value; csSave(); };
       return ta;
     };
-    const platChips = () => h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => {
+    const platChips = () => h('div', { class: 'stagechips' }, CPLAT.filter(([k]) => appPlats(CS.app).includes(k)).map(([k, l]) => {
       const n = r.today_posts.filter((p) => p.platform === k).length;
       return h('button', { class: 'schip' + (CS.plat === k ? ' on' : ''), onclick: () => { CS.plat = k; CS.posted = {}; draw(); } }, l + (n ? ' ✓' : ''));
     }));
@@ -4044,10 +4051,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     };
 
     function draw() {
-      const order = ['fmt', 'idea', 'edit'], idx = Math.max(0, order.indexOf(CS.step)), labels = { fmt: 'Type', idea: 'Idea', edit: 'Make' };
+      const order = ['app', 'fmt', 'idea', 'edit'], idx = Math.max(0, order.indexOf(CS.step)), labels = { app: 'App', fmt: 'Type', idea: 'Idea', edit: 'Make' };
       const bar = h('div', { class: 'cs-steps' }, order.map((k, i) => h('span', { class: 'cs-step' + (i === idx ? ' on' : i < idx ? ' past' : '') }, h('i', null, String(i + 1)), labels[k])));
       let title, sub, body;
-      if (CS.step === 'fmt') {
+      if (CS.step === 'app') {
+        title = 'Where are you posting?'; sub = 'Pick the app. The caption, length and hashtags are made for it.';
+        body = h('div', { class: 'hub-grid one' }, CS_APPS.map(([k, t, sb, ic, pl]) => tile(t, sb, ic, () => { CS.app = k; if (!pl.includes(CS.plat)) CS.plat = pl[0]; CS.posted = {}; go('fmt'); })));
+      } else if (CS.step === 'fmt') {
         title = 'What are you making?'; sub = 'Pick one. You can make another right after.';
         body = h('div', { class: 'hub-grid one' }, CS_FMT.map(([k, t, s, ic]) => tile(t, s, ic, () => { if (CS.fmt !== k) { CS.chat = []; CS.idea = null; } CS.fmt = k; CS.edits = {}; go('idea'); })));
       } else if (CS.step === 'idea') {
