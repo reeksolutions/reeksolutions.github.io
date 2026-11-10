@@ -71,7 +71,8 @@
     if (!r.ok && !j.reply) throw new Error(j.error || 'Something went wrong. Try again.');
     return j;
   };
-  const first = () => (K.owner || '').split(' ')[0] || 'there';
+  const firstOf = (o) => { const m = String(o || '').trim().match(/^((?:dr|mr|mrs|ms)\.?\s+)?(\S+)/i); return m ? ((m[1] || '') + m[2]).trim() : ''; };
+  const first = () => firstOf(K.owner) || 'there';
   const svc = (id) => K.services.find((s) => s.id === id) || K.services[0];
   const lower = (s) => s.toLowerCase();
   const mid = (s, qty) => s.unit === 'project' ? (s.lo + s.hi) / 2 : ((s.lo + s.hi) / 2) * qty;
@@ -325,7 +326,7 @@
     let sid = K.services[0].id, replied = false, qm = 20, quiet = 50;
     const tl = h('div', { class: 'tl' }), math = h('div', { class: 'card' });
     const sel = h('select', { onchange: () => { sid = sel.value; draw(); } }, K.services.map((s) => h('option', { value: s.id }, s.name)));
-    const who = K.owner ? K.owner.split(' ')[0] : 'our team';
+    const who = K.owner ? firstOf(K.owner) : 'our team';
     function draw() {
       const s = svc(sid), n = lower(s.name), steps = [
         ['Right after you send the quote', 'Hi Sarah, it is ' + who + ' at ' + K.business + '. Here is your ' + n + ' estimate. Reply here with any questions.'],
@@ -353,26 +354,52 @@
   }
 
   function pReviews() {
-    const p = phone('Customer phone'), extra = h('div');
-    const s = K.services[0], who = K.owner ? K.owner.split(' ')[0] : 'our team';
-    function start() {
-      p.clear(); extra.replaceChildren();
-      p.add('in', 'Hi Sarah, it is ' + who + ' at ' + K.business + '. Your ' + lower(s.name) + ' is done. How did we do? Tap a star (1 to 5).');
+    const p = phone('Client phone'), alerts = h('div'), who = K.owner ? firstOf(K.owner) : 'our team';
+    let name = 'Sarah', svc = K.services[0], reviews = 14, visits = 40, rate = 12, got = 0;
+    const nameIn = h('input', { type: 'text', value: name, maxlength: 20, 'aria-label': 'Client first name' });
+    nameIn.addEventListener('input', () => { name = nameIn.value.trim().slice(0, 20) || 'Sarah'; });
+    const svcIn = h('select', { 'aria-label': 'Treatment' }, K.services.map((x, i) => h('option', { value: i }, x.name)));
+    svcIn.addEventListener('change', () => { svc = K.services[+svcIn.value] || K.services[0]; });
+    const link = 'g.page/' + String(K.business).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '/review';
+    const send = h('button', { class: 'btn pri', onclick: done }, 'Mark appointment done');
+    const tap = h('button', { class: 'btn', hidden: true, onclick: posted }, 'She taps the link and leaves 5 stars');
+    function done() {
+      p.clear(); alerts.replaceChildren(); tap.hidden = true; send.disabled = true;
+      p.add('sys', 'You tap "done" for ' + name + '’s ' + lower(svc.name) + '. Nothing else for you to do.');
+      setTimeout(() => {
+        p.add('sys', 'About 2 hours later');
+        p.add('in', 'Hi ' + name + ', it is ' + who + ' at ' + K.business + '. Thank you for coming in today for your ' + lower(svc.name) + '. If you have a minute, would you share how it went on Google? It helps other people find us: ' + link);
+        tap.hidden = false; send.disabled = false; send.textContent = 'Run it again';
+        const nudge = h('p', { class: 'note' }, 'If she has not left one after 2 days, one friendly reminder goes out. Then it stops.'); alerts.append(nudge);
+      }, 700);
     }
-    const stars = h('div', { class: 'stars' }, [1, 2, 3, 4, 5].map((n) => h('button', { class: 'star', 'aria-label': n + ' stars', onclick: () => rate(n) }, '★')));
-    function rate(n) {
-      [...stars.children].forEach((b, i) => b.classList.toggle('on', i < n));
-      start(); p.add('out', n + ' stars');
-      if (n >= 4) p.add('in', 'Thank you Sarah, that means a lot! Would you share that on Google? It takes 20 seconds: g.page/your-business');
-      else { p.add('in', 'Thank you for being honest, Sarah. ' + who + ' will call you today to make it right. If you would still like to leave a public review, here is the link: g.page/your-business'); extra.replaceChildren(h('div', { class: 'alert' }, h('b', null, 'Alert to you'), 'Sarah gave ' + n + ' stars on her ' + lower(s.name) + '. Call her today, before it turns into a problem.')); }
+    function posted() {
+      tap.hidden = true; got++;
+      p.add('sys', name + ' opens Google and posts a review');
+      alerts.replaceChildren(
+        h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'New Google review'), h('div', { class: 'stars-static' }, '★★★★★'), h('b', null, name + ' · just now'),
+          h('p', { class: 'note' }, 'Everything went great. Super friendly and I would book again.')),
+        h('div', { class: 'alert' }, h('b', null, 'Reply drafted for you'), 'Thank you, ' + name + '! We loved having you in. See you at your next visit. ' + who + ' at ' + K.business, h('div', { style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: (e) => { e.target.textContent = 'Posted'; e.target.disabled = true; } }, 'Approve and post reply'))));
+      upd();
     }
-    start();
+    const out = h('div', { class: 'big' }), sub = h('p', { class: 'sub' }), v1 = h('b', null, reviews), v2 = h('b', null, visits), v3 = h('b', null, rate + '%');
+    const upd = () => { const add = Math.round(visits * 4.3 * rate / 100); out.textContent = '+' + add + ' reviews'; sub.textContent = 'From ' + (reviews) + ' to about ' + (reviews + add) + ' Google reviews in 30 days' + (got ? ' (plus the one you just saw)' : '') + '. Example math, real results vary.'; };
+    const row = (label, ctl, val) => h('div', null, h('label', null, h('span', null, label + ' '), val), ctl);
+    upd();
     return [
-      h('h2', null, 'Reviews after every job'),
-      h('p', { class: 'lead' }, 'The moment a job is marked done, the customer gets the ask. Everyone is invited to review on Google. Unhappy customers also reach you privately so you can fix it fast.'),
-      stars, p.node, extra,
-      h('div', { class: 'card' }, h('b', null, 'Tap-to-review card'), h('p', { class: 'note' }, 'Leave one in the truck or hand it over at the end of the job. The customer taps their phone on it and your Google review page opens. No app, no typing.'),
-        h('div', { class: 'nfc' }, h('span', { class: 'eyebrow' }, 'Tap here'), h('b', null, K.business), h('span', { class: 'note' }, 'Loved your new yard? Tap to leave a review.'))),
+      h('h2', null, 'Google reviews after every appointment'),
+      h('p', { class: 'lead' }, 'When an appointment is marked done, the client gets a text with your Google review link. It goes to everyone, the same way, so your rating stays honest and your count keeps climbing.'),
+      h('div', { class: 'card' },
+        h('div', { class: 'two' }, h('label', { class: 'field' }, h('span', null, 'Client first name'), nameIn), h('label', { class: 'field' }, h('span', null, 'Treatment'), svcIn)),
+        send, tap),
+      p.node, alerts,
+      h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'What it could add for ' + K.business),
+        row('Google reviews you have now', slider(0, 200, 1, reviews, (v) => { reviews = v; v1.textContent = v; upd(); }), v1),
+        row('Appointments each week', slider(10, 120, 5, visits, (v) => { visits = v; v2.textContent = v; upd(); }), v2),
+        row('Clients who leave a review after the text', slider(5, 25, 1, rate, (v) => { rate = v; v3.textContent = v + '%'; upd(); }), v3),
+        out, sub),
+      h('div', { class: 'card' }, h('b', null, 'Tap-to-review card'), h('p', { class: 'note' }, 'For the front desk. The client taps their phone on it and your Google review page opens. No app, no typing.'),
+        h('div', { class: 'nfc' }, h('span', { class: 'eyebrow' }, 'Tap here'), h('b', null, K.business), h('span', { class: 'note' }, 'Loved your visit? Tap to leave a review.'))),
     ];
   }
 
@@ -395,7 +422,7 @@
     ];
     let ci = 0, past = 80, rate = 6;
     const msg = h('div', { class: 'msg card' }), math = h('div', { class: 'big' });
-    const who = K.owner ? K.owner.split(' ')[0] : 'the team';
+    const who = K.owner ? firstOf(K.owner) : 'the team';
     const names = [['Sarah M.', 'Replied YES'], ['Carlos R.', 'Sent'], ['Dana W.', 'Sent'], ['Mike T.', 'Replied YES'], ['Priya S.', 'Sent']];
     const list = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Sample past customers'), names.map(([n, st]) => h('div', { class: 'out', style: 'padding:6px 0;border-bottom:1px solid var(--line)' }, h('span', null, n), h('span', { class: 'pill' + (st[0] === 'R' ? ' ok' : '') }, st))));
     const calc = () => { math.textContent = money(past * (rate / 100) * 0.5 * K.avg_job); };
@@ -417,7 +444,7 @@
   function pRemind() {
     const p = phone('Customer phone'), acts = h('div', { class: 'row', style: 'margin-top:8px' });
     let n = 0;
-    const who = K.owner ? K.owner.split(' ')[0] : 'our estimator';
+    const who = K.owner ? firstOf(K.owner) : 'our estimator';
     const seq = [
       () => p.add('in', 'Confirmed: free estimate at your place Thursday at 10:00 AM with ' + K.business + '. Reply C to confirm or R to reschedule.'),
       () => p.add('in', 'Reminder: ' + who + ' is coming tomorrow at 10:00 AM. Need to change it? Reply R.'),
@@ -468,7 +495,7 @@
   function pJobdone() {
     let sid = K.services[0].id;
     const tl = h('div', { class: 'tl' }), sel = h('select', { onchange: () => { sid = sel.value; tl.replaceChildren(); } }, K.services.map((s) => h('option', { value: s.id }, s.name)));
-    const who = K.owner ? K.owner.split(' ')[0] : 'our team';
+    const who = K.owner ? firstOf(K.owner) : 'our team';
     const run = async () => {
       const s = svc(sid), n = lower(s.name); tl.replaceChildren();
       const steps = [
@@ -545,7 +572,7 @@
     TABS.forEach(([id, label]) => tabsIn.append(h('button', { class: 'tab', 'data-id': id, onclick: () => go(id) }, label)));
     $app.replaceChildren(
       h('div', { class: 'wrap' }, h('div', { class: 'top' }, h('div', { class: 'eyebrow' }, 'Live demo · built by Reekon Systems'),
-        h('h1', null, K.business), h('p', { class: 'sub' }, (K.owner ? K.owner.split(' ')[0] + ', everything' : 'Everything') + ' here works. Tap through it. Nothing is sent to real customers.'))),
+        h('h1', null, K.business), h('p', { class: 'sub' }, (K.owner ? firstOf(K.owner) + ', everything' : 'Everything') + ' here works. Tap through it. Nothing is sent to real customers.'))),
       t, h('div', { class: 'wrap' }, panel),
       h('div', { class: 'dock' }, h('button', { class: 'btn pri', onclick: lead }, 'I want this for ' + K.business)));
     go((location.hash || '').replace('#', '') || 'math', true);

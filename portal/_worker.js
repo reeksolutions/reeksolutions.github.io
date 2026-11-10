@@ -1352,7 +1352,10 @@ async function googleCallback(request, env, url) {
 // best leads first: no website + low reviews, then no website, then low reviews, then the rest
 const NOSITE_SQL = "COALESCE(TRIM(l.website),'') = ''";
 const LOWREV_SQL = 'COALESCE(l.reviews, 9999) <= 30';
-const LEAD_PRIO = `CASE WHEN ${NOSITE_SQL} AND ${LOWREV_SQL} THEN 0 WHEN ${NOSITE_SQL} THEN 1 WHEN ${LOWREV_SQL} THEN 2 ELSE 3 END`;
+// review-starved places first: the fewer Google reviews, the earlier in the queue. No website breaks ties. Unknown counts go last.
+const REV_TIER_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews <= 10 THEN 0 WHEN l.reviews <= 25 THEN 1 WHEN l.reviews <= 50 THEN 2 WHEN l.reviews <= 100 THEN 3 ELSE 4 END';
+const LEAD_PRIO = `(${REV_TIER_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
+const maxReviews = async (env) => { const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
@@ -2493,9 +2496,11 @@ async function api(request, env, url) {
     const fx = focusSql(await focusTerms(env));
     const t = now(), recent = new Date(Date.now() - 4 * 3600e3).toISOString();
     const who = user.role === 'rep' ? 'AND l.assigned_to = ?' : '';
+    const maxRev = await maxReviews(env); // the queue only dials low-review places (people already in conversation are exempt)
     const row = await env.DB.prepare(
       `SELECT l.id FROM leads l WHERE l.id != ? AND l.phone_norm IS NOT NULL AND l.phone_norm != ''
          AND l.status IN ('new','demo_needed','demo_ready','called','callback') AND (l.status != 'callback' OR l.callback_at <= ?)
+         AND (l.status IN ('callback','demo_ready','called') OR COALESCE(l.reviews, 0) <= ${maxRev})
          AND (l.last_call_at IS NULL OR l.last_call_at < ?) ${who}
        ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, ${LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
          CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, l.attempts ASC, l.id ASC LIMIT 1`

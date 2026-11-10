@@ -1760,11 +1760,11 @@
 
   /* ================= Demo Studio: pick an offer, connect a lead, send the demo ================= */
   const STUDIO_OFFERS = [
+    ['reviews', 'Google review generator', 'A text after every appointment sends the client straight to your Google reviews.', 'spark'],
     ['voice', 'AI receptionist', 'Answers every call and books the consultation. They talk to it live.', 'phone'],
     ['textback', 'Missed-call text-back', 'A call goes unanswered, a text goes out in seconds.', 'sms'],
     ['speed', 'Instant lead reply', 'New inquiry in, answer out before the next med spa replies.', 'bolt'],
     ['quotes', 'Consultation follow-up', 'Quiet consultations get nudged until they reply.', 'mail'],
-    ['reviews', 'Review requests', 'Happy clients go to Google, unhappy ones come to you first.', 'spark'],
     ['winback', 'Win back clients', 'A text wakes up past clients and fills the book.', 'users'],
     ['remind', 'Reminders and no-shows', 'Confirm, remind and reschedule by text. No phone tag.', 'calendar'],
     ['ballpark', 'Instant price range', 'Give a range on the website, get a qualified lead back.', 'deals'],
