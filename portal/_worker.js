@@ -3764,6 +3764,7 @@ const PEXELS_QUERIES = {
   auto: ['car detailing', 'car polishing', 'car wash foam', 'clean car interior', 'luxury car'],
   food: ['tacos', 'street food', 'restaurant food plate', 'food truck', 'burger fries'],
   fitness: ['gym workout', 'personal trainer', 'weightlifting gym', 'boxing training'],
+  junk: ['junk removal truck', 'furniture removal', 'garage cleanout', 'hauling trash'],
   home: ['house cleaning', 'landscaping garden', 'plumber working', 'handyman tools', 'clean kitchen'],
   general: ['small business owner', 'local shop interior', 'storefront', 'customer service smile'],
 };
@@ -3810,11 +3811,28 @@ async function pexelsPhotos(env, data, hint) {
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 const PHOTO_MOOD = { dark: 'moody cinematic lighting, rich deep tones', light: 'bright airy natural daylight, clean and fresh', noir: 'moody warm cinematic lighting, dark rich tones', glow: 'soft airy pastel light, elegant, dreamy', drive: 'dramatic high-contrast lighting, bold, energetic', fresh: 'bright cheerful natural daylight, clean, warm and friendly' };
 function aiImagesReady(env) { return !!env.AI || env.STUDIO_FAKE_AI === '1'; }
+// for a business type with no ready-made photo pack, have the AI write four photo ideas that fit this exact business
+async function dynPhotoPrompts(env, data, N) {
+  if (env.AI && env.STUDIO_FAKE_AI !== '1') {
+    try {
+      const svc = (data.services || []).map((x) => x.name).slice(0, 6).join(', ');
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [
+        { role: 'system', content: 'You write photo ideas for an image generator. Reply ONLY JSON {"photos":[4 strings]}. Each string is one realistic photograph of THIS exact kind of business doing its real work: a worker in action, the finished result, the tools or vehicle, a happy customer scene. Under 30 words each, concrete, no text or signs in the picture, no brand names.' },
+        { role: 'user', content: 'Business: ' + (data.name || '') + '\nType: ' + (data.category || 'local service') + '\nServices: ' + svc + '\nCity: ' + (data.city || '') }], max_tokens: 400, temperature: 0.5, response_format: { type: 'json_object' } });
+      const j = parseJsonLoose(typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
+      const arr = j && Array.isArray(j.photos) ? j.photos.map((x) => str(x, 220)).filter((x) => x.length > 15) : [];
+      if (arr.length >= 3) return arr;
+    } catch (e) { console.error('photo prompts', e); }
+  }
+  const c = data.category || 'local service business';
+  return ['a professional ' + c + ' worker doing the job, candid action photo', 'the finished result of a ' + c + ' job, bright and clean', 'the tools and truck of a ' + c + ' company', 'a happy customer shaking hands with a ' + c + ' professional at their front door'];
+}
 async function makeDemoPhotos(env, userId, data, theme, hint) {
   const N = nicheFor(data.category, data.name);
   const mood = PHOTO_MOOD[theme] || PHOTO_MOOD.noir;
   const extra = hint && /photo|picture|pic|image/i.test(hint) ? ' ' + String(hint).replace(/\b(new|different|other|more|better|change|redo|swap|photos?|pictures?|pics|images?|please|make|give me|the)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : '';
-  const prompts = N.photos.slice(0, 4).map((p) => `${p}${extra ? ', ' + extra : ''}. Professional editorial photograph, ${mood}, sharp focus, realistic, high detail. No text, no words, no letters, no logos, no watermark.`);
+  const base = N.key === 'general' ? await dynPhotoPrompts(env, data, N) : N.photos;
+  const prompts = base.slice(0, 4).map((p) => `${p}${extra ? ', ' + extra : ''}. Professional editorial photograph, ${mood}, sharp focus, realistic, high detail. No text, no words, no letters, no logos, no watermark.`);
   const errors = [];
   const one = async (prompt, i) => {
     let stage = 'ai';
@@ -4074,6 +4092,8 @@ const NICHES = [
     photos: ['delicious street tacos with fresh cilantro, onion and lime on a plate, food photography', 'a busy food truck window at golden hour with people ordering', 'a chef cooking on a hot flat-top grill with flames, food photography', 'a table full of colorful plates of food, overhead shot'] },
   { key: 'fitness', re: /(gym|fitness|training|trainer|yoga|pilates|boxing|crossfit)/, theme: 'drive', services: 'Programs', book: 'Start training', eyebrow: 'Stronger every day',
     photos: ['an athlete training hard with battle ropes in a modern gym, dramatic lighting', 'a personal trainer coaching a client lifting dumbbells', 'a clean modern gym interior with racks and weights', 'close-up of hands chalked up gripping a barbell'] },
+  { key: 'junk', re: /(junk|haul|debris|clean\s?-?out|dumpster|trash|rubbish|garbage|waste removal)/, theme: 'drive', services: 'What we haul', book: 'Get a free estimate', eyebrow: 'Gone in a day',
+    photos: ['two workers in matching work shirts carrying an old couch out of a house toward a white junk removal truck, bright daylight', 'a white junk removal truck parked in front of a suburban home with the back full of neatly loaded furniture', 'a clean empty garage after a professional cleanout, swept floor, daylight through the open door', 'a smiling junk removal crew member in gloves lifting a cardboard box into a truck'] },
   { key: 'home', re: /(clean|maid|landscap|lawn|garden|plumb|electric|roof|handyman|paint|hvac|pest|moving|pressure|pool|construct|contractor)/, theme: 'fresh', services: 'Services', book: 'Get a free quote', eyebrow: 'Done right the first time',
     photos: ['a bright spotless modern living room after a professional cleaning, sunlight', 'a professional in uniform working carefully on a home project', 'a beautiful manicured green lawn and garden in front of a house', 'professional tools neatly arranged in a work van'] },
 ];
