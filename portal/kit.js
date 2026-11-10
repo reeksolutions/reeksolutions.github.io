@@ -6,14 +6,40 @@
   let K = null, tab = '';
 
   /* ---------- tiny helpers ---------- */
+  /* med spa wording: the panels below are written for contractors, so for a med spa every line goes through this table */
+  const MED_MAP = [
+    ['How can I help with your backyard?', 'How can I help you today?'], ['Estimate booked', 'Consultation booked'], ['Free on-site estimate', 'Free consultation'],
+    ['book the estimate', 'book the consultation'], ['Missed jobs', 'Missed bookings'], ['Quote follow-up', 'Consult follow-up'], ['Job done', 'Visit done'], ['Average job', 'Average client value'], ['would have hired you', 'would have booked'],
+    ['A website that books jobs', 'A website that books appointments'], ['You were on a job. No voicemail left.', 'You were with a client. No voicemail left.'],
+    ['we are on a job site. What are you looking to build?', 'we are with a client. Which treatment are you interested in?'],
+    [/We would love to look at your (.+?) project\. What is your zip code, and what days work for a free estimate\?/, 'We would love to help with your $1. What days work for a free consultation?'],
+    ['No quote gets forgotten', 'No consultation goes quiet'], ['Most estimates go quiet', 'Most consultations go quiet'], ['Quote for', 'Treatment'], ['Right after you send the quote', 'Right after the consultation'],
+    [/Here is your (.+?) estimate\./, 'Here is your $1 plan and pricing.'], [/got the (.+?) estimate\. Happy to walk through it or adjust the scope if the number feels off\./, 'got the $1 plan. Happy to walk through it or adjust it if the number feels off.'],
+    [/hold a spot for your (.+?) project\?/, 'hold a spot for your $1?'], ['we are booking projects for next month', 'we are booking appointments for next month'], ['Still thinking about the', 'Still thinking about the'],
+    ['keep your quote open', 'keep your spot open'], ['Quotes you send a month', 'Consultations a month'], ['a job, that is about:', 'a client, that is about:'], ['more booked work per month', 'more booked revenue per month'],
+    ['Reviews after every job', 'Reviews after every visit'], ['The moment a job is marked done', 'The moment a visit is marked done'], [/Your (.+?) is done\./, 'Thank you for coming in for your $1.'],
+    ['Leave one in the truck or hand it over at the end of the job.', 'Keep one at the front desk or hand it over at checkout.'], ['Loved your new yard? Tap to leave a review.', 'Loved your visit? Tap to leave a review.'],
+    ['Bring past customers back', 'Bring past clients back'], ['Every customer you ever built for is a repeat job or a referral waiting.', 'Every client you ever treated is a repeat visit or a referral waiting.'],
+    ['Sample past customers', 'Sample past clients'], ['Past customers', 'Past clients'], ['If half of the repliers become jobs at', 'If half of the repliers rebook at'],
+    ['Confirmed: free estimate at your place Thursday at 10:00 AM with', 'Confirmed: your free consultation on Thursday at 10:00 AM at'], [/Reminder: (.+?) is coming tomorrow at 10:00 AM\./, 'Reminder: your visit is tomorrow at 10:00 AM with $1.'],
+    ['We are on the way. Arriving around 10:00 AM.', 'We are ready for you. See you around 10:00 AM.'], ['Estimate appointments get confirmed', 'Appointments get confirmed'], ['Customer phone', 'Client phone'], ['Customer replies R', 'Client replies R'],
+    ['Instant ballpark for homeowners', 'Instant price range for clients'], ['Homeowners want a number before they call.', 'Clients want a number before they book.'], ['Priced per project.', 'Priced per treatment.'],
+    ['always gets a free estimate for the exact number', 'always gets a free consultation for the exact price'], ['Book my free estimate', 'Book my free consultation'], ['Free estimate · tomorrow', 'Free consultation · tomorrow'], ['Project', 'Treatment'],
+    ['One tap when the job is done', 'One tap when the visit is done'], ['The work finishes and the marketing starts: reviews, a before and after post, referrals, and a reminder for the next job.', 'The visit ends and the follow-up starts: reviews, a before and after post, referrals, and a reminder for the next visit.'],
+    ['Finished project', 'Treatment'], ['Mark job done', 'Mark visit done'], ['You tap "job done"', 'You tap "visit done"'], ['Another yard finished. Want yours next? Message us for a free estimate.', 'Another happy client. Want to be next? Message us for a free consultation.'],
+    ['know a neighbor thinking about a project?', 'know a friend thinking about a treatment?'], ['Estimate booked', 'Consultation booked'], ['Quote sent', 'Plan sent'], ['Tap the arrows to move a job along', 'Tap the arrows to move a client along'],
+    [/\bhomeowners\b/g, 'clients'], [/\bHomeowner\b/g, 'Client'], [/\bhomeowner\b/g, 'client'], [/\bcontractor\b/g, 'med spa'], [/\bon a job\b/g, 'with a client'],
+  ];
+  const medOn = () => !!(K && K.niche === 'medspa');
+  const T = (t) => { if (!medOn() || typeof t !== 'string') return t; let o = t; for (const [a, b] of MED_MAP) o = o.replace(a, b); return o; };
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
       if (v == null || v === false) continue;
       if (k === 'class') el.className = v; else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'value') el.value = v; else el.setAttribute(k, v === true ? '' : v);
+      else if (k === 'value') el.value = v; else el.setAttribute(k, v === true ? '' : (k === 'placeholder' ? T(v) : v));
     }
-    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(typeof kid === 'string' ? T(kid) : kid));
     return el;
   }
   const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
@@ -103,7 +129,7 @@
       h('p', { class: 'lead' }, 'Move the sliders to your real numbers. This is example math, not a promise.'),
       h('div', { class: 'card' },
         row('Calls you miss each week', slider(1, 30, 1, miss, (v) => { miss = v; v1.textContent = v; upd(); }), v1),
-        row('Average job', slider(500, 30000, 500, avg, (v) => { avg = v; v2.textContent = money(v); upd(); }), v2),
+        row('Average job', slider(medOn() ? 50 : 500, medOn() ? 3000 : 30000, medOn() ? 50 : 500, avg, (v) => { avg = v; v2.textContent = money(v); upd(); }), v2),
         row('How many of those callers would have hired you', slider(10, 60, 5, close, (v) => { close = v; v3.textContent = v + '%'; upd(); }), v3)),
       h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Walking out the door each month'), out, yr),
       h('p', { class: 'lead' }, 'Everything on the next tabs is a working example for ' + K.business + '. Tap through it. Talk to the receptionist first.'),
@@ -155,7 +181,7 @@
     }
     const sendTyped = async () => { const t = input.value.trim(); if (!t || busy) return; input.value = ''; unlockAudio(); if (!hist.length) { const g = 'Thanks for calling ' + K.business + ', this is ' + K.agent + '. How can I help with your backyard?'; addMsg('in', g); hist.push({ r: 'a', t: g }); } await turn(t); say(active ? 'Listening…' : 'Type or tap to talk'); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendTyped(); } });
-    const ideas = ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
+    const ideas = medOn() ? ['How much is Botox?', 'Can I come in this week?', 'Do you do laser hair removal?', 'What helps with acne scars?'] : ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
     return [
       h('h2', null, 'Call ' + K.business + ' after hours'),
       h('p', { class: 'lead' }, 'This is a live AI voice receptionist. Tap the button, talk like a homeowner, and watch it book the estimate. ' + (K.premium_voice ? '' : 'Voice is a standard demo voice. The real one is custom.')),
@@ -276,7 +302,12 @@
   }
 
   function pWinback() {
-    const camps = [
+    const camps = medOn() ? [
+      ['Skin refresh', (n) => 'Hi {first}, it is ' + n + ' at ' + K.business + '. It has been a while since your last visit. Want to book a skin refresh this month? Reply YES and I will send open times.'],
+      ['Touch-up reminder', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Your results are due for a touch-up check. Want me to hold a time this week? Reply YES.'],
+      ['Summer ready', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Summer is close. Laser and facials are easiest to start now. Want a free consultation? Reply YES.'],
+      ['Bring a friend', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Bring a friend to her first visit and you both get a thank-you from us. Reply YES for details.'],
+    ] : [
       ['Spring refresh', (n) => 'Hi {first}, it is ' + n + ' at ' + K.business + '. Spring is here. Want us to take a look at refreshing the yard we built for you? Reply YES and I will send a quick quote.'],
       ['Shade for summer', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Summer is coming. A shade structure over your patio makes the yard usable all day. Want a free quote? Reply YES.'],
       ['Before the rain', (n) => 'Hi {first}, ' + n + ' at ' + K.business + '. Rain season is close. Want us to check your drainage before it matters? Reply YES for a free look.'],
@@ -288,7 +319,7 @@
     const names = [['Sarah M.', 'Replied YES'], ['Carlos R.', 'Sent'], ['Dana W.', 'Sent'], ['Mike T.', 'Replied YES'], ['Priya S.', 'Sent']];
     const list = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Sample past customers'), names.map(([n, st]) => h('div', { class: 'out', style: 'padding:6px 0;border-bottom:1px solid var(--line)' }, h('span', null, n), h('span', { class: 'pill' + (st[0] === 'R' ? ' ok' : '') }, st))));
     const calc = () => { math.textContent = money(past * (rate / 100) * 0.5 * K.avg_job); };
-    const draw = () => { msg.textContent = camps[ci][1](who); };
+    const draw = () => { msg.textContent = T(camps[ci][1](who)); };
     const chips = h('div', { class: 'chips' }, camps.map((c, i) => h('button', { class: 'chip' + (i === 0 ? ' on' : ''), onclick: (e) => { ci = i; [...chips.children].forEach((x) => x.classList.remove('on')); e.target.classList.add('on'); draw(); } }, c[0])));
     const v1 = h('b', null, past), v2 = h('b', null, rate + '%');
     draw(); calc();
@@ -340,7 +371,7 @@
       const s = svc(sid), lo = s.unit === 'project' ? s.lo : s.lo * qty, hi = s.unit === 'project' ? s.hi : s.hi * qty;
       out.replaceChildren(h('p', { class: 'eyebrow' }, 'Ballpark'), h('div', { class: 'big' }, money(lo) + ' to ' + money(hi)),
         h('p', { class: 'note' }, 'Example ranges only. Your real rates go here, and the homeowner always gets a free estimate for the exact number.'),
-        h('div', { class: 'lc', style: 'margin-top:12px' }, h('b', null, 'What you get as a lead'), h('small', null, 'Sarah M. · ' + s.name + ' · ' + (s.unit === 'project' ? 'project' : qty + ' ' + s.unit) + ' · asked for ~' + money(mid(s, qty)))));
+        h('div', { class: 'lc', style: 'margin-top:12px' }, h('b', null, 'What you get as a lead'), h('small', null, 'Sarah M. · ' + s.name + ' · ' + (s.unit === 'project' ? (medOn() ? 'treatment' : 'project') : qty + ' ' + s.unit) + ' · asked for ~' + money(mid(s, qty)))));
       booked.replaceChildren();
     }
     drawSize(); draw();
@@ -352,6 +383,7 @@
     ];
   }
 
+  const KEEP_MED = { botox: 'touch-up check', filler: 'follow-up check', laser: 'next laser session', facial: 'monthly facial', needle: 'next microneedling session', contour: 'progress check', peel: 'next peel', weight: 'monthly check-in' };
   const KEEP = { turf: 'yearly cleaning check', pavers: 'sealing check in 2 years', deck: 'yearly reseal check', patio: 'sealing check in 2 years', fence: 'stain check in 2 years', wall: 'yearly inspection', pergola: 'yearly inspection', kitchen: 'yearly inspection', drainage: 'check before rainy season', lighting: 'yearly bulb and timer check' };
   function pJobdone() {
     let sid = K.services[0].id;
@@ -364,7 +396,7 @@
         ['2 hours later · review ask', 'Hi Sarah, it is ' + who + ' at ' + K.business + '. Thanks for trusting us with your ' + n + '. Would you share a quick Google review? g.page/your-business'],
         ['Same day · before and after post (draft for you to approve)', 'Before and after: ' + n + ' in ' + K.city + '. Another yard finished. Want yours next? Message us for a free estimate.'],
         ['3 days later · referral ask', 'Sarah, know a neighbor thinking about a project? Send them my way and I will thank you both when they book.'],
-        ['Later · ' + KEEP[sid], 'Hi Sarah, ' + who + ' here. Time for a ' + KEEP[sid] + ' on your ' + n + '. Want me to schedule it? (Suggested timing. You set it.)'],
+        ['Later · ' + (medOn() ? KEEP_MED[sid] : KEEP[sid]), medOn() ? 'Hi Sarah, ' + who + ' here. Time for your ' + KEEP_MED[sid] + '. Want me to schedule it? (Suggested timing. You set it.)' : 'Hi Sarah, ' + who + ' here. Time for a ' + KEEP[sid] + ' on your ' + n + '. Want me to schedule it? (Suggested timing. You set it.)'],
       ];
       for (const [w, m] of steps) { tl.append(h('div', { class: 'step' }, h('div', { class: 'when' }, w), h('div', { class: 'msg' }, m))); await wait(450); }
     };
@@ -376,7 +408,7 @@
   }
 
   function pTracker() {
-    const cols = ['New', 'Estimate booked', 'Quote sent', 'Won'];
+    const cols = ['New', 'Consult booked', 'Plan sent', 'Won'];
     const names = ['Sarah M.', 'Carlos R.', 'Dana W.', 'Mike T.', 'Priya S.', 'Jordan L.'];
     const cards = names.map((n, i) => { const s = K.services[i % K.services.length]; return { n, s: s.name, amt: Math.round(mid(s, typicalQty(s)) / 100) * 100, c: [0, 0, 1, 1, 2, 3][i], src: ['Missed call', 'Website chat', 'Facebook ad', 'Voice receptionist', 'Website form', 'Referral'][i] }; });
     const board = h('div', { class: 'board' });

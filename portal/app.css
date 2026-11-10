@@ -1498,3 +1498,43 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .sc-act small{color:var(--dim)}
 .sc-act .sc-ok{color:#3ddc97;font-weight:700}
 .sc-act .row{gap:6px;flex-wrap:wrap}
+
+/* category fonts + drop-downs */
+:root{--display:"Sora","Inter Tight",system-ui,sans-serif}
+.cat-head h1{font:800 34px/1.05 var(--display);letter-spacing:-.035em}
+.cat-head .kicker{font-family:var(--display);font-weight:600;letter-spacing:.14em}
+.hub-h,.side-label{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:none;border:0;color:var(--ink);cursor:pointer;text-align:left}
+.hub-h{font:700 15px var(--display);letter-spacing:-.01em;padding:6px 2px 10px}
+.hub-h svg,.side-label svg{width:16px;height:16px;transition:transform .2s;transform:rotate(90deg);color:var(--dim)}
+.hub-h[aria-expanded="false"] svg,.side-label[aria-expanded="false"] svg{transform:rotate(0deg)}
+.hub-sec .hub-grid.closed,.side-links.closed{display:none}
+.hub-tile b{font-family:var(--display);font-weight:700;letter-spacing:-.015em}
+.side-label{font:700 11px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:6px 12px 8px}
+.side-label:hover{color:var(--ink)}
+
+/* Demo Studio */
+.sh{margin:-20px -16px 0;padding-top:20px!important;padding:0 16px 40px;min-height:calc(100svh - var(--top,56px) - var(--nav,64px));background:radial-gradient(120% 70% at 50% -10%,#4f86ff 0%,rgba(79,134,255,0) 60%),linear-gradient(170deg,#08173f 0%,#123a9c 48%,#2f6bff 100%);color:#fff}
+.sh .crumb{color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.08);margin-top:16px}
+.sh-hero{padding:44px 4px 22px;max-width:760px;margin:0 auto;text-align:center}
+.sh-hero.small{padding:20px 4px 14px;text-align:left;margin:0 auto}
+.sh-kick{font:700 12px var(--display);letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.7);margin:0 0 12px}
+.sh-hero h1{font:800 clamp(30px,6vw,52px)/1.05 var(--display);letter-spacing:-.04em;margin:0}
+.sh-sub{color:rgba(255,255,255,.8);font-size:16px;margin:14px auto 0;max-width:52ch}
+.sh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;max-width:1000px;margin:10px auto 0}
+.sh-card{display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;text-decoration:none;transition:transform .15s,background .15s;animation:shUp .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i)*40ms)}
+.sh-card:hover{background:rgba(255,255,255,.18)}.sh-card:active{transform:scale(.97)}
+.sh-card b{font:700 17px var(--display);letter-spacing:-.02em}
+.sh-card small{color:rgba(255,255,255,.78);font-size:13px;line-height:1.4}
+.sh-ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.18)}
+.sh-ic svg{width:20px;height:20px}
+@keyframes shUp{from{opacity:0;transform:translateY(18px)}}
+.sh-link{display:flex;align-items:center;justify-content:center;gap:6px;margin:22px auto 0;color:rgba(255,255,255,.85);font-weight:600;font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.sh-link svg{width:14px;height:14px}
+.sp-card{max-width:760px;margin:12px auto 0;padding:16px;border-radius:20px;background:var(--card);border:1px solid var(--line-2);color:var(--ink)}
+.sp-card h3{font:700 16px var(--display);margin:0 0 4px}
+.sp-leads{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:340px;overflow:auto}
+.sp-lead{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;padding:12px;border-radius:14px;border:1px solid var(--line-2);background:var(--bg-2,transparent);color:var(--ink);cursor:pointer}
+.sp-lead small{display:block;color:var(--dim);margin-top:2px}
+.sp-lead.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(91,140,255,.35)}
+.sp-ready{display:flex;flex-direction:column;gap:8px}
+.sp-ready small{color:var(--dim);word-break:break-all}

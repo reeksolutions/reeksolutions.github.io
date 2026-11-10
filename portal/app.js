@@ -183,6 +183,19 @@
   Object.keys(CATS).forEach((k) => catItems(k).forEach((i) => { CAT_OF[i[0]] = k; }));
   const ROLE_NAME = { admin: 'Admin', rep: 'Sales rep', dev: 'Demo builder' };
 
+  /* ---- drop-down sections (category pages + sidebar): closed state is remembered ---- */
+  const closedSet = () => { try { return new Set(JSON.parse(localStorage.getItem('rs_closed') || '[]')); } catch { return new Set(); } };
+  const saveClosed = (set) => { try { localStorage.setItem('rs_closed', JSON.stringify([...set])); } catch { /* private mode */ } };
+  function dropHead(key, label, box, cls) {
+    const set = closedSet(), shut = set.has(key);
+    box.classList.toggle('closed', shut);
+    return h('button', { type: 'button', class: cls, 'aria-expanded': String(!shut), onclick: (e) => {
+      const c = !box.classList.contains('closed'); box.classList.toggle('closed', c);
+      e.currentTarget.setAttribute('aria-expanded', String(!c));
+      const t = closedSet(); if (c) t.add(key); else t.delete(key); saveClosed(t);
+    } }, h('span', null, label), icon('chev'));
+  }
+
   /* ---- slot-machine page switch: pages sit on a reel in tab order; going to a later page rolls up, an earlier one rolls down ---- */
   const SLOT_CATS = ['home', 'sell', 'create', 'crew', 'more'];
   function slotPos(hash) {
@@ -280,7 +293,7 @@
     const catKey = S.me.role === 'admin' ? CAT_OF[active] : null;
     const isAdmin = S.me.role === 'admin';
     document.documentElement.classList.remove('nonav');
-    const crumb = crumbOver ? crumbTo(crumbOver.href, crumbOver.label)
+    const crumb = crumbOver === 'none' ? null : crumbOver ? crumbTo(crumbOver.href, crumbOver.label)
       : catKey && catKey !== active ? h('a', { class: 'crumb cat', href: '#/' + catKey }, icon('chev'), CATS[catKey][0])
       : isAdmin && !['home', 'sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home')
       : isAdmin && ['sell', 'create', 'crew', 'more'].includes(active) ? h('a', { class: 'crumb cat', href: '#/home' }, icon('chev'), 'Home') : null;
@@ -290,10 +303,13 @@
         k === 'callbacks' || (k === 'sell' && S.me.role === 'admin') ? h('span', { class: 'count cb-count', hidden: true }) : null)));
     const side = h('aside', { class: 'side', 'aria-label': 'Sidebar' },
       h('a', { href: '#/' + home(), class: 'logo' }, icon('logo'), h('span', null, 'Reekon ', h('em', null, 'Systems'))),
-      h('div', { class: 'side-scroll' }, navFor(S.me.role).map(([group, items]) => h('div', { class: 'side-group' },
-        group ? h('div', { class: 'side-label' }, group) : null,
-        items.map(([k, label]) => h('a', { href: '#/' + k, class: 'side-link' + (sideActive === k ? ' on' : '') }, icon(TAB_ICON[k] || k), h('span', null, label),
-          k === 'callbacks' ? h('span', { class: 'count cb-count', hidden: true }) : null))))),
+      h('div', { class: 'side-scroll' }, navFor(S.me.role).map(([group, items]) => {
+        const links = h('div', { class: 'side-links' }, items.map(([k, label]) => h('a', { href: '#/' + k, class: 'side-link' + (sideActive === k ? ' on' : '') }, icon(TAB_ICON[k] || k), h('span', null, label),
+          k === 'callbacks' ? h('span', { class: 'count cb-count', hidden: true }) : null)));
+        const head = group ? dropHead('side:' + group, group, links, 'side-label') : null;
+        if (head && links.querySelector('.on')) { links.classList.remove('closed'); head.setAttribute('aria-expanded', 'true'); }
+        return h('div', { class: 'side-group' }, head, links);
+      })),
       h('a', { href: '#/account', class: 'side-me' + (active === 'account' ? ' on' : '') }, h('span', { class: 'avatar' }, initials(S.me.name)),
         h('span', { class: 'who' }, h('b', null, S.me.name), h('small', null, ROLE_NAME[S.me.role] || S.me.role)), icon('chev')));
     const top = h('header', { class: 'top' },
@@ -341,7 +357,7 @@
         case 'rebrief': return await viewRebrief(arg);
         case 'cards': return await viewCards();
         case 'settings': return await viewSettings();
-        case 'studio': return await viewStudio(+arg || null);
+        case 'studio': if (+arg) return await viewStudio(+arg); if (arg === 'build') return await viewStudio(null); if (arg && studioOffer(arg)) return await viewStudioOffer(arg); return viewStudioHome();
         case 'lab': return await viewLab(arg);
         case 'integrations': return await viewIntegrations();
         case 'rep': return await viewRep(+arg);
@@ -1740,6 +1756,84 @@
       result,
       h('div', { class: 'page-head', style: 'margin-top:18px' }, h('div', null, h('h2', null, 'Your demos'), h('p', { class: 'sub' }, 'You get a Discord alert the first time they open it and when they talk to the AI.'))), list,
     ]);
+  }
+
+  /* ================= Demo Studio: pick an offer, connect a lead, send the demo ================= */
+  const STUDIO_OFFERS = [
+    ['voice', 'AI receptionist', 'Answers every call and books the consultation. They talk to it live.', 'phone'],
+    ['textback', 'Missed-call text-back', 'A call goes unanswered, a text goes out in seconds.', 'sms'],
+    ['speed', 'Instant lead reply', 'New inquiry in, answer out before the next med spa replies.', 'bolt'],
+    ['quotes', 'Consultation follow-up', 'Quiet consultations get nudged until they reply.', 'mail'],
+    ['reviews', 'Review requests', 'Happy clients go to Google, unhappy ones come to you first.', 'spark'],
+    ['winback', 'Win back clients', 'A text wakes up past clients and fills the book.', 'users'],
+    ['remind', 'Reminders and no-shows', 'Confirm, remind and reschedule by text. No phone tag.', 'calendar'],
+    ['ballpark', 'Instant price range', 'Give a range on the website, get a qualified lead back.', 'deals'],
+    ['jobdone', 'Visit-done automation', 'One tap after a visit starts reviews, referrals and rebooking.', 'flag'],
+    ['tracker', 'Lead tracker', 'Every call, text and form lands in one board with the money.', 'leads'],
+    ['site', 'Website + chat', 'A sample site built for them with an AI chat in the corner.', 'search'],
+    ['math', 'The missed-money math', 'Sliders that show what missed calls cost them each month.', 'chart'],
+  ];
+  const studioOffer = (id) => STUDIO_OFFERS.find((o) => o[0] === id);
+
+  function viewStudioHome() {
+    shell('studio', h('div', { class: 'sh' },
+      h('a', { class: 'crumb', href: '#/create' }, icon('chev'), 'Create'),
+      h('div', { class: 'sh-hero' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, 'What do you want to demo today?'),
+        h('p', { class: 'sh-sub' }, 'Pick an offer. Then connect the lead who asked for it and send them a live demo.')),
+      h('div', { class: 'sh-grid' }, STUDIO_OFFERS.map(([id, name, line, ic], i) => h('a', { class: 'sh-card', href: '#/studio/' + id, style: '--i:' + i },
+        h('span', { class: 'sh-ic' }, icon(ic)), h('b', null, name), h('small', null, line)))),
+      h('a', { class: 'sh-link', href: '#/studio/build' }, 'Need a full custom website instead? Build one with AI', icon('chev'))), 'none');
+  }
+
+  async function viewStudioOffer(id) {
+    const [oid, name, line] = studioOffer(id);
+    const r = await api('GET', '/studio/demo-leads');
+    let lead = null, built = null;
+    const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
+    const pickBox = h('div', { class: 'sp-leads' });
+    const resultBox = h('div');
+    const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready' }[st] || st);
+    const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
+    const dmFor = (L, link) => 'Hey ' + ((L.owner || '').split(' ')[0] || 'there') + ', it\'s ' + first(S.me.name) + '. I put together a quick live demo of ' + name.toLowerCase() + ' for ' + L.business + '. Tap it and try it yourself: ' + link;
+    function drawLeads() {
+      pickBox.replaceChildren(...(r.leads.length ? r.leads.map((L) => h('button', { type: 'button', class: 'sp-lead' + (lead && lead.id === L.id ? ' on' : ''), onclick: () => { lead = L; built = null; drawLeads(); drawResult(); } },
+        h('div', null, h('b', null, L.business), h('small', null, [L.city, L.category].filter(Boolean).join(' · ') + (L.status === 'booked' && L.booked_at ? ' · ' + dayWord(L.booked_at) : ''))),
+        h('span', { class: 'tag ' + (L.status === 'booked' || L.status === 'call2' ? 'good' : '') }, tag(L.status)))) : [h('p', { class: 'dim' }, 'No leads yet who booked an audit or asked for a demo. Log an audit booked on a lead and they show up here.')]));
+    }
+    async function build(btn) {
+      btn.disabled = true;
+      try {
+        let slug = lead.kit_slug;
+        if (!slug) {
+          const k = await api('POST', '/kits', { business: lead.business, owner: lead.owner || '', city: lead.city || '', phone: lead.phone || '', lead_id: lead.id, niche: lead.med ? 'medspa' : 'contractor' });
+          slug = k.slug; lead.kit_slug = slug;
+        }
+        built = linkFor(slug); drawResult(); toast('Demo ready');
+      } catch (e) { fail(e); btn.disabled = false; }
+    }
+    function drawResult() {
+      if (!lead) { resultBox.replaceChildren(h('p', { class: 'dim small' }, 'Pick a lead to connect it to this demo.')); return; }
+      if (!built) { const b = h('button', { class: 'btn primary block', type: 'button', onclick: () => build(b) }, icon('spark'), (lead.kit_slug ? 'Open the demo for ' : 'Build the demo for ') + lead.business);
+        resultBox.replaceChildren(b, lead.med ? null : h('p', { class: 'dim small', style: 'margin-top:8px' }, 'This lead does not look like a med spa, so the demo will use contractor wording.')); return; }
+      const msg = dmFor(lead, built);
+      resultBox.replaceChildren(h('section', { class: 'sp-ready' }, h('b', null, 'Ready for ' + lead.business), h('small', null, built),
+        h('div', { class: 'row wrap' },
+          h('a', { class: 'btn primary', href: built, target: '_blank', rel: 'noopener' }, 'Open it'),
+          lead.phone ? h('a', { class: 'btn', href: 'sms:' + lead.phone + '?&body=' + encodeURIComponent(msg) }, 'Text it') : null,
+          h('button', { class: 'btn', type: 'button', onclick: () => copy(built, 'Link copied') }, 'Copy link'),
+          h('button', { class: 'btn', type: 'button', onclick: () => copy(msg, 'Message copied') }, 'Copy message')),
+        h('div', { class: 'row wrap', style: 'margin-top:8px' },
+          h('button', { class: 'btn ok', type: 'button', onclick: async (e) => { const b = e.currentTarget; b.disabled = true; try { await api('POST', '/leads/' + lead.id + '/calls', { outcome: 'demo_sent' }); toast('Logged: demo sent'); b.textContent = 'Demo sent ✓'; } catch (x) { fail(x); b.disabled = false; } } }, 'I sent the demo'),
+          h('a', { class: 'btn', href: '#/lead/' + lead.id }, 'Open the lead'))));
+    }
+    drawLeads(); drawResult();
+    shell('studio', h('div', { class: 'sh sh-offer' },
+      h('a', { class: 'crumb', href: '#/studio' }, icon('chev'), 'All offers'),
+      h('div', { class: 'sh-hero small' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, name), h('p', { class: 'sh-sub' }, line)),
+      h('section', { class: 'sp-card' }, h('h3', null, '1. Connect a lead'), h('p', { class: 'dim small' }, 'Leads who booked an audit or asked for a demo, newest audits first.'), pickBox),
+      h('section', { class: 'sp-card' }, h('h3', null, '2. Build and send'), resultBox),
+      oid === 'site' ? h('a', { class: 'sh-link', href: '#/studio/build' }, 'Want a fully custom site? Build one with AI', icon('chev')) : null), 'none');
   }
 
   async function viewStudio(leadId) {
@@ -5171,11 +5265,11 @@ function api(method, path, body) {
   function viewCategory(key) {
     const [title, sub, groups] = CATS[key];
     shell(key, [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Category'), h('h1', null, title), h('p', { class: 'sub' }, sub))),
+      h('div', { class: 'page-head cat-head' }, h('div', null, h('p', { class: 'kicker' }, 'Category'), h('h1', null, title), h('p', { class: 'sub' }, sub))),
       key === 'create' ? h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting') : null,
-      groups.map(([label, items]) => h('section', { class: 'hub-sec' }, h('span', { class: 'eyebrow' }, label),
-        h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s2, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
-          h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s2)))))),
+      groups.map(([label, items]) => { const grid = h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s2, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
+          h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s2))));
+        return h('section', { class: 'hub-sec' }, dropHead(key + ':' + label, label, grid, 'hub-h'), grid); }),
     ]);
   }
 
