@@ -141,3 +141,21 @@ input[type=range]{accent-color:var(--blue)}
 .dock .btn{border-radius:16px;font-size:16px}
 .sheet-in{background:#0d1017;border-color:var(--line)}
 .frame{border-color:var(--line)}
+
+/* phone-call screen */
+.gline{margin:0 0 6px;font-size:13.5px;color:#e9ecf5}
+.call-kick{font:600 11px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:18px}
+.call-card{padding:26px 16px 30px;min-height:430px;display:flex;flex-direction:column;align-items:center}
+.call-card>b{font-size:24px}
+.call-time{font:600 18px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;color:var(--pop);min-height:20px;margin-top:12px}
+.call-card .status{margin:8px 0 0;flex:1}
+.call-card.ringing .avatar{animation:kring 1s infinite}
+.call-card.ringing .status{animation:kblink 1s infinite}
+@keyframes kblink{50%{opacity:.45}}
+.mic{flex-direction:column;min-width:0;width:84px;height:84px;padding:0;gap:0;font-size:0;border-radius:50%;position:relative;margin-bottom:26px}
+.mic::before{width:34px;height:34px;transition:transform .25s}
+.mic::after{content:"Call";position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);font:600 13px Inter,system-ui,sans-serif;color:var(--mut);white-space:nowrap}
+.mic.rec::before{transform:rotate(135deg)}
+.mic.rec::after{content:"End call"}
+.type-box{margin:0 0 12px}
+[hidden]{display:none!important}

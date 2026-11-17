@@ -1261,6 +1261,12 @@ async function handleIngest(request, env) {
 }
 
 // shared lead filters (list + export)
+// leads outside the niche that nobody has worked stay out of the list and board (search or ?all=1 still finds them)
+function hideNonFocus(w, args, fx, p) {
+  if (p.get('all') === '1' || p.get('q')) return { w, args };
+  const c = `(l.status NOT IN ('new','demo_needed','demo_ready') OR ${fx.sql})`;
+  return { w: w ? w + ' AND ' + c : 'WHERE ' + c, args: args.concat(fx.args) };
+}
 function leadFilter(p, user) {
   const where = [], args = [];
   if (user.role === 'rep') { where.push('l.assigned_to = ?', "l.status != 'dnc'"); args.push(user.id); }
@@ -1568,6 +1574,7 @@ async function api(request, env, url) {
     const p = url.searchParams;
     let { w, args } = leadFilter(p, user);
     const fx = focusSql(await focusTerms(env));
+    ({ w, args } = hideNonFocus(w, args, fx, p));
     const PRIO = await leadPrio(env);
     if (p.get('focus') === '1') { w = (w ? w + ' AND ' : 'WHERE ') + fx.sql; args = [...args, ...fx.args]; }
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
@@ -1589,7 +1596,8 @@ async function api(request, env, url) {
   if (path === '/leads/board' && method === 'GET') {
     need(user, 'admin', 'rep');
     const p = new URLSearchParams(url.searchParams); p.set('status', 'all_board');
-    const { w, args } = leadFilter(p, user);
+    let { w, args } = leadFilter(p, user);
+    ({ w, args } = hideNonFocus(w, args, focusSql(await focusTerms(env)), url.searchParams));
     const base = w ? w + ' AND' : 'WHERE';
     const per = Math.min(+url.searchParams.get('per') || 40, 100);
     const fx = focusSql(await focusTerms(env));
@@ -4784,6 +4792,20 @@ const KIT_REMODEL = {
   ],
   ideas: ['How much to remodel a kitchen?', 'Can you come give an estimate this week?', 'Do you handle permits?', 'How long does a bathroom take?'],
 };
+const KIT_LANDSCAPE = {
+  type: 'landscaping company', visit: 'free estimate', customer: 'homeowner',
+  tagline: 'Yards that look cared for in {city}.',
+  services: [
+    { name: 'Lawn care and maintenance', unit: 'project', lo: 120, hi: 350, q: 'About how big is the yard, and do you want weekly or every other week?', blurb: 'Mowing, edging and cleanup on a schedule you can count on.' },
+    { name: 'Landscape design and install', unit: 'project', lo: 3500, hi: 18000, q: 'Is it the front yard, the back yard or both, and what look are you after?', blurb: 'New plants, beds and layouts built around how you use the yard.' },
+    { name: 'Sod and artificial turf', unit: 'sq ft', lo: 3, hi: 14, q: 'About how many square feet, and do you want real sod or turf?', blurb: 'A green lawn fast, real or low-maintenance turf.' },
+    { name: 'Sprinklers and irrigation', unit: 'project', lo: 350, hi: 4500, q: 'Is it a repair, or a new system?', blurb: 'Leak repairs, new zones and smart timers that save water.' },
+    { name: 'Tree trimming and removal', unit: 'project', lo: 300, hi: 2500, q: 'How many trees, and about how tall are they?', blurb: 'Safe trimming and removal, hauled away when we leave.' },
+    { name: 'Yard cleanup', unit: 'project', lo: 250, hi: 1200, q: 'Is it overgrowth, leaves and debris, or a full reset?', blurb: 'Overgrown yards cleared and hauled in a day.' },
+  ],
+  ideas: ['How much for weekly lawn care?', 'Can you come give an estimate this week?', 'My sprinklers are leaking', 'Do you remove trees?'],
+};
+const LANDSCAPE_RE = /landscap|lawn|gardener|gardening|tree service|yard care|irrigation|sprinkler/i;
 const REMODEL_RE = /remodel|renovat|general contractor|home improvement|kitchen and bath|\badu\b/i;
 const ROOF_RE = /roof|shingle|gutter/i;
 const TILE_RE = /\btil(e|es|er|ers|ing)\b|grout|backsplash/i;
@@ -4814,6 +4836,7 @@ async function kitProfileAI(env, type, business, city) {
   if (ROOF_RE.test(type)) return kitProfileClean(KIT_ROOF, 'roofing contractor');
   if (TILE_RE.test(type)) return kitProfileClean(KIT_TILE, 'tile contractor');
   if (REMODEL_RE.test(type)) return kitProfileClean(KIT_REMODEL, 'remodeling contractor');
+  if (LANDSCAPE_RE.test(type) && !/paver|hardscape|turf install/i.test(type)) return kitProfileClean(KIT_LANDSCAPE, 'landscaping company');
   if (JUNK_RE.test(type)) return kitProfileClean(KIT_JUNK, 'junk removal');
   if (env.AI) {
     try {
@@ -4836,6 +4859,7 @@ async function kitProfileAI(env, type, business, city) {
 function kitNicheFor(category, business) {
   const t = String(category || '') + ' ' + String(business || '');
   if (ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
+  if (LANDSCAPE_RE.test(t) && !/paver|hardscape|turf install/i.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
   return String(category || '').trim() ? 'custom' : 'medspa';
@@ -4883,6 +4907,7 @@ function kitPublic(row) {
   const [agent, speaker] = KIT_AGENTS[(d.agent_ix | 0) % KIT_AGENTS.length];
   return {
     slug: row.slug, business: d.business, owner: d.owner || '', city: d.city, phone: d.phone, hours: d.hours, tagline: d.tagline,
+    address: (d.google && d.google.address) || '', rating: (d.google && d.google.rating) || '', reviews: d.google && d.google.reviews != null ? d.google.reviews : null, category: (d.google && d.google.category) || '',
     niche: d.niche === 'medspa' ? 'medspa' : d.niche === 'custom' && d.custom ? 'custom' : 'contractor', look: KIT_LOOKS[d.look] ? d.look : 'earth', agent, speaker, avg_job: d.avg_job || (d.niche === 'medspa' ? 450 : 6500), premium_voice: d.voice !== 'aura',
     services: d.niche === 'custom' && d.custom ? d.custom.services.map((x, i) => ({ id: 'c' + (i + 1), ...x }))
       : (d.services || (d.niche === 'medspa' ? KIT_DEFAULT_MED : KIT_DEFAULT_SERVICES)).filter((x) => KIT_ALL[x]).map((id) => ({ id, ...KIT_ALL[id] })),
@@ -4976,6 +5001,7 @@ async function kitTranscribe(env, buf) {
 }
 const b64buf = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 
+const kitFacts = (k) => [k.address ? 'ADDRESS: ' + k.address + '.' : '', k.phone ? 'PHONE: ' + k.phone + '.' : '', k.rating ? 'GOOGLE RATING: ' + k.rating + ' stars' + (k.reviews ? ' from ' + k.reviews + ' reviews' : '') + '. Only mention it if asked about reviews.' : ''].filter(Boolean).join('\n');
 function kitPrompt(k, mode) {
   const style = mode === 'voice' ? 'You are speaking out loud on a phone call: at most 2 short sentences, under 35 words, never read lists or say symbols.'
     : mode === 'sms' ? 'You are texting: under 220 characters, one question at a time, no emojis.' : 'You are in a website chat: under 60 words, friendly and plain.';
@@ -4987,6 +5013,7 @@ Know only what is written here. Never invent providers, credentials, years in bu
 TREATMENTS: ${k.services.map((s) => s.name).join(', ')}.
 EXAMPLE PRICE RANGES (always say the free consultation gives the exact price): ${kitBallparks(k).replace(/ per project/g, ' per visit')}.
 HOURS: ${k.hours}.
+${kitFacts(k)}
 YOUR JOB: answer their question in a sentence or two, then find out which treatment they want, any area or concern, and their timeline (one question at a time). Then get their first name and best phone number, then book a free consultation by offering two time slots like "tomorrow at 11 or 3". Use weekday names, never calendar dates.
 ${style} Plain words. No markdown.
 Once they give name, phone and pick a time, confirm in one sentence, say a confirmation text is on its way, and fill in booking. Otherwise booking is null.
@@ -4999,6 +5026,7 @@ Know only what is written here. Never invent licenses, years in business, street
 SERVICES: ${k.services.map((s) => s.name).join(', ')}.
 EXAMPLE PRICE RANGES (always say the ${k.visit} gives the exact price): ${kitBallparks(k)}.
 HOURS: ${k.hours}.
+${kitFacts(k)}
 HOW TO SIZE A JOB, ask the matching question: ${k.services.map((s) => s.name + ' -> ' + s.q).join(' | ')}.
 YOUR JOB: answer their question in a sentence or two, then find out what they need, how big the job is, their city or zip, and their timeline (one question at a time). Then get their first name and best phone number, then book a ${k.visit} by offering two time slots like "tomorrow at 10 or 2". Use weekday names, never calendar dates.
 ${style} Plain words. No markdown.
@@ -5011,6 +5039,7 @@ Know only what is written here. Never invent licenses, years in business, street
 SERVICES: ${k.services.map((s) => s.name).join(', ')}.
 EXAMPLE BALLPARKS (always say the free on-site estimate gives the exact price): ${kitBallparks(k)}.
 HOURS: ${k.hours}.
+${kitFacts(k)}
 YOUR JOB: answer their question in a sentence or two, then find out the project, rough size, their city or zip, and timeline (one question at a time). Then get their first name and best phone number, then book a free on-site estimate by offering two time slots like "tomorrow at 10 or 2". Use weekday names, never calendar dates.
 ${style} Plain words. No markdown.
 Once they give name, phone and pick a time, confirm in one sentence, say a confirmation text is on its way, and fill in booking. Otherwise booking is null.
@@ -5240,14 +5269,24 @@ async function kitAdmin(env, user, path, method, body, url) {
   }
   if (path === '/kits' && method === 'POST') {
     let leadId = null, leadCat = '';
-    if (body.lead_id) { const l = await env.DB.prepare('SELECT id, category, business FROM leads WHERE id = ?').bind(+body.lead_id).first(); if (l) { leadId = l.id; leadCat = (l.category || '') + ' ' + (l.business || ''); } }
+    let google = null;
+    if (body.lead_id) { const l = await env.DB.prepare('SELECT id, category, business, owner, city, phone, address, rating, reviews, website, link FROM leads WHERE id = ?').bind(+body.lead_id).first();
+      if (l) { leadId = l.id; leadCat = (l.category || '') + ' ' + (l.business || '');
+        // the demo is written from this lead's own Google listing
+        if (!oneLine(body.business, 80)) body.business = l.business;
+        if (!oneLine(body.owner, 40) && l.owner) body.owner = l.owner;
+        if (!oneLine(body.city, 40) && l.city) body.city = l.city;
+        if (!oneLine(body.phone, 30) && l.phone) body.phone = l.phone;
+        google = { address: oneLine(l.address, 160), rating: l.rating ? String(l.rating).slice(0, 4) : '', reviews: Number.isFinite(+l.reviews) && l.reviews != null ? Math.round(+l.reviews) : null, category: oneLine(l.category, 60), website: oneLine(l.website, 200), link: oneLine(l.link, 300) };
+      } }
     const bizType = oneLine(body.biz_type, 60);
     if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
     const medFocus = await isMedFocus(env);
     if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
     if (body.niche === 'medspa' && !medFocus) body.niche = 'custom';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
+    if (google) data.google = google;
     const slug = kitSlug(data.business), t = now();
     const r = await env.DB.prepare('INSERT INTO demo_kits (slug, user_id, lead_id, data, created_at, updated_at) VALUES (?,?,?,?,?,?)').bind(slug, user.id, leadId, JSON.stringify(data), t, t).run();
     if (leadId) await env.DB.prepare("UPDATE leads SET demo_url = ?, updated_at = ? WHERE id = ? AND COALESCE(demo_url,'') = ''").bind(url.origin + '/k/' + slug, t, leadId).run();
@@ -5264,6 +5303,7 @@ async function kitAdmin(env, user, path, method, body, url) {
       const prevData = JSON.parse(row.data || '{}'), bt = oneLine(body.biz_type, 60);
       if (bt) { const nn = kitNicheFor(bt, ''); body.niche = nn; if (nn === 'custom') body._profile = await kitProfileAI(env, bt, oneLine(body.business ?? prevData.business, 80), oneLine(body.city ?? prevData.city, 40) || 'Los Angeles'); }
       const data = cleanKit(body, prevData);
+      if (prevData.google) data.google = prevData.google;
       await env.DB.prepare('UPDATE demo_kits SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), row.id).run();
       return json({ ok: true, data });
     }

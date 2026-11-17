@@ -212,21 +212,33 @@
     const avatar = h('div', { class: 'avatar' }, K.agent[0]);
     const status = h('div', { class: 'status' }, 'Tap to start the call');
     const thread = h('div', { class: 'thread card', style: 'min-height:80px' });
-    const addMsg = (cls, t) => { const m = h('div', { class: 'm ' + cls }, t); thread.append(m); thread.scrollTop = thread.scrollHeight; return m; };
-    const mic = h('button', { class: 'mic', onclick: toggle }, SR ? 'Tap to call' : 'Start');
+    const addMsg = (cls, t) => { if (cls === 'sys') status.textContent = t; };   // a real call has no message thread; only problems are shown
+    const timer = h('div', { class: 'call-time' }, '');
+    let tStart = 0, tInt = null;
+    const fmtT = () => { const n = Math.floor((Date.now() - tStart) / 1000); return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
+    const startTimer = () => { tStart = Date.now(); timer.textContent = '00:00'; clearInterval(tInt); tInt = setInterval(() => { timer.textContent = fmtT(); }, 1000); };
+    const stopTimer = () => { clearInterval(tInt); tInt = null; };
+    // ringback tone, like the phone ringing on the other end
+    const tone = (freqs, secs, vol) => new Promise((res) => { try { const AC = window.AudioContext || window.webkitAudioContext; const ac = new AC(); const g = ac.createGain(); g.gain.value = vol || 0.07; g.connect(ac.destination);
+      const t0 = ac.currentTime; freqs.forEach((f) => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + secs); });
+      setTimeout(() => { try { ac.close(); } catch { /* ok */ } res(); }, secs * 1000 + 120); } catch { setTimeout(res, 600); } });
+    const ring = async () => { card.classList.add('ringing'); await tone([440, 480], 1.6); if (active) await wait(500); card.classList.remove('ringing'); };
+    const typeBox = h('div', { class: 'type-box', hidden: true });
+    const showType = () => { typeBox.hidden = false; };
+    const mic = h('button', { class: 'mic', onclick: toggle }, 'Call');
     const box = h('div');
     const input = h('input', { type: 'text', placeholder: 'Or type what you would say', maxlength: 300, autocomplete: 'off' });
     const say = (t, cls) => { status.textContent = t; avatar.classList.toggle('live', cls === 'live'); };
     async function turn(text) {
-      addMsg('out', text); say('Thinking…'); busy = true;
+      say('…'); busy = true;
       let j; try { j = await call('talk', { mode: 'voice', text, history: hist }); } catch (e) { addMsg('sys', e.message); busy = false; return; }
       hist.push({ r: 'u', t: text }, { r: 'a', t: j.reply || '' });
       addMsg('in', j.reply); if (j.booking) box.append(bookingCard(j.booking, false));
-      say('Speaking…', 'live'); await speak(j.reply); busy = false;
+      say(K.agent + ' is speaking…', 'live'); await speak(j.reply); busy = false;
       if (j.limited) hang();
     }
     async function listen() {
-      say('Listening… talk now', 'live');
+      say('Listening…', 'live');
       let clip;
       try { clip = await listenClip(() => say('Hearing you…', 'live')); }
       catch (e) { micBlocked = true; throw e; }
@@ -239,33 +251,35 @@
       while (active) {
         if (busy) { await wait(200); continue; }
         let t = '';
-        try { t = await listen(); } catch (e) { mic.classList.remove('rec'); active = false; mic.textContent = 'Tap to call'; avatar.classList.remove('live');
+        try { t = await listen(); } catch (e) { mic.classList.remove('rec'); active = false; mic.textContent = 'Call'; avatar.classList.remove('live'); stopTimer(); card.classList.remove('oncall'); showType();
           say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap to call. Or type below.'); return; }
         if (!active) break;
-        if (!t) { if (++empties >= 3) { say('I did not hear anything. Tap to call again.'); hang(true); } continue; }
+        if (!t) { if (++empties >= 3) { hang(true); say('I did not hear anything. Tap Call to try again.'); } continue; }
         empties = 0; await turn(t); await wait(250);
       }
     }
-    function hang(quiet) { active = false; mic.classList.remove('rec'); mic.textContent = 'Tap to call'; try { stopListen && stopListen(); } catch { /* ok */ } releaseMic(); stopAudio(); if (!quiet) say('Call ended. Tap to call again.'); avatar.classList.remove('live'); }
+    function hang(quiet) { const was = active; active = false; mic.classList.remove('rec'); mic.textContent = 'Call'; try { stopListen && stopListen(); } catch { /* ok */ } releaseMic(); stopAudio(); stopTimer(); card.classList.remove('oncall', 'ringing'); if (was) tone([480, 620], 0.35, 0.05); if (!quiet) say('Call ended' + (tStart ? ' · ' + fmtT() : '')); avatar.classList.remove('live'); }
     async function toggle() {
       unlockAudio();
       if (active) return hang();
-      active = true; empties = 0; mic.classList.add('rec'); mic.textContent = 'Hang up';
-      if (SR) { try { await getMic(); } catch (e) { active = false; mic.classList.remove('rec'); mic.textContent = 'Tap to call'; say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap to call. Or type below.'); return; } }
-      if (!hist.length) { const g = T(greet()); addMsg('in', g); hist.push({ r: 'a', t: g }); say('Speaking…', 'live'); await speak(g); }
-      if (SR) loop(); else { say('Type your reply below'); active = false; mic.classList.remove('rec'); mic.textContent = 'Start'; }
+      active = true; empties = 0; tStart = 0; timer.textContent = ''; mic.classList.add('rec'); mic.textContent = 'End call';
+      if (SR) { try { await getMic(); } catch (e) { active = false; mic.classList.remove('rec'); mic.textContent = 'Call'; showType(); say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap Call. Or type below.'); return; } }
+      say('Calling ' + K.business + '…'); await ring();
+      if (!active) return;
+      card.classList.add('oncall'); startTimer();
+      if (!hist.length) { const g = T(greet()); hist.push({ r: 'a', t: g }); say(K.agent + ' is speaking…', 'live'); await speak(g); }
+      if (!active) return;
+      if (SR) loop(); else { showType(); say('Type your reply below'); }
     }
-    const sendTyped = async () => { const t = input.value.trim(); if (!t || busy) return; input.value = ''; unlockAudio(); if (!hist.length) { const g = T(greet()); addMsg('in', g); hist.push({ r: 'a', t: g }); } await turn(t); say(active ? 'Listening…' : 'Type or tap to talk'); };
+    const sendTyped = async () => { const t = input.value.trim(); if (!t || busy) return; input.value = ''; unlockAudio(); if (!hist.length) { const g = T(greet()); addMsg('in', g); hist.push({ r: 'a', t: g }); } await turn(t); say(active ? 'Listening…' : 'Type again, or tap Call to talk'); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendTyped(); } });
-    const ideas = genOn() && K.ideas ? K.ideas : medOn() ? ['How much is Botox?', 'Can I come in this week?', 'Do you do laser hair removal?', 'What helps with acne scars?'] : ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
+    typeBox.append(h('p', { class: 'note', style: 'margin:0 0 8px' }, 'No mic? Type what you would say and ' + K.agent + ' answers out loud.'), h('div', { class: 'compose', style: 'padding:0' }, input, h('button', { class: 'btn sm pri', onclick: sendTyped }, 'Send')));
+    if (!SR || IN_APP) showType();
+    const card = h('div', { class: 'card call-card' }, h('div', { class: 'call-kick' }, K.business), avatar, h('b', null, K.agent), h('div', { class: 'note' }, 'AI receptionist'), timer, status, mic);
     return [
       h('h2', null, 'Call ' + K.business + ' right now'),
-      h('p', { class: 'lead' }, 'Tap the green button and talk like a customer. ' + K.agent + ' answers out loud and books the job.'),
-      h('div', { class: 'card call-card' }, avatar, h('b', null, K.agent + ' · AI receptionist'), h('div', { class: 'note' }, K.business), status, mic,
-        SR && !IN_APP ? null : h('p', { class: 'note', style: 'margin-top:12px' }, IN_APP ? 'If the mic does not start, this app is blocking it. Open the link in Safari or Chrome, or type below.' : 'This browser cannot listen. Type below and ' + K.agent + ' will answer out loud.')),
-      h('div', { class: 'chips' }, ideas.map((t) => h('button', { class: 'chip', onclick: () => { unlockAudio(); input.value = t; sendTyped(); } }, t))),
-      h('div', { class: 'compose', style: 'padding:0 0 10px' }, input, h('button', { class: 'btn sm pri', onclick: sendTyped }, 'Send')),
-      thread, box,
+      h('p', { class: 'lead' }, 'Tap Call and talk like a customer. ' + K.agent + ' answers out loud and books the job.'),
+      card, typeBox, box,
       h('p', { class: 'note' }, 'Answers every call on the first ring, nights and weekends included. Not a promise of results, just what it sounds like.'),
     ];
   }
@@ -355,7 +369,7 @@
 
   function pReviews() {
     const p = phone('Client phone'), alerts = h('div'), who = K.owner ? firstOf(K.owner) : 'our team';
-    let name = 'Sarah', svc = K.services[0], reviews = 14, visits = 40, rate = 12, got = 0;
+    let name = 'Sarah', svc = K.services[0], reviews = K.reviews != null ? Math.min(200, K.reviews) : 14, visits = 40, rate = 12, got = 0;
     const nameIn = h('input', { type: 'text', value: name, maxlength: 20, 'aria-label': 'Client first name' });
     nameIn.addEventListener('input', () => { name = nameIn.value.trim().slice(0, 20) || 'Sarah'; });
     const svcIn = h('select', { 'aria-label': 'Treatment' }, K.services.map((x, i) => h('option', { value: i }, x.name)));
@@ -572,7 +586,7 @@
     TABS.forEach(([id, label]) => tabsIn.append(h('button', { class: 'tab', 'data-id': id, onclick: () => go(id) }, label)));
     $app.replaceChildren(
       h('div', { class: 'wrap' }, h('div', { class: 'top' }, h('div', { class: 'eyebrow' }, 'Live demo · built by Reekon Systems'),
-        h('h1', null, K.business), h('p', { class: 'sub' }, (K.owner ? firstOf(K.owner) + ', everything' : 'Everything') + ' here works. Tap through it. Nothing is sent to real customers.'))),
+        h('h1', null, K.business), (K.rating || K.address) ? h('p', { class: 'gline' }, [K.rating ? '★ ' + K.rating + (K.reviews ? ' · ' + K.reviews + ' Google reviews' : ' on Google') : '', K.address || ''].filter(Boolean).join('  ·  ')) : null, h('p', { class: 'sub' }, (K.owner ? firstOf(K.owner) + ', everything' : 'Everything') + ' here works. Tap through it. Nothing is sent to real customers.'))),
       t, h('div', { class: 'wrap' }, panel),
       h('div', { class: 'dock' }, h('button', { class: 'btn pri', onclick: lead }, 'I want this for ' + K.business)));
     go((location.hash || '').replace('#', '') || 'math', true);
