@@ -259,8 +259,8 @@
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendTyped(); } });
     const ideas = genOn() && K.ideas ? K.ideas : medOn() ? ['How much is Botox?', 'Can I come in this week?', 'Do you do laser hair removal?', 'What helps with acne scars?'] : ['How much for a paver patio?', 'Can you come out this week?', 'Do you do artificial turf?', 'My yard floods when it rains'];
     return [
-      h('h2', null, 'Call ' + K.business + ' after hours'),
-      h('p', { class: 'lead' }, 'This is a live AI voice receptionist. Tap the button, talk out loud like a customer, and watch it book the estimate. It listens, answers in a real voice, and keeps going until you hang up.'),
+      h('h2', null, 'Call ' + K.business + ' right now'),
+      h('p', { class: 'lead' }, 'Tap the green button and talk like a customer. ' + K.agent + ' answers out loud and books the job.'),
       h('div', { class: 'card call-card' }, avatar, h('b', null, K.agent + ' · AI receptionist'), h('div', { class: 'note' }, K.business), status, mic,
         SR && !IN_APP ? null : h('p', { class: 'note', style: 'margin-top:12px' }, IN_APP ? 'If the mic does not start, this app is blocking it. Open the link in Safari or Chrome, or type below.' : 'This browser cannot listen. Type below and ' + K.agent + ' will answer out loud.')),
       h('div', { class: 'chips' }, ideas.map((t) => h('button', { class: 'chip', onclick: () => { unlockAudio(); input.value = t; sendTyped(); } }, t))),
