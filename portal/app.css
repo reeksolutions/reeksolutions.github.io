@@ -1623,3 +1623,19 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .hm-todo input{accent-color:var(--accent)}
 .hm-sel:focus-visible{outline:2px solid var(--pop);outline-offset:2px}
 .hub-tile:hover .hub-ic{color:var(--pop)}
+
+/* blue + citron mixed: one gradient used on the things that should stand out */
+:root{--mix:linear-gradient(110deg,var(--accent) 0%,#46c8d8 52%,var(--pop) 100%);--mix-soft:linear-gradient(110deg,rgba(91,140,255,.16),rgba(215,255,63,.10))}
+:root[data-theme="light"]{--mix:linear-gradient(110deg,var(--accent) 0%,#1f8f8f 55%,var(--pop) 100%);--mix-soft:linear-gradient(110deg,rgba(47,98,232,.10),rgba(93,122,0,.10))}
+.logo em,.hm-big,.hm-kpi b,.sc-info>b,.page-head h1{background:var(--mix);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.page-head h1{display:inline-block}
+.btn.primary,:root[data-theme="light"] .btn.primary,.start-btn,.hm-chip.on{background:var(--mix);color:#05070d;border-color:transparent}
+:root[data-theme="light"] .btn.primary,:root[data-theme="light"] .start-btn{color:#fff}
+.btn.primary svg,.start-btn svg{color:inherit}
+.tabs a.on,.side-link.on{background:var(--mix-soft)}
+.me,.avatar{background:var(--mix-soft);border-color:rgba(215,255,63,.35)}
+.sc-card,.hm-card{position:relative;overflow:hidden}
+.sc-card::before,.hm-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--mix)}
+.hm-kpi{background:var(--mix-soft)}
+.hub-ic,.kic{background:var(--mix-soft);border-color:rgba(215,255,63,.22)}
+.schip.on{background:var(--mix-soft);border-color:var(--pop)}
