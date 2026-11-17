@@ -1568,3 +1568,43 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .hm-todo small{color:var(--muted);flex:none}
 .hm-todo.done .hm-t{text-decoration:line-through;color:var(--muted)}
 .hm-todo.now{background:rgba(59,130,246,.12)}
+
+/* Home v2: sketch layout (content + to-do left, charts right) */
+.hm-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start;margin-bottom:14px}
+.hm-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.hm-col .hm-card{margin:0}
+.hm-sel{border:1px solid var(--line);background:var(--card);color:inherit;border-radius:999px;padding:6px 10px;font:inherit;font-size:12.5px;max-width:100%}
+.hm-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.hm-kpi{border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;color:inherit;min-width:0}
+.hm-kpi b{display:block;font-size:20px;font-weight:800;letter-spacing:-.03em}
+.hm-kpi small{color:var(--muted);font-size:11.5px}
+.hm-tab{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.hm-tab>span{padding:10px 6px;text-align:center;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.hm-tab .hm-th{color:var(--muted);font-weight:600;font-size:12.5px}
+.hm-tab .hm-rl{text-align:left;color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap;display:flex;align-items:center}
+.hm-tab .hm-td b{display:block;font-size:17px;letter-spacing:-.02em}
+.hm-tab .hm-td small{display:block;font-size:11px;color:var(--muted)}
+.hm-tab .hm-td small.up{color:var(--ok)}.hm-tab .hm-td small.down{color:var(--bad)}
+.hm-plot{position:relative}
+.hm-ymax,.hm-y0{position:absolute;left:2px;font-size:10.5px;color:var(--muted);pointer-events:none}
+.hm-ymax{top:0}.hm-y0{bottom:2px}
+@media(max-width:700px){
+  .hm-grid{gap:8px}
+  .hm-grid .panel{padding:10px;border-radius:14px}
+  .hm-grid .hm-head h3{font-size:14px}.hm-grid .hm-big{font-size:16px}
+  .hm-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .hm-tab{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .hm-tab .hm-corner{display:none}
+  .hm-tab .hm-rl{grid-column:1/-1;padding:5px 8px;font-size:11px;background:rgba(127,127,127,.08)}
+  .hm-tab>span{padding:7px 2px}
+  .hm-tab .hm-th{font-size:9.5px}
+  .hm-tab .hm-td b{font-size:12.5px}.hm-tab .hm-td small{font-size:9.5px}
+  .hm-grid .hm-todo{padding:7px 2px;gap:7px}
+  .hm-grid .hm-todo input{width:18px;height:18px}
+  .hm-grid .hm-todo .hm-t{font-size:12px;line-height:1.25}
+  .hm-grid .hm-todo small{display:none}
+  .hm-grid .hm-sel{font-size:11.5px;padding:5px 6px}
+  .hm-grid .btn.small{padding:6px 9px;font-size:12px}
+  .hm-grid .ov-svg{height:96px}
+  .hm-grid .dim.small{font-size:10.5px}
+}

@@ -4303,7 +4303,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     svg.append(sv('polyline', { points: pts.join(' '), class: 'hm-path', fill: 'none' }));
     values.forEach((v, i) => { if (n <= 31 || i === n - 1) { const c = sv('circle', { cx: X(i).toFixed(1), cy: Y(v).toFixed(1), r: i === n - 1 ? 3.2 : 1.6, class: 'hm-dot' }); c.append(sv('title', null, document.createTextNode(labels[i] + ': ' + f(v)))); svg.append(c); } });
     const short = (d) => new Date(d + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
-    return h('div', { class: 'ov-chart' }, svg, h('div', { class: 'ov-ax' }, h('span', null, short(labels[0])), h('span', null, short(labels[Math.floor((n - 1) / 2)])), h('span', null, short(labels[n - 1]))));
+    return h('div', { class: 'ov-chart' }, h('div', { class: 'hm-plot' }, h('span', { class: 'hm-ymax' }, f(max)), h('span', { class: 'hm-y0' }, f(0)), svg), h('div', { class: 'ov-ax' }, h('span', null, short(labels[0])), h('span', null, 'over time'), h('span', null, short(labels[n - 1]))));
   }
   const HM = { range: 1, ch: 'calls' };
   const HM_PLAT = [['ig', 'Instagram', 'IG'], ['x', 'X', 'X'], ['tiktok', 'TikTok', 'TikTok'], ['facebook', 'Facebook', 'Facebook']];
@@ -4322,14 +4322,19 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('small', { class: 'dim' }, d.streak ? d.streak + '-day streak' : 'Finish the to-dos and hit your calls to build a streak'))));
     // content table
     const chips = (opts, cur, on) => h('div', { class: 'hm-chips' }, opts.map(([v, l]) => h('button', { type: 'button', class: 'hm-chip' + (cur === v ? ' on' : ''), onclick: () => on(v) }, l)));
-    const setRange = (v) => { HM.range = v; viewAdminHome(); };
+    const setRange = (v) => { HM.range = +v; viewAdminHome(); };
     const cell = (v, extra) => h('td', null, h('b', null, v), extra ? h('small', { class: extra[0] }, extra[1]) : null);
     const fmtChange = (c) => (c == null ? null : [c > 0 ? 'up' : c < 0 ? 'down' : '', (c > 0 ? '+' : '') + c.toLocaleString()]);
-    const table = h('div', { class: 'hm-scroll' }, h('table', { class: 'hm-table' },
-      h('thead', null, h('tr', null, h('th', null, ''), HM_PLAT.map(([, , sh]) => h('th', null, sh)))),
-      h('tbody', null,
-        h('tr', null, h('th', null, 'Followers'), HM_PLAT.map(([k]) => { const p = d.platforms[k]; return p.followers == null ? h('td', { class: 'dim' }, h('b', null, '—')) : cell(p.followers.toLocaleString(), fmtChange(p.change)); })),
-        h('tr', null, h('th', null, 'DMs sent'), HM_PLAT.map(([k]) => cell('+' + d.platforms[k].dms.toLocaleString()))))));
+    const sel = (opts, cur, on, label) => { const el = h('select', { class: 'hm-sel', 'aria-label': label, onchange: (e) => on(e.target.value) }, opts.map(([v, l]) => h('option', { value: v }, l))); el.value = String(cur); return el; };
+    const RANGES = [[1, 'Today'], [7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days']];
+    const table = h('div', { class: 'hm-tab' },
+      h('span', { class: 'hm-th hm-corner' }), HM_PLAT.map(([, , sh]) => h('span', { class: 'hm-th' }, sh)),
+      h('span', { class: 'hm-rl' }, 'Followers'), HM_PLAT.map(([k]) => { const p = d.platforms[k], c = fmtChange(p.change); return h('span', { class: 'hm-td' }, h('b', null, p.followers == null ? '—' : p.followers.toLocaleString()), c ? h('small', { class: c[0] }, c[1]) : null); }),
+      h('span', { class: 'hm-rl' }, 'DMs sent'), HM_PLAT.map(([k]) => h('span', { class: 'hm-td' }, h('b', null, '+' + d.platforms[k].dms.toLocaleString()))));
+    const T = d.totals, kp = (l, v, href) => h('a', { class: 'hm-kpi', href }, h('b', null, v.toLocaleString()), h('small', null, l));
+    const kpis = h('section', { class: 'panel hm-card' },
+      h('div', { class: 'hm-head' }, h('h3', null, 'Analytics'), sel(RANGES, HM.range, setRange, 'Time range')),
+      h('div', { class: 'hm-kpis' }, kp('Calls', T.dials, '#/tracker'), kp('Pick-ups', T.talks, '#/tracker'), kp('Booked', T.demos, '#/callbacks'), kp('Texts', T.texts, '#/tracker'), kp('DMs', T.dms, '#/tracker'), kp('Posts', T.posts, '#/content')));
     const openUpdate = () => sheet((box, close) => {
       const inputs = {}, dmIn = {};
       box.append(h('h2', null, 'Update today'), h('p', { class: 'sub' }, 'Type your follower count for each app and how many DMs you sent today. Leave a box empty to skip it.'),
@@ -4345,8 +4350,8 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
           } }, 'Save')));
     });
     const contentCard = h('section', { class: 'panel hm-card' },
-      h('div', { class: 'hm-head' }, h('h3', null, 'Content'), h('div', { class: 'row' }, chips([[1, 'Today'], [7, '7 days'], [30, '30 days'], [90, '90 days']], HM.range, setRange), h('button', { class: 'btn small primary', onclick: openUpdate }, 'Update'))),
-      table, h('p', { class: 'dim small', style: 'margin:8px 0 0' }, 'Followers show the latest count and the change over the range. Tap Update to add today\'s numbers until the apps are connected.'));
+      h('div', { class: 'hm-head' }, h('h3', null, 'Content'), h('div', { class: 'row' }, sel(RANGES, HM.range, setRange, 'Time range'), h('button', { class: 'btn small primary', onclick: openUpdate }, 'Update'))),
+      table, h('p', { class: 'dim small', style: 'margin:0' }, 'Tap Update to add today\'s numbers.'));
     // charts
     const revCard = h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Revenue'), h('span', { class: 'hm-big' }, '$' + d.revenue.total.toLocaleString())),
       lineChart({ labels: d.labels, values: d.revenue.values, fmt: (v) => '$' + v.toLocaleString() }),
@@ -4354,7 +4359,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const chKey = { calls: 'calls', sms: 'sms', email: 'email', social: 'social' }[HM.ch] || 'calls';
     const outVals = d.outreach[chKey], outTotal = outVals.reduce((a, b) => a + b, 0);
     const outCard = h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Sales outreach'), h('span', { class: 'hm-big' }, outTotal.toLocaleString())),
-      chips([['calls', 'Cold calling'], ['sms', 'SMS'], ['email', 'Email'], ['social', 'Social media']], HM.ch, (v) => { HM.ch = v; viewAdminHome(); }),
+      sel([['calls', 'Cold calling'], ['sms', 'SMS'], ['email', 'Email'], ['social', 'Social media']], HM.ch, (v) => { HM.ch = v; viewAdminHome(); }, 'Outreach channel'),
       lineChart({ labels: d.labels, values: outVals, cls: 'alt' }),
       h('p', { class: 'dim small', style: 'margin:6px 0 0' }, 'Per day, last ' + d.labels.length + ' days.'));
     // plan to-dos
@@ -4370,7 +4375,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
     const head = h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine), h('h1', null, 'Day ' + Math.min(d.day_n, 30) + ' of 30'), h('p', { class: 'sub' }, 'Focus: ' + niche + '.')),
       h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/overview' }, 'Full overview'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
-    shell('home', [head, scoreCard, contentCard, h('div', { class: 'ov-grid' }, revCard, outCard), todoCard, catLauncher()]);
+    shell('home', [head, scoreCard, kpis, h('div', { class: 'hm-grid' }, h('div', { class: 'hm-col' }, contentCard, todoCard), h('div', { class: 'hm-col' }, revCard, outCard)), catLauncher()]);
   }
 
   async function viewAdminOverview() {

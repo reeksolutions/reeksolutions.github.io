@@ -2810,11 +2810,13 @@ async function api(request, env, url) {
     const em = days.map((d) => emailRows.filter((r) => ptd(r.created_at) === d).length);
     const col = (k) => days.map((d) => (byDay.get(d) || {})[k] || 0);
     const tdy = byDay.get(today) || trkRow(null, today);
+    const inRange = days.filter((x) => x >= start), tsum = (k) => inRange.reduce((t, x) => t + ((byDay.get(x) || {})[k] || 0), 0);
+    const totals = { dials: tsum('dials'), talks: tsum('talks'), demos: tsum('demos'), texts: tsum('texts'), dms: tsum('dms'), posts: tsum('posts') };
     const base = trkScore(tdy, goal, 0), blocksPct = Math.round((100 * tdy.blocks.length) / TRK_BLOCKS.length);
     return json({ today, day_n: Math.max(1, Math.floor((Date.parse(today) - Date.parse((await getSetting(env, 'push_start')) || '2026-11-02')) / 864e5) + 1), range, goal,
       focus: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT, streak: trkStreak(byDay, goal, today),
       score: { total: Math.round((base.score + blocksPct) / 2), todos_done: tdy.blocks.length, todos_total: TRK_BLOCKS.length, dials: tdy.dials, texts: tdy.texts, dms: tdy.dms, posts: tdy.posts },
-      blocks: tdy.blocks, platforms, labels: days,
+      blocks: tdy.blocks, platforms, labels: days, totals,
       revenue: { values: rev, total: rev[rev.length - 1], mrr: Math.round(mrr / 100), deals: deals.length },
       outreach: { calls: col('dials'), sms: col('texts'), email: em, social: col('dms') } });
   }
