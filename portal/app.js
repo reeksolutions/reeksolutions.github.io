@@ -1781,6 +1781,42 @@
       h('a', { class: 'sh-link', href: '#/studio/build' }, 'Need a full custom website instead? Build one with AI', icon('chev'))), 'none');
   }
 
+  /* ---- receptionist voice picker (ElevenLabs voices on the account) ---- */
+  function voiceCard() {
+    const list = h('div', { class: 'vp-list' }, h('p', { class: 'dim small' }, 'Loading your voices…'));
+    const card = h('section', { class: 'sp-card' }, h('h3', null, 'Receptionist voice'),
+      h('p', { class: 'dim small' }, 'Pick the voice every demo uses. Tap Play to hear it. The receptionist takes the voice\'s first name.'), list);
+    let actx = null, cur = null, all = [], filter = 'male';
+    const play = async (v, btn) => {
+      btn.disabled = true; const old = btn.textContent; btn.textContent = '…';
+      try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') await actx.resume();
+        const j = await api('POST', '/voices/preview', { id: v.id, name: v.name });
+        const bin = atob(j.audio), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        const buf = await actx.decodeAudioData(u8.buffer);
+        if (cur) { try { cur.stop(); } catch { /* ok */ } }
+        cur = actx.createBufferSource(); cur.buffer = buf; cur.connect(actx.destination); cur.start(0);
+      } catch (e) { fail(e); }
+      btn.disabled = false; btn.textContent = old;
+    };
+    const draw = (d) => {
+      if (!d.ready) { list.replaceChildren(h('p', { class: 'dim small' }, 'Add your ElevenLabs API key to the CRM to pick a voice.')); return; }
+      const shown = all.filter((v) => filter === 'all' || v.gender === filter);
+      const chips = h('div', { class: 'hm-chips', style: 'margin:4px 0 10px' }, [['male', 'Men'], ['female', 'Women'], ['all', 'All']].map(([k, l]) => h('button', { type: 'button', class: 'hm-chip' + (filter === k ? ' on' : ''), onclick: () => { filter = k; draw(d); } }, l)));
+      list.replaceChildren(chips, ...(shown.length ? shown.map((v) => {
+        const on = v.id === d.current;
+        const pb = h('button', { type: 'button', class: 'btn small', onclick: (e) => play(v, e.currentTarget) }, 'Play');
+        const ub = h('button', { type: 'button', class: 'btn small ' + (on ? 'ok' : 'primary'), disabled: on, onclick: async (e) => { e.currentTarget.disabled = true; try { const r = await api('PUT', '/voices', { id: v.id, name: v.name }); d.current = v.id; toast('Voice set. Your receptionist is now ' + r.name + '.'); draw(d); } catch (x) { fail(x); } } }, on ? '✓ In use' : 'Use');
+        return h('div', { class: 'vp-row' + (on ? ' on' : '') }, h('div', { class: 'vp-t' }, h('b', null, v.name), h('small', null, [v.gender, v.accent, v.age, v.desc, v.use].filter(Boolean).join(' · '))), h('div', { class: 'row' }, pb, ub));
+      }) : [h('p', { class: 'dim small' }, 'No voices in this group.')]));
+    };
+    api('GET', '/voices').then((d) => {
+      // contractor-sounding voices first: American men, then the rest
+      const rank = (v) => (v.gender === 'male' ? 0 : 2) + (/american/i.test(v.accent) ? 0 : 1);
+      all = (d.voices || []).slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)); if (!all.some((v) => v.gender === 'male')) filter = 'all'; draw(d);
+    }).catch((e) => list.replaceChildren(h('p', { class: 'dim small' }, e.message || 'Could not load the voices.')));
+    return card;
+  }
   async function viewStudioOffer(id) {
     const [oid, name, line] = studioOffer(id);
     const r = await api('GET', '/studio/demo-leads');
@@ -1838,6 +1874,7 @@
       h('div', { class: 'sh-hero small' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, name), h('p', { class: 'sh-sub' }, line)),
       h('section', { class: 'sp-card' }, h('h3', null, '1. Connect a lead'), h('p', { class: 'dim small' }, 'Your roofer, landscaper and remodeler leads. Booked and callback leads come first.'), pickBox),
       h('section', { class: 'sp-card' }, h('h3', null, '2. Build and send'), resultBox),
+      oid === 'voice' ? voiceCard() : null,
       oid === 'site' ? h('a', { class: 'sh-link', href: '#/studio/build' }, 'Want a fully custom site? Build one with AI', icon('chev')) : null), 'none');
   }
 

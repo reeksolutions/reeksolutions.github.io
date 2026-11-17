@@ -1664,3 +1664,8 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .sp-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--mix)}
 .sp-lead{background:var(--card)}
 .sp-lead.on{border-color:var(--pop);box-shadow:0 0 0 2px var(--pop-soft)}
+.vp-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;max-height:420px;overflow:auto}
+.vp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line-2);border-radius:14px;background:var(--card)}
+.vp-row.on{border-color:var(--pop);background:var(--mix-soft)}
+.vp-t{min-width:0}.vp-t b{display:block}.vp-t small{display:block;color:var(--muted);font-size:12px}
+.vp-row .row{flex:none;gap:6px;flex-wrap:nowrap}

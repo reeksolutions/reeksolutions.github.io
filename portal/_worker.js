@@ -2875,7 +2875,7 @@ async function api(request, env, url) {
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
-  if (path === '/kits' || path.startsWith('/kits/')) { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
+  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
   if (path === '/studio' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const leadId = +url.searchParams.get('lead') || null;
@@ -4941,11 +4941,11 @@ async function kitPage(request, env, slug, site) {
   return kitHeaders(new Response(asset.body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }), KIT_PAGE_CSP);
 }
 
-async function elevenSpeak(env, text) {
+async function elevenSpeak(env, text, voiceId) {
   const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
-  const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_64', {
+  const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId || env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_64', {
     method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }), signal: AbortSignal.timeout(15000) });
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.8, speed: 1.04 } }), signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('eleven ' + r.status);
   return r.arrayBuffer();
 }
@@ -4978,8 +4978,16 @@ async function transcribeWords(env, buf) {
   }
   throw new HttpError(503, 'Could not hear the recording right now. Captions will use your script instead.');
 }
-async function kitTranscribe(env, buf) {
+async function kitTranscribe(env, buf, fast) {
   const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  if (fast && env.AI) {   // live call: Whisper answers quicker, so try it first
+    try {
+      const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      const r = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: btoa(s), language: 'en' });
+      const t = String((r && (r.text || (r.result && r.result.text))) || '').trim();
+      if (t) return t;
+    } catch (e) { console.error('whisper fast', e); }
+  }
   if (key) {
     try {
       const fd = new FormData();
@@ -5003,7 +5011,7 @@ const b64buf = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i 
 
 const kitFacts = (k) => [k.address ? 'ADDRESS: ' + k.address + '.' : '', k.phone ? 'PHONE: ' + k.phone + '.' : '', k.rating ? 'GOOGLE RATING: ' + k.rating + ' stars' + (k.reviews ? ' from ' + k.reviews + ' reviews' : '') + '. Only mention it if asked about reviews.' : ''].filter(Boolean).join('\n');
 function kitPrompt(k, mode) {
-  const style = mode === 'voice' ? 'You are speaking out loud on a phone call: at most 2 short sentences, under 35 words, never read lists or say symbols.'
+  const style = mode === 'voice' ? 'You are on a live phone call. Sound like a real, friendly person at the front desk: use contractions, short everyday sentences, one thought at a time. Open with a quick natural acknowledgment when it fits (Got it. Sure thing. Okay.). At most 2 short sentences, under 28 words. Never read lists, never say symbols, say prices in words like "about four to nine hundred dollars".'
     : mode === 'sms' ? 'You are texting: under 220 characters, one question at a time, no emojis.' : 'You are in a website chat: under 60 words, friendly and plain.';
   const role = mode === 'voice' ? 'phone receptionist' : mode === 'sms' ? 'text-message assistant' : 'website chat assistant';
   if (k.niche === 'medspa') {
@@ -5071,6 +5079,8 @@ async function handleKitApi(request, env, url) {
   const row = await kitByUnique(env, m[1]);
   if (!row) return json({ error: 'This demo link is not available.' }, 404);
   const k = kitPublic(row), op = m[2] || '';
+  const pickVoice = (await getSetting(env, 'kit_voice_id')) || '', pickName = (await getSetting(env, 'kit_voice_name')) || '';
+  if (pickVoice && pickName && k.premium_voice && env.ELEVENLABS_API_KEY) k.agent = pickName;   // the receptionist is named after the voice you picked
   const day = ptParts().date, ua = request.headers.get('User-Agent') || '';
   const viewer = await getUser(request, env).catch(() => null);       // you previewing your own demo is never counted
   const vid = await visitorId(request, env, day);
@@ -5086,6 +5096,41 @@ async function handleKitApi(request, env, url) {
     return json(k);
   }
   if (request.method !== 'POST') return json({ error: 'POST only' }, 405);
+  // speak a line: ElevenLabs with the picked voice first, the free voice as backup. Returns null when no voice can play.
+  async function doSpeak(text) {
+    if ((await kitCount(env, row.id, 'tts', day)) >= 160) return null;
+    await kitLog(env, row.id, 'tts', vid);
+    if (env.ELEVENLABS_API_KEY && (pickVoice || env.ELEVENLABS_VOICE_ID) && row.eleven_used < 80) {
+      try {
+        const buf = await elevenSpeak(env, text, pickVoice);
+        await env.DB.prepare('UPDATE demo_kits SET eleven_used = eleven_used + 1 WHERE id = ?').bind(row.id).run();
+        return { audio: b64buf(buf), mime: 'audio/mpeg', engine: 'eleven' };
+      } catch (e) { console.error('kit eleven', e); }
+    }
+    if (!env.AI) return null;
+    try {
+      const r = await env.AI.run('@cf/deepgram/aura-1', { text, speaker: k.speaker, encoding: 'mp3' }, { returnRawResponse: true });
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 1500) throw new Error('empty audio');
+      return { audio: b64buf(buf), mime: 'audio/mpeg', engine: 'aura' };
+    } catch (e) { console.error('kit aura', e); return null; }
+  }
+  if (op === 'turn') {
+    // one round trip for a live call: the caller's clip in, the words heard + the reply + the reply's audio out
+    const buf = await request.arrayBuffer();
+    if (buf.byteLength < 2000) return json({ heard: '' });
+    if (buf.byteLength > 1_400_000) return json({ error: 'That was too long. Say it in a sentence or two.' }, 413);
+    if ((await kitCount(env, row.id, 'stt', day)) >= 240) return json({ error: 'Voice limit reached for today. Type instead.' }, 429);
+    await kitLog(env, row.id, 'stt', vid);
+    let heard; try { heard = oneLine(await kitTranscribe(env, buf, true), 300); } catch (e) { return json({ error: e.message || 'Could not hear that.' }, 503); }
+    if (!heard) return json({ heard: '' });
+    let history = []; try { history = JSON.parse(decodeURIComponent(request.headers.get('X-Hist') || '[]')); } catch { history = []; }
+    const o = await doTalk({ mode: 'voice', text: heard, history });
+    const st = o._status; delete o._status;
+    if (st) return json(o, st);
+    const a = o.reply ? await doSpeak(o.reply) : null;
+    return json({ heard, ...o, ...(a || {}) });
+  }
   if (op === 'stt') {
     // the visitor's microphone: a short WAV clip in, the words out
     const buf = await request.arrayBuffer();
@@ -5109,12 +5154,12 @@ async function handleKitApi(request, env, url) {
     return json({ ok: true });
   }
 
-  if (op === 'talk') {
+  async function doTalk(body) {
     const mode = ['voice', 'chat', 'sms'].includes(body.mode) ? body.mode : 'chat';
     const text = oneLine(body.text, 300);
-    if (!text) return json({ error: 'Say or type something first.' }, 400);
-    if ((await kitCount(env, row.id, 'talk', day, vid)) >= 70 || (await kitCount(env, row.id, 'talk', day)) >= 400) return json({ reply: 'This demo has hit its daily limit. Message ' + (k.owner ? 'Marquise' : 'us') + ' and we will keep going.', booking: null, limited: true });
-    if (!env.AI) return json({ error: 'The AI is not switched on yet.' }, 503);
+    if (!text) return { error: 'Say or type something first.', _status: 400 };
+    if ((await kitCount(env, row.id, 'talk', day, vid)) >= 70 || (await kitCount(env, row.id, 'talk', day)) >= 400) return ({ reply: 'This demo has hit its daily limit. Message ' + (k.owner ? 'Marquise' : 'us') + ' and we will keep going.', booking: null, limited: true });
+    if (!env.AI) return { error: 'The AI is not switched on yet.', _status: 503 };
     const hist = (Array.isArray(body.history) ? body.history : []).slice(-12).map((x) => ({ role: x && x.r === 'a' ? 'assistant' : 'user', content: oneLine(x && x.t, 400) })).filter((x) => x.content);
     let out;
     try {
@@ -5122,7 +5167,7 @@ async function handleKitApi(request, env, url) {
       out = kitParseAI(r);
     } catch (e) {
       console.error('kit talk', e);
-      return json({ reply: 'Sorry, I missed that. Could you say it again?', booking: null });
+      return { reply: 'Sorry, I missed that. Could you say it again?', booking: null };
     }
     const reply = oneLine(out.reply, 420) || 'Sorry, could you say that again?';
     const bk = out.booking && typeof out.booking === 'object' && out.booking.name && out.booking.phone && out.booking.when
@@ -5134,28 +5179,22 @@ async function handleKitApi(request, env, url) {
       if (first) discordNotify(env, `🎙️ **${k.owner || 'A prospect'} is talking to the AI demo for ${k.business} right now.**`).catch(() => {});
       if (bk) await kitLog(env, row.id, 'booking', vid, bk.when);
     }
-    return json({ reply, booking: bk });
+    return { reply, booking: bk };
+  }
+
+  if (op === 'talk') {
+    const o = await doTalk(body);
+    const st = o._status; delete o._status;
+    if (st) return json(o, st);
+    if (body.speak && o.reply) Object.assign(o, (await doSpeak(o.reply)) || {});
+    return json(o);
   }
 
   if (op === 'tts') {
     const text = oneLine(body.text, 420);
     if (!text) return json({ error: 'Nothing to say' }, 400);
-    if ((await kitCount(env, row.id, 'tts', day)) >= 160) return json({ error: 'Voice limit reached for today. The text still works.' }, 429);
-    await kitLog(env, row.id, 'tts', vid);
-    if (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID && row.eleven_used < 80) {
-      try {
-        const buf = await elevenSpeak(env, text);
-        await env.DB.prepare('UPDATE demo_kits SET eleven_used = eleven_used + 1 WHERE id = ?').bind(row.id).run();
-        return json({ audio: b64buf(buf), mime: 'audio/mpeg', engine: 'eleven' });
-      } catch (e) { console.error('kit eleven', e); }
-    }
-    if (!env.AI) return json({ error: 'No voice engine' }, 503);
-    try {
-      const r = await env.AI.run('@cf/deepgram/aura-1', { text, speaker: k.speaker, encoding: 'mp3' }, { returnRawResponse: true });
-      const buf = await r.arrayBuffer();
-      if (buf.byteLength < 1500) throw new Error('empty audio');
-      return json({ audio: b64buf(buf), mime: 'audio/mpeg', engine: 'aura' });
-    } catch (e) { console.error('kit aura', e); return json({ error: 'The voice could not play. The text still works.' }, 502); }
+    const a = await doSpeak(text);
+    return a ? json(a) : json({ error: 'The voice could not play. The text still works.' }, 502);
   }
 
   if (op === 'lead') {
@@ -5266,6 +5305,30 @@ async function kitAdmin(env, user, path, method, body, url) {
     return json({ kits: rows.map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, niche: d.niche || 'contractor', business: d.business, owner: d.owner, city: d.city, look: d.look, views: r.views, talks: r.talks, last_view_at: r.last_view_at, created_at: r.created_at, tabs: tabs.filter((t) => t.kit_id === r.id).map((t) => t.detail) }; }),
       services: Object.entries(KIT_SERVICES).map(([id, s]) => ({ id, name: s.name })), services_med: Object.entries(KIT_SERVICES_MED).map(([id, s]) => ({ id, name: s.name })), looks: Object.entries(KIT_LOOKS).map(([id, l]) => ({ id, name: l.name, accent: l.accent, bg: l.bg })),
       eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), origin: url.origin });
+  }
+  if (path === '/voices' && method === 'GET') {
+    need(user, 'admin');
+    const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+    if (!key) return json({ ready: false, voices: [], current: '' });
+    const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key }, signal: AbortSignal.timeout(12000) });
+    if (!r.ok) throw new HttpError(502, 'ElevenLabs did not send the voice list (' + r.status + '). Check the API key.');
+    const j = await r.json();
+    const voices = (Array.isArray(j.voices) ? j.voices : []).map((v) => { const L = v.labels || {}; return { id: String(v.voice_id || ''), name: oneLine(v.name, 60), gender: oneLine(L.gender, 12).toLowerCase(), accent: oneLine(L.accent, 24), age: oneLine(L.age, 16), desc: oneLine(L.description || L.descriptive || '', 40), use: oneLine(L.use_case || '', 40) }; }).filter((v) => /^[A-Za-z0-9]{10,40}$/.test(v.id)).slice(0, 80);
+    return json({ ready: true, voices, current: (await getSetting(env, 'kit_voice_id')) || env.ELEVENLABS_VOICE_ID || '', current_name: (await getSetting(env, 'kit_voice_name')) || '' });
+  }
+  if (path === '/voices' && method === 'PUT') {
+    need(user, 'admin');
+    const id = String(body.id || ''), name = oneLine(body.name, 60).split(/[\s\-–(]/)[0].replace(/[^A-Za-z']/g, '').slice(0, 16);
+    if (!/^[A-Za-z0-9]{10,40}$/.test(id)) bad('Pick a voice from the list');
+    await setSetting(env, 'kit_voice_id', id); await setSetting(env, 'kit_voice_name', name || 'Alex');
+    return json({ ok: true, name: name || 'Alex' });
+  }
+  if (path === '/voices/preview' && method === 'POST') {
+    need(user, 'admin');
+    const id = String(body.id || ''); if (!/^[A-Za-z0-9]{10,40}$/.test(id)) bad('Pick a voice from the list');
+    const nm = oneLine(body.name, 60).split(/[\s\-–(]/)[0].replace(/[^A-Za-z']/g, '') || 'Alex';
+    let buf; try { buf = await elevenSpeak(env, 'Thanks for calling, this is ' + nm + '. Sure thing, I can get you on the schedule. Does tomorrow at ten work?', id); } catch (e) { throw new HttpError(502, 'That voice could not play. Your plan may not include it.'); }
+    return json({ audio: b64buf(buf), mime: 'audio/mpeg' });
   }
   if (path === '/kits' && method === 'POST') {
     let leadId = null, leadCat = '';

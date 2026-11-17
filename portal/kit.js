@@ -86,9 +86,15 @@
   }
   const decode = (buf) => new Promise((res, rej) => { try { ctx.decodeAudioData(buf, res, rej); } catch (e) { rej(e); } });
   function stopAudio() { try { if (curSrc) { curSrc.onended = null; curSrc.stop(); } } catch { /* done */ } curSrc = null; if (window.speechSynthesis) speechSynthesis.cancel(); }
-  async function speak(text) {
+  async function playJ(j) {
+    const bin = atob(j.audio), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const buf = await decode(u8.buffer);
+    await new Promise((res) => { const src = ctx.createBufferSource(); curSrc = src; src.buffer = buf; src.connect(ctx.destination); src.onended = res; src.start(0); });
+  }
+  async function speak(text, ready) {
     try {
-      const j = await call('tts', { text });
+      const j = (ready && (await ready.catch(() => null))) || await call('tts', { text });
       const bin = atob(j.audio), u8 = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
       const buf = await decode(u8.buffer);
@@ -134,7 +140,7 @@
         const rms = Math.sqrt(sum / d.length), now = performance.now(), thr = Math.max(0.014, floor * 3.2);
         if (rms > thr) { if (!speaking) { speaking = true; onHeard && onHeard(); chunks.push(...pre); } lastVoice = now; voiced += d.length / ctx.sampleRate; }
         else if (!speaking) floor = floor * 0.95 + rms * 0.05;
-        if (speaking) { chunks.push(d); if (now - lastVoice > 1000 && voiced > 0.25) return finish(wavOf(chunks, ctx.sampleRate)); if (now - t0 > 16000) return finish(wavOf(chunks, ctx.sampleRate)); }
+        if (speaking) { chunks.push(d); if (now - lastVoice > 720 && voiced > 0.25) return finish(wavOf(chunks, ctx.sampleRate)); if (now - t0 > 16000) return finish(wavOf(chunks, ctx.sampleRate)); }
         else { pre.push(d); if (pre.length > 3) pre.shift(); if (now - t0 > 9000) finish(null); }
       };
       src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
@@ -231,31 +237,47 @@
     const say = (t, cls) => { status.textContent = t; avatar.classList.toggle('live', cls === 'live'); };
     async function turn(text) {
       say('…'); busy = true;
-      let j; try { j = await call('talk', { mode: 'voice', text, history: hist }); } catch (e) { addMsg('sys', e.message); busy = false; return; }
+      let j; try { j = await call('talk', { mode: 'voice', text, history: hist, speak: true }); } catch (e) { addMsg('sys', e.message); busy = false; return; }
+      await answer(text, j);
+    }
+    // play the reply (audio usually arrives with it) and log the turn
+    async function answer(text, j) {
       hist.push({ r: 'u', t: text }, { r: 'a', t: j.reply || '' });
-      addMsg('in', j.reply); if (j.booking) box.append(bookingCard(j.booking, false));
-      say(K.agent + ' is speaking…', 'live'); await speak(j.reply); busy = false;
+      if (j.booking) box.append(bookingCard(j.booking, false));
+      say(K.agent + ' is speaking…', 'live');
+      if (j.audio) { try { await playJ(j); } catch { await speak(j.reply); } } else await speak(j.reply);
+      busy = false;
       if (j.limited) hang();
+    }
+    // live call turn: the clip goes up, the words heard + reply + voice come back in one trip
+    async function voiceTurn(clip) {
+      busy = true; say('…');
+      let j;
+      try {
+        const r = await fetch('/kit-api/' + slug + '/turn', { method: 'POST', headers: { 'Content-Type': 'audio/wav', 'X-Hist': encodeURIComponent(JSON.stringify(hist.slice(-6).map((x) => ({ r: x.r, t: String(x.t).slice(0, 200) })))) }, body: clip });
+        j = await r.json().catch(() => ({}));
+        if (!r.ok && !j.reply) throw new Error(j.error || 'Could not hear that.');
+      } catch (e) { busy = false; addMsg('sys', e.message); return false; }
+      if (!j.heard || !j.reply) { busy = false; return false; }
+      await answer(j.heard, j); return true;
     }
     async function listen() {
       say('Listening…', 'live');
-      let clip;
-      try { clip = await listenClip(() => say('Hearing you…', 'live')); }
+      try { return await listenClip(() => say('Listening…', 'live')); }
       catch (e) { micBlocked = true; throw e; }
-      if (!clip) return '';
-      say('Got it…');
-      try { return await transcribe(clip); } catch (e) { addMsg('sys', e.message); return ''; }
     }
     let micBlocked = false;
     async function loop() {
       while (active) {
         if (busy) { await wait(200); continue; }
-        let t = '';
+        let t = null;
         try { t = await listen(); } catch (e) { mic.classList.remove('rec'); active = false; mic.textContent = 'Call'; avatar.classList.remove('live'); stopTimer(); card.classList.remove('oncall'); showType();
           say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap to call. Or type below.'); return; }
         if (!active) break;
-        if (!t) { if (++empties >= 3) { hang(true); say('I did not hear anything. Tap Call to try again.'); } continue; }
-        empties = 0; await turn(t); await wait(250);
+        const ok = t ? await voiceTurn(t) : false;
+        if (!active) break;
+        if (!ok) { if (++empties >= 3) { hang(true); say('I did not hear anything. Tap Call to try again.'); } continue; }
+        empties = 0; await wait(120);
       }
     }
     function hang(quiet) { const was = active; active = false; mic.classList.remove('rec'); mic.textContent = 'Call'; try { stopListen && stopListen(); } catch { /* ok */ } releaseMic(); stopAudio(); stopTimer(); card.classList.remove('oncall', 'ringing'); if (was) tone([480, 620], 0.35, 0.05); if (!quiet) say('Call ended' + (tStart ? ' · ' + fmtT() : '')); avatar.classList.remove('live'); }
@@ -264,10 +286,12 @@
       if (active) return hang();
       active = true; empties = 0; tStart = 0; timer.textContent = ''; mic.classList.add('rec'); mic.textContent = 'End call';
       if (SR) { try { await getMic(); } catch (e) { active = false; mic.classList.remove('rec'); mic.textContent = 'Call'; showType(); say(IN_APP ? 'This app blocks the mic. Tap ••• and choose Open in Safari or Chrome, or type below.' : 'The mic is blocked. Allow the microphone for this site, then tap Call. Or type below.'); return; } }
+      const g0 = !hist.length ? T(greet()) : '', pre = g0 ? call('tts', { text: g0 }) : null;   // fetch the greeting while it rings
+      if (pre) pre.catch(() => {});
       say('Calling ' + K.business + '…'); await ring();
       if (!active) return;
       card.classList.add('oncall'); startTimer();
-      if (!hist.length) { const g = T(greet()); hist.push({ r: 'a', t: g }); say(K.agent + ' is speaking…', 'live'); await speak(g); }
+      if (g0) { hist.push({ r: 'a', t: g0 }); say(K.agent + ' is speaking…', 'live'); await speak(g0, pre); }
       if (!active) return;
       if (SR) loop(); else { showType(); say('Type your reply below'); }
     }
