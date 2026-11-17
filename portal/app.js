@@ -1771,9 +1771,34 @@
   ];
   const studioOffer = (id) => STUDIO_OFFERS.find((o) => o[0] === id);
 
+  /* ---- Pitch now: paste any business, get its demo in seconds ---- */
+  function pitchNowCard() {
+    const ta = h('textarea', { class: 'pn-in', rows: 3, placeholder: 'Paste the business here: share it from Google Maps, paste the link, or just type the name and city' });
+    const out = h('div', { class: 'pn-out' });
+    const go = h('button', { class: 'btn primary', onclick: async () => {
+      const text = ta.value.trim(); if (!text) { toast('Paste the business first', true); ta.focus(); return; }
+      go.disabled = true; go.textContent = 'Building the demo…'; out.replaceChildren();
+      try {
+        const r = await api('POST', '/quickdemo', { text });
+        const copy = h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(r.link); toast('Link copied'); } catch { prompt('Copy this link', r.link); } } }, 'Copy link');
+        out.replaceChildren(h('div', { class: 'pn-res' },
+          h('b', null, r.business),
+          h('small', null, [r.rating ? '★ ' + r.rating + (r.reviews != null ? ' · ' + r.reviews + ' reviews' : '') : '', r.category || '', r.address || ''].filter(Boolean).join('  ·  ') || (r.found ? '' : 'Not found on Google, built from the name')),
+          h('div', { class: 'row', style: 'margin-top:10px;flex-wrap:wrap' },
+            h('a', { class: 'btn primary', href: r.link, target: '_blank', rel: 'noopener' }, icon('phone'), 'Open demo'), copy,
+            r.phone ? h('a', { class: 'btn', href: 'sms:' + r.phone.replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent('Here is the demo I built for you: ' + r.link) }, 'Text it to them') : null,
+            h('a', { class: 'btn', href: '#/lead/' + r.lead_id }, 'Open lead'))));
+        ta.value = '';
+      } catch (e) { fail(e); }
+      go.disabled = false; go.textContent = 'Build demo';
+    } }, 'Build demo');
+    return h('section', { class: 'sp-card pn-card' }, h('h3', null, 'Pitch now'),
+      h('p', { class: 'dim small' }, 'Out and about? Paste any business and get its live demo in a few seconds. It saves them as a lead too.'), ta, h('div', { class: 'row', style: 'margin-top:8px' }, go), out);
+  }
   function viewStudioHome() {
     shell('studio', h('div', { class: 'sh' },
       h('a', { class: 'crumb', href: '#/create' }, icon('chev'), 'Create'),
+      pitchNowCard(),
       h('div', { class: 'sh-hero' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, 'What do you want to demo today?'),
         h('p', { class: 'sh-sub' }, 'Pick an offer. Then connect the lead who asked for it and send them a live demo.')),
       h('div', { class: 'sh-grid' }, STUDIO_OFFERS.map(([id, name, line, ic], i) => h('a', { class: 'sh-card', href: '#/studio/' + id, style: '--i:' + i },
@@ -4404,7 +4429,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
       h('div', { class: 'hm-todos' }, todoRows), h('p', { class: 'dim small', style: 'margin:8px 0 0' }, 'This is your daily plan. Check each one off when it\'s done.'));
     const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
     const head = h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine), h('h1', null, 'Day ' + Math.min(d.day_n, 30) + ' of 30'), h('p', { class: 'sub' }, 'Focus: ' + niche + '.')),
-      h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/overview' }, 'Full overview'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
+      h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/studio' }, icon('spark'), 'Pitch now'), h('a', { class: 'btn', href: '#/overview' }, 'Full overview'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
     shell('home', [head, scoreCard, kpis, h('div', { class: 'hm-grid' }, h('div', { class: 'hm-col' }, contentCard, todoCard), h('div', { class: 'hm-col' }, revCard, outCard))]);
   }
 

@@ -2875,7 +2875,7 @@ async function api(request, env, url) {
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
-  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
+  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
   if (path === '/studio' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const leadId = +url.searchParams.get('lead') || null;
@@ -5305,6 +5305,60 @@ async function kitAdmin(env, user, path, method, body, url) {
     return json({ kits: rows.map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, niche: d.niche || 'contractor', business: d.business, owner: d.owner, city: d.city, look: d.look, views: r.views, talks: r.talks, last_view_at: r.last_view_at, created_at: r.created_at, tabs: tabs.filter((t) => t.kit_id === r.id).map((t) => t.detail) }; }),
       services: Object.entries(KIT_SERVICES).map(([id, s]) => ({ id, name: s.name })), services_med: Object.entries(KIT_SERVICES_MED).map(([id, s]) => ({ id, name: s.name })), looks: Object.entries(KIT_LOOKS).map(([id, l]) => ({ id, name: l.name, accent: l.accent, bg: l.bg })),
       eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), origin: url.origin });
+  }
+  if (path === '/quickdemo' && method === 'POST') {
+    // pitch on the spot: paste a Google Maps share, a link or just a name, get a demo for that business
+    need(user, 'admin', 'rep');
+    const raw = String(body.text || '').slice(0, 2000).trim();
+    if (!raw) bad('Paste the business first');
+    const lines = raw.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+    const urlM = raw.match(/https?:\/\/\S+/);
+    let mapsName = '';
+    if (urlM) {
+      let u = urlM[0];
+      try { if (/goo\.gl|maps\.app/.test(u)) { const r = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(6000) }); u = r.headers.get('location') || u; } } catch { /* keep the short link */ }
+      const pm = u.match(/\/maps\/place\/([^/@?]+)/) || u.match(/[?&]q=([^&]+)/);
+      if (pm) { try { mapsName = decodeURIComponent(pm[1].replace(/\+/g, ' ')).trim(); } catch { mapsName = pm[1].replace(/\+/g, ' '); } }
+    }
+    const textLines = lines.filter((x) => !/^https?:\/\//.test(x));
+    const phoneM = raw.match(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+    const addrLine = textLines.find((x) => /\d+\s+\S+.*\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|way|ln|lane|pl|ct|hwy|pkwy)\b/i.test(x) || /\b[A-Z]{2}\s+\d{5}\b/.test(x)) || '';
+    const name = (textLines.find((x) => x !== addrLine && !/^\(?\d{3}\)?[\s.-]?\d{3}/.test(x) && !/^[\d.]+\s*(★|stars?|\()/i.test(x)) || mapsName.split(',')[0] || '').replace(/\s+[-|·].*$/, '').trim().slice(0, 100);
+    if (!name) bad('Could not find a business name in that. Paste the name, or share it from Google Maps.');
+    const cityM = (addrLine || mapsName).match(/,\s*([A-Za-z .'-]+?),?\s+[A-Z]{2}\b/);
+    const where = (cityM && cityM[1].trim()) || oneLine(body.city, 60) || 'Los Angeles, CA';
+    // look it up once to fill in phone, rating, reviews and type
+    let hit = null;
+    try {
+      const res = await finderSearch(env, user.id, name + (addrLine ? ' ' + addrLine : ''), where, undefined, 0);
+      const list = (res && res.results) || [];
+      const nk = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      hit = list.find((x) => { const bk = String(x.business || '').toLowerCase().replace(/[^a-z0-9]/g, ''); return bk && (bk.includes(nk.slice(0, 12)) || nk.includes(bk.slice(0, 12))); }) || null;
+    } catch (e) { console.error('quickdemo lookup', e.message || e); }
+    const L = {
+      business: (hit && hit.business) || name, phone: (hit && hit.phone) || (phoneM ? phoneM[0] : ''), address: (hit && hit.address) || addrLine,
+      category: (hit && hit.category) || oneLine(body.biz_type, 60) || '', rating: hit && hit.rating ? String(hit.rating) : '', reviews: hit && hit.reviews != null ? hit.reviews : null,
+      link: (hit && hit.link) || (urlM ? urlM[0] : ''), website: (hit && hit.website) || '', place_id: (hit && hit.place_id) || null,
+    };
+    const city = (L.address.match(/,\s*([A-Za-z .'-]+?),\s*[A-Z]{2}\b/) || [])[1] || where.split(',')[0];
+    const pn = normPhone(L.phone);
+    if (pn && (await env.DB.prepare('SELECT 1 FROM dnc WHERE phone_norm = ?').bind(pn).first())) bad(L.business + ' is on your Do Not Call list.');
+    let lead = pn ? await env.DB.prepare('SELECT id FROM leads WHERE phone_norm = ? ORDER BY id LIMIT 1').bind(pn).first() : null;
+    if (!lead && L.place_id) lead = await env.DB.prepare('SELECT id FROM leads WHERE place_id = ? LIMIT 1').bind(L.place_id).first();
+    if (!lead) lead = await env.DB.prepare('SELECT id FROM leads WHERE lower(business) = lower(?) LIMIT 1').bind(L.business).first();
+    const t = now();
+    if (!lead) {
+      const r = await env.DB.prepare(`INSERT INTO leads (business, phone, phone_norm, city, category, link, status, assigned_to, created_at, updated_at, website, address, rating, heat, source, place_id, reviews, call_notes)
+        VALUES (?,?,?,?,?,?,'demo_needed',?,?,?,?,?,?,'warm','in person',?,?,?)`).bind(L.business, L.phone || null, pn || null, city, L.category || null, L.link || null, user.id, t, t, L.website || null, L.address || null, L.rating || null, L.place_id, L.reviews, 'Pitched in person ' + ptParts().date).run();
+      lead = { id: r.meta.last_row_id };
+    } else {
+      await env.DB.prepare("UPDATE leads SET rating = COALESCE(rating, ?), reviews = COALESCE(reviews, ?), address = COALESCE(address, ?), link = COALESCE(link, ?), updated_at = ? WHERE id = ?").bind(L.rating || null, L.reviews, L.address || null, L.link || null, t, lead.id).run();
+    }
+    const kr = await kitAdmin(env, user, '/kits', 'POST', { lead_id: lead.id, business: L.business, city, phone: L.phone || '', biz_type: oneLine(body.biz_type, 60) || L.category || '' }, url);
+    const kj = await kr.json();
+    if (!kr.ok) throw new HttpError(kr.status, kj.error || 'Could not build the demo');
+    await env.DB.prepare('UPDATE leads SET demo_url = ?, updated_at = ? WHERE id = ?').bind(kj.link, now(), lead.id).run();
+    return json({ ok: true, link: kj.link, kit_id: kj.id, lead_id: lead.id, business: L.business, phone: L.phone, address: L.address, rating: L.rating, reviews: L.reviews, category: L.category, found: !!hit });
   }
   if (path === '/voices' && method === 'GET') {
     need(user, 'admin');
