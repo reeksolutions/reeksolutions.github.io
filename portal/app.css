@@ -4,6 +4,7 @@
   --ink:#f4f6fb;--muted:#a2a8b8;--dim:#7a8094;
   --accent:#5b8cff;--accent-2:#a9c2ff;--accent-ink:#05070d;--glow:rgba(91,140,255,.45);
   --ok:#3ddc97;--warn:#f5b84b;--hot:#ff9f5a;--bad:#ff7a7a;
+  --pop:#d7ff3f;--pop-ink:#141a00;--pop-soft:rgba(215,255,63,.12);
   --r:16px;--font:"Inter Tight",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
   --top:56px;--nav:64px;
 }
@@ -1138,6 +1139,7 @@ body.has-drawer{overflow:hidden}
   --ink:#0e1320;--muted:#4b5468;--dim:#6b7488;
   --accent:#2f62e8;--accent-2:#2f62e8;--accent-ink:#ffffff;--glow:rgba(47,98,232,.25);
   --ok:#0f9d63;--warn:#b7791f;--hot:#d9661f;--bad:#d64545;
+  --pop:#5d7a00;--pop-ink:#ffffff;--pop-soft:rgba(93,122,0,.12);
   color-scheme:light;
 }
 :root[data-theme="dark"]{color-scheme:dark}
@@ -1608,3 +1610,16 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
   .hm-grid .ov-svg{height:96px}
   .hm-grid .dim.small{font-size:10.5px}
 }
+
+/* third color (citron): used sparingly for labels, the live position and key numbers */
+.kicker{color:var(--pop)}
+.tabs a.on svg,.side-link.on svg{color:var(--pop)}
+.tabs a.on{box-shadow:inset 0 2px 0 var(--pop)}
+@media(min-width:1000px){.side-link.on{box-shadow:inset 3px 0 0 var(--pop),inset 0 0 0 1px rgba(91,140,255,.22)}}
+.count{background:var(--pop);color:var(--pop-ink)}
+.hm-big{color:var(--pop)}
+.hm-line.alt .hm-path{stroke:var(--pop)}.hm-line.alt .hm-area{fill:var(--pop)}.hm-line.alt .hm-dot{fill:var(--pop)}
+.hm-todo.now{background:var(--pop-soft);box-shadow:inset 3px 0 0 var(--pop)}
+.hm-todo input{accent-color:var(--accent)}
+.hm-sel:focus-visible{outline:2px solid var(--pop);outline-offset:2px}
+.hub-tile:hover .hub-ic{color:var(--pop)}

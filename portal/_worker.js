@@ -2880,13 +2880,13 @@ async function api(request, env, url) {
   }
   if (path === '/studio/demo-leads' && method === 'GET') {
     need(user, 'admin');
+    const sfx = focusSql(await focusTerms(env));   // only leads in the locked niche show up in Demo Studio
     const { results } = await env.DB.prepare(`SELECT l.id, l.business, l.owner, l.city, l.category, l.phone, l.status, l.booked_at, l.demo_url, COALESCE(l.heat,'cold') AS heat,
         (SELECT slug FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_slug,
         (SELECT id FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_id,
         (SELECT data FROM demo_kits k WHERE k.lead_id = l.id ORDER BY k.id DESC LIMIT 1) AS kit_data
-      FROM leads l WHERE l.status IN ('booked','call2','callback','demo_needed','demo_ready')
-      ORDER BY CASE l.status WHEN 'booked' THEN 0 WHEN 'call2' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'callback' THEN 3 ELSE 4 END, l.booked_at, l.id DESC LIMIT 60`).all();
-    results.sort((a, b) => (isMedCat((b.category || '') + ' ' + (b.business || '')) ? 1 : 0) - (isMedCat((a.category || '') + ' ' + (a.business || '')) ? 1 : 0));
+      FROM leads l WHERE l.status IN ('booked','call2','callback','demo_needed','demo_ready','new','called') AND ${sfx.sql}
+      ORDER BY CASE l.status WHEN 'booked' THEN 0 WHEN 'call2' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'callback' THEN 3 WHEN 'demo_ready' THEN 4 WHEN 'called' THEN 5 ELSE 6 END, l.booked_at, l.id DESC LIMIT 60`).bind(...sfx.args).all();
     return json({ origin: url.origin, leads: results.map((r) => {
       let kd = null; try { kd = r.kit_data ? JSON.parse(r.kit_data) : null; } catch { /* ignore */ }
       const want = kitNicheFor(r.category, r.business), have = kd ? (kd.niche || 'contractor') : '';
@@ -5245,7 +5245,7 @@ async function kitAdmin(env, user, path, method, body, url) {
     if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
     const medFocus = await isMedFocus(env);
     if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
-    if (body.niche === 'medspa' && !medFocus && !isMedCat(leadCat + ' ' + oneLine(body.business, 80) + ' ' + bizType)) body.niche = 'custom';
+    if (body.niche === 'medspa' && !medFocus) body.niche = 'custom';
     if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     const slug = kitSlug(data.business), t = now();

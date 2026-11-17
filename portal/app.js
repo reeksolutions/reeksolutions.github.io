@@ -1045,7 +1045,7 @@
     const lateStage = !!STAGE_UI;   // past first contact: hide the cold-call scaffolding
 
     /* ---- simple step-by-step flow for sellers ---- */
-    const isMedLead = /med(ical|i)?\s*spa|aesthetic|botox|laser|skin/i.test((L.category || '') + ' ' + L.business);
+    const isMedLead = false; // niche is locked to roofers, landscapers and remodelers
     const noteMsg = isMedLead
       ? 'Hey, it\'s ' + me1 + '. I called earlier to ask about booking a consultation and nobody picked up. I\'m booking this week and going with whoever responds first. I help med spas stop losing calls like mine. Want me to show you how?'
       : 'Hey, it\'s ' + me1 + '. I called earlier about a job and nobody picked up. I\'m getting quotes this week and going with whoever answers first. I build voice assistants that answer for contractors while they\'re on a job. Want to hear one built for you?';
@@ -1757,14 +1757,14 @@
   /* ================= Demo Studio: pick an offer, connect a lead, send the demo ================= */
   const STUDIO_OFFERS = [
     ['voice', 'Voice AI receptionist', 'Answers every call while they are on a job and books the estimate. They talk to it live.', 'phone'],
-    ['reviews', 'Google review generator', 'A text after every appointment sends the client straight to your Google reviews.', 'spark'],
+    ['reviews', 'Google review generator', 'A text after every finished job sends the homeowner straight to your Google reviews.', 'spark'],
     ['textback', 'Missed-call text-back', 'A call goes unanswered, a text goes out in seconds.', 'sms'],
-    ['speed', 'Instant lead reply', 'New inquiry in, answer out before the next med spa replies.', 'bolt'],
-    ['quotes', 'Consultation follow-up', 'Quiet consultations get nudged until they reply.', 'mail'],
-    ['winback', 'Win back clients', 'A text wakes up past clients and fills the book.', 'users'],
+    ['speed', 'Instant lead reply', 'New inquiry in, answer out before the next contractor calls back.', 'bolt'],
+    ['quotes', 'Estimate follow-up', 'Quiet estimates get nudged until they say yes or no.', 'mail'],
+    ['winback', 'Win back customers', 'A text wakes up past customers and fills the schedule.', 'users'],
     ['remind', 'Reminders and no-shows', 'Confirm, remind and reschedule by text. No phone tag.', 'calendar'],
     ['ballpark', 'Instant price range', 'Give a range on the website, get a qualified lead back.', 'deals'],
-    ['jobdone', 'Visit-done automation', 'One tap after a visit starts reviews, referrals and rebooking.', 'flag'],
+    ['jobdone', 'Job-done automation', 'One tap after a job starts reviews and referrals.', 'flag'],
     ['tracker', 'Lead tracker', 'Every call, text and form lands in one board with the money.', 'leads'],
     ['site', 'Website + chat', 'A sample site built for them with an AI chat in the corner.', 'search'],
     ['math', 'The missed-money math', 'Sliders that show what missed calls cost them each month.', 'chart'],
@@ -1790,13 +1790,13 @@
     const resultBox = h('div');
     const bizType = h('input', { type: 'text', placeholder: 'What kind of business? roofing, landscaping or remodeling', maxlength: 60, class: 'sp-type' });
     const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready' }[st] || st);
+    const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready', new: 'New', called: 'Called' }[st] || st);
     const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
     const dmFor = (L, link) => 'Hey ' + ((L.owner || '').split(' ')[0] || 'there') + ', it\'s ' + first(S.me.name) + '. I put together a quick live demo of ' + name.toLowerCase() + ' for ' + L.business + '. Tap it and try it yourself: ' + link;
     function drawLeads() {
       pickBox.replaceChildren(...(r.leads.length ? r.leads.map((L) => h('button', { type: 'button', class: 'sp-lead' + (lead && lead.id === L.id ? ' on' : ''), onclick: () => { lead = L; built = null; bizType.value = ''; drawLeads(); drawResult(); } },
         h('div', null, h('b', null, L.business), h('small', null, [L.city, L.category].filter(Boolean).join(' · ') + (L.status === 'booked' && L.booked_at ? ' · ' + dayWord(L.booked_at) : ''))),
-        h('span', { class: 'tag ' + (L.status === 'booked' || L.status === 'call2' ? 'good' : '') }, tag(L.status)))) : [h('p', { class: 'dim' }, 'No leads yet who booked an audit or asked for a demo. Log an audit booked on a lead and they show up here.')]));
+        h('span', { class: 'tag ' + (L.status === 'booked' || L.status === 'call2' ? 'good' : '') }, tag(L.status)))) : [h('p', { class: 'dim' }, 'No roofer, landscaper or remodeler leads yet. Run the Lead Finder, or build a demo for any business with the button below.')]));
     }
     async function build(btn, rebuild) {
       btn.disabled = true;
