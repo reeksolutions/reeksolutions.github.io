@@ -4674,6 +4674,34 @@ const KIT_JUNK = {
   ],
   ideas: ['How much to haul a couch?', 'Can you come out today?', 'I need a garage cleaned out', 'Do you take old appliances?'],
 };
+const KIT_ROOF = {
+  type: 'roofing contractor', visit: 'free inspection', customer: 'homeowner',
+  tagline: 'A roof that holds up in {city}. Free inspection, honest price.',
+  services: [
+    { name: 'Roof repair', unit: 'project', lo: 450, hi: 1800, q: 'Where is it leaking or damaged, and how long has it been going on?', blurb: 'Missing shingles, flashing and leaks fixed fast.' },
+    { name: 'Full roof replacement', unit: 'sq ft', lo: 6, hi: 14, q: 'About how many square feet is the roof, and what is it made of?', blurb: 'Tear-off and new roof, cleaned up when we leave.' },
+    { name: 'Emergency leak and tarping', unit: 'project', lo: 350, hi: 1500, q: 'Is water coming in right now, and where?', blurb: 'Same-day help to stop the damage before the storm hits.' },
+    { name: 'Tile and flat roof work', unit: 'project', lo: 600, hi: 3500, q: 'Is it a tile or a flat roof, and what is the problem?', blurb: 'Tile replacement, flat roof coatings and patching.' },
+    { name: 'Gutters and drainage', unit: 'linear ft', lo: 9, hi: 18, q: 'About how many feet of gutter does the house need?', blurb: 'Seamless gutters that move water away from the house.' },
+    { name: 'Storm damage and insurance claims', unit: 'project', lo: 500, hi: 6000, q: 'What happened and when? Do you have an insurance claim open?', blurb: 'Inspection and a clear report for your insurance adjuster.' },
+  ],
+  ideas: ['How much for a new roof?', 'My roof is leaking, can you come today?', 'Do you work with insurance?', 'How long does a replacement take?'],
+};
+const KIT_TILE = {
+  type: 'tile contractor', visit: 'free estimate', customer: 'homeowner',
+  tagline: 'Tile done right in {city}. Clean lines, no mess left behind.',
+  services: [
+    { name: 'Bathroom and shower tile', unit: 'project', lo: 2500, hi: 9000, q: 'Is it a shower, a tub surround or the whole bathroom floor and walls?', blurb: 'Waterproofed showers and tile that lasts.' },
+    { name: 'Floor tile installation', unit: 'sq ft', lo: 8, hi: 20, q: 'About how many square feet, and which rooms?', blurb: 'Porcelain, ceramic and natural stone floors.' },
+    { name: 'Kitchen backsplash', unit: 'project', lo: 900, hi: 3500, q: 'About how many square feet of wall, and do you have the tile picked out?', blurb: 'A backsplash that finishes the kitchen.' },
+    { name: 'Tile repair and regrouting', unit: 'project', lo: 250, hi: 1200, q: 'Is it cracked tile, loose tile or dirty grout?', blurb: 'Cracks, loose tiles and old grout made like new.' },
+    { name: 'Patio and outdoor tile', unit: 'sq ft', lo: 12, hi: 25, q: 'About how many square feet of patio or entry?', blurb: 'Slip-resistant outdoor tile for patios, steps and pool decks.' },
+    { name: 'Walk-in shower conversion', unit: 'project', lo: 4500, hi: 14000, q: 'Do you want to replace a tub with a walk-in shower?', blurb: 'Swap the old tub for a clean walk-in shower.' },
+  ],
+  ideas: ['How much to tile a bathroom?', 'Can you come out this week?', 'Do you supply the tile?', 'How long does a shower take?'],
+};
+const ROOF_RE = /roof|shingle|gutter/i;
+const TILE_RE = /\btil(e|er|ing)\b|grout|backsplash/i;
 const JUNK_RE = /junk|haul|trash|debris|clean\s?-?out|dumpster|waste removal|garbage|rubbish|disposal/i;
 const CONTRACTOR_RE = /landscap|paver|turf|patio|hardscape|backyard|fence|deck\b|concrete|pergola|artificial grass|masonry|retaining|outdoor living/i;
 const KIT_VISITS = ['free estimate', 'free consultation', 'free quote', 'free assessment', 'free inspection'];
@@ -4698,6 +4726,8 @@ function kitProfileClean(o, type) {
 }
 // Ask Workers AI for a believable service menu for any local business type. Falls back to a plain generic menu.
 async function kitProfileAI(env, type, business, city) {
+  if (ROOF_RE.test(type)) return kitProfileClean(KIT_ROOF, 'roofing contractor');
+  if (TILE_RE.test(type)) return kitProfileClean(KIT_TILE, 'tile contractor');
   if (JUNK_RE.test(type)) return kitProfileClean(KIT_JUNK, 'junk removal');
   if (env.AI) {
     try {
@@ -4719,7 +4749,7 @@ async function kitProfileAI(env, type, business, city) {
 // which kind of demo does this business get?
 function kitNicheFor(category, business) {
   const t = String(category || '') + ' ' + String(business || '');
-  if (JUNK_RE.test(t)) return 'custom';
+  if (ROOF_RE.test(t) || TILE_RE.test(t) || JUNK_RE.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
   return String(category || '').trim() ? 'custom' : 'medspa';
