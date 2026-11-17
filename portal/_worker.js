@@ -186,6 +186,14 @@ async function ensureSchema(env) {
       email_next_at = CASE WHEN tags LIKE '%,opted-out,%' OR tags LIKE '%,replied,%' THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', emailed_at, '+3 days') END
       WHERE emailed_at IS NOT NULL`).run();
   }
+  // one-time niche switch (Nov 2026): roofing + tile with voice AI. Runs once; your own focus changes after this stick.
+  if ((await getSetting(env, 'niche_v')) !== '2') {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'roofing')"),
+      env.DB.prepare("UPDATE settings SET value = json_remove(value, '$.niches', '$.max_reviews', '$.low_review_only') WHERE key = 'auto_finder' AND json_valid(value)"),
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v', '2')"),
+    ]);
+  }
   schemaReady = true;
 }
 
@@ -213,59 +221,47 @@ const DEFAULT_SCRIPT = [
   { kind: 'step', title: 'Opener', body:
 `Hey, is this {owner_first}?
 
-[If yes] Hey {owner_first}, this is {rep_first} with Reekon Systems, here in LA. I'll be quick, I know you're probably on a job site.
+[If yes] Hey {owner_first}, it's {rep_first} here in LA. Not selling you a roof, promise. Got 30 seconds?
 
-[If you messaged them] Hey {owner_first}, it's {rep_first}. I sent you a demo for {business}, a version of your own AI receptionist. Did you get a chance to try it?
+[If you messaged them] Hey {owner_first}, it's {rep_first}. I texted you a demo built for {business}. Did you get a chance to talk to it?
 
-[If gatekeeper] Hey! Quick one: who handles the calls and new jobs for {business}? … Is {owner_first} around?` },
-  { kind: 'step', title: 'The hook (their own demo)', body:
-`Here's why I'm calling. We build AI phone and text systems for backyard contractors. When you're on a job and can't pick up, it answers the call, answers questions, and books the free estimate.
+[If gatekeeper] Hey! Quick one: who handles new jobs and calls for {business}? … Is {owner_first} around?` },
+  { kind: 'step', title: 'The question', body:
+`When you're up on a job and the phone rings, who picks up?
 
-We already put together a live demo for {business}. You can talk to it on your phone right now. Can I text you the link?
+[Let them answer. Then:] And what happens to those calls? Do they leave a message, or call the next guy?
+
+[Listen. Write what they say in Notes: who answers, how many calls they miss, how big a typical job is.]` },
+  { kind: 'step', title: 'The pitch (voice AI)', body:
+`Here's what I do. I set up a voice assistant that answers every call in {business}'s name, asks what's going on, and books the free inspection or estimate for you. You get a text with the name, the address and the problem.
+
+I already built one for {business}. I'll text you the link so you can call it yourself and hear it. Takes a minute.
 
 [Demo link] {demo_link}` },
-  { kind: 'step', title: 'Quick questions (the audit)', body:
-`While you pull it up, three quick ones:
+  { kind: 'step', title: 'The close', body:
+`Try it, and I'll call you back at [time] to see what you think. Does today after 4 or tomorrow morning work better?
 
-- When you're on a job and the phone rings, what happens to that call?
-- Roughly how many calls or messages do you think you miss in a week?
-- When you give someone an estimate, who follows up, and how many go quiet?
-- Say an average job is what, a few thousand? So one lost job is a few thousand lost.
-
-[Listen. Write what they say in Notes. Get: staff, software, how leads come in, who decides, budget.]` },
-  { kind: 'step', title: 'What we do', body:
-`That's exactly what the system fixes:
-
-1) Every call is answered, even while you're working, and the estimate gets booked.
-2) Every new lead gets a text back in seconds.
-3) Every quote gets followed up until they say yes or no.
-4) Every finished job asks for the review and the referral.
-
-It runs for {business} on top of your own number. You keep working. Want me to book the free 30-minute audit so Marquise can show you exactly what it would look like?` },
-  { kind: 'step', title: 'Book the audit', body:
-`The next step is a free 30-minute AI audit with Marquise, our founder. He'll look at how calls and quotes work at {business} today and give you a rough number before the call ends. No pressure.
-
-Does tomorrow morning or tomorrow afternoon work better?
-
-[Lock a day and time → tap Booked and put the time in. Always book the second call on the audit.]` },
+[Lock a time → tap Callback and put the time in. If they're hot, book a 10-minute screen-share demo instead.]` },
   { kind: 'objection', title: '"How much is it?"', body:
-`Fair question. Setups usually run from about $3,000 depending on what we turn on, plus a monthly fee, and Marquise gives you the exact number on the audit. Most contractors look at it as: if it books one extra job, it has paid for itself. Want me to grab you a time to see the real number for {business}?` },
-  { kind: 'objection', title: '"I already have someone answering the phone"', body:
-`That's great. Does that person answer at 7pm, on weekends, and while you're all at lunch? This doesn't replace them. It catches what they can't. Worth 30 minutes to see how many calls slip through?` },
+`Fair question. It depends on how many calls you get, so I'd rather show you first. One roof or tile job you'd otherwise miss usually pays for it. Want to try the demo and I'll give you the exact number when I call back?` },
+  { kind: 'objection', title: '"I have an answering service / my wife answers"', body:
+`That's great. Does it answer at 7pm, on weekends, and while you're both on a job? And does it book the job, or just take a message? This catches what they can't. Worth a minute to hear it?` },
+  { kind: 'objection', title: '"AI sounds fake"', body:
+`Totally fair. Try it yourself first. If it sounds fake, tell me and I'll stop bugging you. Can I text you the link?` },
   { kind: 'objection', title: '"I get enough work"', body:
-`Love that. The goal isn't more work than you can handle. It's making sure the jobs you're already paying to get don't leak out through a missed call or a quote nobody followed up. Want to see what leaks, free?` },
+`Love that. The goal isn't more work than you can handle. It's making sure the jobs you're already paying to get don't leak out through a missed call. Want to hear what that sounds like, free?` },
   { kind: 'objection', title: '"Just send me info"', body:
-`For sure, I'll text you the demo right now. It only makes sense once you've talked to it, so let's put 30 minutes on the calendar too. What's better, morning or afternoon?` },
+`For sure, I'll text you the live demo right now. It makes more sense once you've talked to it. What's a good time for me to call you back and see what you think?` },
   { kind: 'objection', title: '"I\'m on a job right now"', body:
 `Totally get it, that's exactly why I'm calling. When's a better time for a 2-minute call back, early tomorrow or late afternoon?
 
 [Tap Callback and set the time.]` },
   { kind: 'objection', title: '"Not interested"', body:
-`No problem at all. Can I ask: is it the timing, or you just don't see a need? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
+`No problem at all. Is it the timing, or you just don't see a need? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
   { kind: 'objection', title: '"Is this a robot?"', body:
-`Ha, I'm a real person! The AI only handles the repetitive stuff like "do you do pavers?" and booking the estimate. Anything important goes straight to you.` },
+`Ha, I'm a real person. The AI only picks up the calls you can't, like when you're on a roof, and books the estimate. Anything important goes straight to you.` },
   { kind: 'step', title: 'Voicemail', body:
-`Hey {owner_first}, it's {rep_first} with Reekon Systems. We built a demo of an AI receptionist for {business}, so the next time you're on a job and the phone rings, it books the estimate for you. I'll text you the link. Talk soon!
+`Hey {owner_first}, it's {rep_first} here in LA. I built a voice assistant for {business} that answers the phone when you're on a job and books the estimate. I'll text you a link so you can call it and hear it. Talk soon!
 
 [Then tap Voicemail, and text the demo link.]` },
 ];
@@ -328,15 +324,16 @@ function trkScore(t, goal, postedPlatforms) {
   ];
   return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
 }
-const FOCUS_DEFAULT = 'med spa';
+const FOCUS_DEFAULT = 'roofing';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
   if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
+  if (/roof|tile|tiling|home service/.test(base)) ['roofing', 'roofer', 'roof repair', 'roofing contractor', 'roof replacement', 'shingle', 'tile', 'tiling', 'tile installer', 'tile contractor', 'grout', 'flooring'].forEach((t) => terms.add(t));
   if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
-  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 12);
+  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 14);
 }
 function focusSql(terms) {
   if (!terms.length) return { sql: '0', args: [] };
@@ -797,7 +794,8 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
 const BACKYARD_NICHES = ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'];
-const AUTO_DEFAULTS = { enabled: false, niches: BACKYARD_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 30, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
+const HOME_NICHES = ['roofing contractor', 'roof repair', 'roof replacement', 'tile contractor', 'tile installer', 'bathroom tile installer', 'flooring and tile', 'roofer'];
+const AUTO_DEFAULTS = { enabled: false, niches: HOME_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 5000, include_social: true, any_site: false, low_review_only: false, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -1355,7 +1353,12 @@ const LOWREV_SQL = 'COALESCE(l.reviews, 9999) <= 30';
 // review-starved places first: the fewer Google reviews, the earlier in the queue. No website breaks ties. Unknown counts go last.
 const REV_TIER_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews <= 10 THEN 0 WHEN l.reviews <= 25 THEN 1 WHEN l.reviews <= 50 THEN 2 WHEN l.reviews <= 100 THEN 3 ELSE 4 END';
 const LEAD_PRIO = `(${REV_TIER_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
-const maxReviews = async (env) => { const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
+// voice AI sells to BUSY shops: the more reviews, the more calls they probably miss. Med spa review-generator mode keeps the low-review order.
+const REV_BUSY_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews >= 100 THEN 0 WHEN l.reviews >= 50 THEN 1 WHEN l.reviews >= 25 THEN 2 WHEN l.reviews >= 10 THEN 3 ELSE 4 END';
+const LEAD_PRIO_BUSY = `(${REV_BUSY_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
+const isMedFocus = async (env) => /med(ical|i)?\s*spa|aesthetic/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
+const leadPrio = async (env) => ((await isMedFocus(env)) ? LEAD_PRIO : LEAD_PRIO_BUSY);
+const maxReviews = async (env) => { if (!(await isMedFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
@@ -1555,11 +1558,12 @@ async function api(request, env, url) {
     const p = url.searchParams;
     let { w, args } = leadFilter(p, user);
     const fx = focusSql(await focusTerms(env));
+    const PRIO = await leadPrio(env);
     if (p.get('focus') === '1') { w = (w ? w + ' AND ' : 'WHERE ') + fx.sql; args = [...args, ...fx.args]; }
     const limit = Math.min(+p.get('limit') || 50, 200), offset = Math.max(+p.get('offset') || 0, 0);
     const SORTS = { business: 'l.business COLLATE NOCASE', city: 'l.city COLLATE NOCASE', status: 'l.status', stage: "CASE l.status WHEN 'new' THEN 0 WHEN 'demo_needed' THEN 0 WHEN 'demo_ready' THEN 0 WHEN 'called' THEN 1 WHEN 'callback' THEN 2 WHEN 'booked' THEN 3 WHEN 'call2' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE 7 END", last_call: 'l.last_call_at', next: 'l.next_action_at', added: 'l.id', rep: 'u.name' };
     const sortKey = SORTS[p.get('sort')], dir = p.get('dir') === 'desc' ? 'DESC' : 'ASC';
-    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY ${LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, CASE WHEN l.status IN ('callback','booked') THEN COALESCE(l.callback_at, l.updated_at) END ASC, l.id DESC`;
+    const order = sortKey ? `ORDER BY ${sortKey} IS NULL, ${sortKey} ${dir}, l.id DESC` : `ORDER BY ${PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, CASE l.status WHEN 'callback' THEN 0 WHEN 'demo_ready' THEN 1 WHEN 'booked' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, CASE WHEN l.status IN ('callback','booked') THEN COALESCE(l.callback_at, l.updated_at) END ASC, l.id DESC`;
     const orderArgs = sortKey ? [] : fx.args;
     const { results } = await env.DB.prepare(
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
@@ -1579,6 +1583,7 @@ async function api(request, env, url) {
     const base = w ? w + ' AND' : 'WHERE';
     const per = Math.min(+url.searchParams.get('per') || 40, 100);
     const fx = focusSql(await focusTerms(env));
+    const PRIO = await leadPrio(env);
     const out = [];
     for (const [key, label, list] of BOARD_STAGES) {
       const inList = `l.status IN (${list.map(() => '?').join(',')})`;
@@ -1587,7 +1592,7 @@ async function api(request, env, url) {
             l.assigned_to, u.name AS rep_name, l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.next_action_at, l.next_action, l.updated_at,
             l.rating, l.reviews, l.link, l.place_id, l.address, l.website, (${fx.sql}) AS focus
           FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${base} ${inList}
-          ORDER BY ${key === 'callback' || key === 'booked' ? '(0+0)' : LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
+          ORDER BY ${key === 'callback' || key === 'booked' ? '(0+0)' : PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END, CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, COALESCE(l.callback_at, l.booked_at, l.updated_at) ${key === 'callback' || key === 'booked' ? 'ASC' : 'DESC'} LIMIT ?`)
           .bind(...fx.args, ...args, ...list, ...fx.args, per).all(),
         env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${base} ${inList}`).bind(...args, ...list).first(),
       ]);
@@ -2494,6 +2499,7 @@ async function api(request, env, url) {
     need(user, 'admin', 'rep');
     const cur = +url.searchParams.get('after') || 0;
     const fx = focusSql(await focusTerms(env));
+    const PRIO = await leadPrio(env);
     const t = now(), recent = new Date(Date.now() - 4 * 3600e3).toISOString();
     const who = user.role === 'rep' ? 'AND l.assigned_to = ?' : '';
     const maxRev = await maxReviews(env); // the queue only dials low-review places (people already in conversation are exempt)
@@ -2502,7 +2508,7 @@ async function api(request, env, url) {
          AND l.status IN ('new','demo_needed','demo_ready','called','callback') AND (l.status != 'callback' OR l.callback_at <= ?)
          AND (l.status IN ('callback','demo_ready','called') OR COALESCE(l.reviews, 0) <= ${maxRev})
          AND (l.last_call_at IS NULL OR l.last_call_at < ?) ${who}
-       ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, ${LEAD_PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
+       ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, ${PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
          CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, l.attempts ASC, l.id ASC LIMIT 1`
     ).bind(cur, t, recent, ...(user.role === 'rep' ? [user.id] : []), ...fx.args).first();
     return json({ id: row ? row.id : null });
@@ -2962,9 +2968,9 @@ async function api(request, env, url) {
   }
   if (path === '/video/postcopy' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
-    const transcript = str(body.transcript, 3000), biz = str(body.business, 60) || 'med spa';
+    const transcript = str(body.transcript, 3000), biz = str(body.business, 60) || 'roofing contractor';
     if (!transcript) bad('No words to write a caption from');
-    const fallbackTags = ['#medspa', '#medspamarketing', '#aiforbusiness', '#smallbusiness', '#automation', '#reekonsystems'];
+    const fallbackTags = ['#roofing', '#roofingcontractor', '#aiforbusiness', '#smallbusiness', '#automation', '#reekonsystems'];
     let caption = '', tags = [];
     if (env.AI) {
       try {
@@ -4701,7 +4707,7 @@ const KIT_TILE = {
   ideas: ['How much to tile a bathroom?', 'Can you come out this week?', 'Do you supply the tile?', 'How long does a shower take?'],
 };
 const ROOF_RE = /roof|shingle|gutter/i;
-const TILE_RE = /\btil(e|er|ing)\b|grout|backsplash/i;
+const TILE_RE = /\btil(e|es|er|ers|ing)\b|grout|backsplash/i;
 const JUNK_RE = /junk|haul|trash|debris|clean\s?-?out|dumpster|waste removal|garbage|rubbish|disposal/i;
 const CONTRACTOR_RE = /landscap|paver|turf|patio|hardscape|backyard|fence|deck\b|concrete|pergola|artificial grass|masonry|retaining|outdoor living/i;
 const KIT_VISITS = ['free estimate', 'free consultation', 'free quote', 'free assessment', 'free inspection'];
@@ -5157,8 +5163,10 @@ async function kitAdmin(env, user, path, method, body, url) {
     if (body.lead_id) { const l = await env.DB.prepare('SELECT id, category, business FROM leads WHERE id = ?').bind(+body.lead_id).first(); if (l) { leadId = l.id; leadCat = (l.category || '') + ' ' + (l.business || ''); } }
     const bizType = oneLine(body.biz_type, 60);
     if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
-    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : 'medspa';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    const medFocus = await isMedFocus(env);
+    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : 'custom');
+    if (body.niche === 'medspa' && !medFocus && !isMedCat(leadCat + ' ' + oneLine(body.business, 80) + ' ' + bizType)) body.niche = 'custom';
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     const slug = kitSlug(data.business), t = now();
     const r = await env.DB.prepare('INSERT INTO demo_kits (slug, user_id, lead_id, data, created_at, updated_at) VALUES (?,?,?,?,?,?)').bind(slug, user.id, leadId, JSON.stringify(data), t, t).run();

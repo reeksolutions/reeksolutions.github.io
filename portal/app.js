@@ -1052,7 +1052,7 @@
     const isMedLead = /med(ical|i)?\s*spa|aesthetic|botox|laser|skin/i.test((L.category || '') + ' ' + L.business);
     const noteMsg = isMedLead
       ? 'Hey, it\'s ' + me1 + '. I called earlier to ask about booking a consultation and nobody picked up. I\'m booking this week and going with whoever responds first. I help med spas stop losing calls like mine. Want me to show you how?'
-      : 'Hey, it\'s ' + me1 + '. I called earlier about a backyard project and nobody picked up. I\'m getting quotes this week and going with whoever responds first. I help contractors stop missing calls like mine. Want me to show you how?';
+      : 'Hey, it\'s ' + me1 + '. I called earlier about a roof/tile job and nobody picked up. I\'m getting quotes this week and going with whoever answers first. I build voice assistants that answer for contractors while they\'re on a job. Want to hear one built for you?';
     async function logMsg(kind) {
       await flushLive();
       try {
@@ -1747,9 +1747,9 @@
         h('button', { class: 'btn small', onclick: async () => { try { await api('PATCH', '/kits/' + k.id, { reroll: true }); toast('New look'); viewLab(arg); } catch (e) { fail(e); } } }, 'New look'),
         h('button', { class: 'btn small', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to delete'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Delete'; }, 3000); return; } try { await api('DELETE', '/kits/' + k.id); toast('Deleted'); viewLab(arg); } catch (e2) { fail(e2); } } }, 'Delete')))) : [h('p', { class: 'dim' }, 'No demos yet. Build the first one above.')];
     shell('lab', [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Demo Lab'), h('h1', null, 'Demo Lab'), h('p', { class: 'sub' }, 'Type a med spa in. Get one link with every offer working: voice receptionist, website, chat, text-back, quote follow-up, reviews, win-back, reminders, ballpark estimates, job-done automation and a lead tracker.'))),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Demo Lab'), h('h1', null, 'Demo Lab'), h('p', { class: 'sub' }, 'Backyard contractors only. For roofing or tile, use Demo Studio. Get one link with every offer working: voice receptionist, website, chat, text-back, quote follow-up, reviews, win-back, reminders, ballpark estimates, job-done automation and a lead tracker.'))),
       h('section', { class: 'ov-card' }, h('div', { class: 'ov-head' }, h('h3', null, L ? 'New demo for ' + L.business : 'New demo')),
-        input('Business name', 'business', { placeholder: "Glow Med Spa" }), input('Owner name', 'owner', { placeholder: 'Dr. Lee' }), input('City', 'city', { placeholder: 'Beverly Hills' }), input('Business phone (shown on the sample site)', 'phone', { type: 'tel' }),
+        input('Business name', 'business', { placeholder: "Torres Pavers & Turf" }), input('Owner name', 'owner', { placeholder: 'Mike Torres' }), input('City', 'city', { placeholder: 'Torrance' }), input('Business phone (shown on the sample site)', 'phone', { type: 'tel' }),
         input('Average job ($, for the money math)', 'avg', { type: 'number', inputmode: 'numeric' }),
         h('div', { class: 'field' }, h('label', null, 'What they build'), svcChips), h('div', { class: 'field' }, h('label', null, 'Look of the sample website'), lookChips),
         voiceRow ? h('div', { class: 'field' }, h('label', null, 'Receptionist voice'), voiceRow) : null, build),
@@ -1760,8 +1760,8 @@
 
   /* ================= Demo Studio: pick an offer, connect a lead, send the demo ================= */
   const STUDIO_OFFERS = [
+    ['voice', 'Voice AI receptionist', 'Answers every call while they are on a job and books the estimate. They talk to it live.', 'phone'],
     ['reviews', 'Google review generator', 'A text after every appointment sends the client straight to your Google reviews.', 'spark'],
-    ['voice', 'AI receptionist', 'Answers every call and books the consultation. They talk to it live.', 'phone'],
     ['textback', 'Missed-call text-back', 'A call goes unanswered, a text goes out in seconds.', 'sms'],
     ['speed', 'Instant lead reply', 'New inquiry in, answer out before the next med spa replies.', 'bolt'],
     ['quotes', 'Consultation follow-up', 'Quiet consultations get nudged until they reply.', 'mail'],
@@ -1792,7 +1792,7 @@
     const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
     const pickBox = h('div', { class: 'sp-leads' });
     const resultBox = h('div');
-    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. junk removal, plumber, med spa', maxlength: 60, class: 'sp-type' });
+    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. roofing, tile, plumber', value: 'roofing contractor', maxlength: 60, class: 'sp-type' });
     const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready' }[st] || st);
     const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
@@ -2191,7 +2191,7 @@
     const capIn = h('input', { id: 'auto-cap', type: 'number', min: 0, max: 50000, inputmode: 'numeric', value: d.caps.month, oninput: (e) => { cfg.month_cap = +e.target.value || 0; dirty(); } });
     const expandBox = h('input', { id: 'auto-expand', type: 'checkbox', checked: cfg.expand !== false, onchange: (e) => { cfg.expand = e.target.checked; dirty(); } });
     const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
-    const focusName = String(d.focus || 'backyard contractor').toLowerCase(), focusPl = focusName + 's';
+    const focusName = String(d.focus || 'roofing').toLowerCase(), focusPl = focusName + 's';
     const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
     const stockBar = h('div', { class: 'stockbar' },
       h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh ' + focusName + ' leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
@@ -2211,13 +2211,14 @@
     const runs = (d.runs || []).slice(0, 8);
     const LA = ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Beverly Hills, CA', 'West Hollywood, CA', 'Irvine, CA'];
     const PRESETS = [
+      { key: 'roofing', label: 'Roofing and tile mode', focus: 'roofing', niches: ['roofing contractor', 'roof repair', 'roof replacement', 'tile contractor', 'tile installer', 'bathroom tile installer', 'flooring and tile', 'roofer'], max: 5000, low: false },
       { key: 'med spa', label: 'Med spa mode', focus: 'med spa', niches: ['med spa', 'medical spa', 'medspa', 'aesthetic clinic', 'botox injector', 'laser hair removal', 'body contouring', 'skin rejuvenation clinic'], max: 40 },
       { key: 'backyard contractor', label: 'Backyard contractor mode', focus: 'backyard contractor', niches: ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'], max: 30 }];
     const presetBtns = PRESETS.map((pr) => h('button', { class: 'btn block ' + (focusName === pr.key ? 'ok' : 'primary'), style: 'margin-bottom:10px', disabled: !d.ready, onclick: async () => {
       try {
-        await api('PUT', '/finder/auto', { enabled: true, focus: pr.focus, niches: pr.niches, cities: LA, per_night: 20, max_reviews: pr.max, any_site: false, low_review_only: true, include_social: true });
-        toast(pr.label + ' on: owner-operators with ' + pr.max + ' or fewer reviews, 20 searches a night across LA. New leads appear in the morning.'); again();
-      } catch (e) { fail(e); } } }, (focusName === pr.key ? '✓ ' : '') + pr.label + (focusName === pr.key ? ' (on)' : ': low-review owners, LA')));
+        await api('PUT', '/finder/auto', { enabled: true, focus: pr.focus, niches: pr.niches, cities: LA, per_night: 20, max_reviews: pr.max, any_site: false, low_review_only: pr.low !== false, include_social: true });
+        toast(pr.label + ' on: ' + (pr.low === false ? 'any size of shop' : 'owner-operators with ' + pr.max + ' or fewer reviews') + ', 20 searches a night across LA. New leads appear in the morning.'); again();
+      } catch (e) { fail(e); } } }, (focusName === pr.key ? '✓ ' : '') + pr.label + (focusName === pr.key ? ' (on)' : pr.low === false ? ': any size, LA' : ': low-review owners, LA')));
     const medBtn = h('div', null, presetBtns);
     autoBox.replaceChildren(h('section', { class: 'panel auto-bot' },
       h('div', { class: 'panel-head' }, h('div', null, h('h3', null, 'Auto lead bot'), h('div', { class: 'sub' }, h('span', { class: 'dot ' + (cfg.enabled && d.ready ? 'on' : '') }), status)),
@@ -3223,7 +3224,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   ];
   const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
   const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker'], ['ballpark', 'Instant ballpark'], ['jobdone', 'Job-done automation']];
-  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' ? 'med spa' : v; } catch { return 'med spa'; } })(), offers: [], cardFmt: null, cardLines: null, app: null, step: 'app', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
+  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' || v === 'med spa' ? 'roofing contractor' : v; } catch { return 'roofing contractor'; } })(), offers: [], cardFmt: null, cardLines: null, app: null, step: 'app', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
   const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'app', app: null, fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
   const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
@@ -3698,7 +3699,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const bs = fixI >= 0 ? plan.scenes[fixI].start + 0.15 : plan.total * 0.45;
     const endI = plan.scenes.findIndex((x, i) => i > fixI && (x.kind === 'result' || x.kind === 'cta'));
     const be = Math.max(bs + 3, Math.min(bs + 12, (endI >= 0 ? plan.scenes[endI].start : plan.total) - 0.2));
-    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'med spa'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
+    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'roofing contractor'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
     ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
     const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, Math.max(W, H) * 0.6); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
     // phone
@@ -4292,7 +4293,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   async function viewAdminHome() {
     const ov = await api('GET', '/overview');
     const trk = ov;
-    const niche = ov.focus_niche || 'med spa';
+    const niche = ov.focus_niche || 'roofing';
     const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
     const labels = C.days.map(shortDay);
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -4394,9 +4395,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   /* ---- Today's score (Home): one number for the day, every row has a button that moves it ---- */
   const FIX_QUEUE = [
     ['Connect Google so Meet links make themselves', '#/integrations'],
-    ['Clear the non-med-spa leads out of the list', '#/finder'],
+    ['Clear the leads outside roofing and tile out of the list', '#/finder'],
     ['Set a dial goal you can actually hit', '#/tracker'],
-    ['Point the demos at med spa treatments', '#/lab'],
+    ['Build a roofing or tile voice demo in Demo Studio', '#/studio'],
     ['Write tomorrow\'s post before you quit for the day', '#/content'],
     ['Call every callback that is due', '#/callbacks'],
     ['Read last week\'s calls and fix the opener', '#/rebrief'],
