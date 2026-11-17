@@ -342,12 +342,13 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['overview', 'lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
       switch (route) {
         case 'home': return await viewHome();
+        case 'overview': return await viewAdminOverview();
         case 'team': location.hash = '#/home'; return;
         case 'finder': return await viewFinder();
         case 'emailbot': return await viewEmailBot();
@@ -4290,7 +4291,89 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     ]);
   }
 
+  /* ================= new Home (from Marquise's sketch): score, content table, revenue + outreach charts, plan to-dos ================= */
+  function lineChart({ labels, values, fmt, cls }) {
+    const W = 340, H = 120, top = 10, n = values.length, f = fmt || ((v) => v.toLocaleString());
+    const max = Math.max(1, ...values), min = 0;
+    const X = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W), Y = (v) => H - 2 - ((v - min) / (max - min)) * (H - top - 2);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, class: 'ov-svg hm-line ' + (cls || ''), role: 'img', preserveAspectRatio: 'none' });
+    svg.append(sv('line', { x1: 0, y1: H - 0.5, x2: W, y2: H - 0.5, class: 'ov-axis' }));
+    const pts = values.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1));
+    svg.append(sv('polygon', { points: `0,${H} ${pts.join(' ')} ${W},${H}`, class: 'hm-area' }));
+    svg.append(sv('polyline', { points: pts.join(' '), class: 'hm-path', fill: 'none' }));
+    values.forEach((v, i) => { if (n <= 31 || i === n - 1) { const c = sv('circle', { cx: X(i).toFixed(1), cy: Y(v).toFixed(1), r: i === n - 1 ? 3.2 : 1.6, class: 'hm-dot' }); c.append(sv('title', null, document.createTextNode(labels[i] + ': ' + f(v)))); svg.append(c); } });
+    const short = (d) => new Date(d + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return h('div', { class: 'ov-chart' }, svg, h('div', { class: 'ov-ax' }, h('span', null, short(labels[0])), h('span', null, short(labels[Math.floor((n - 1) / 2)])), h('span', null, short(labels[n - 1]))));
+  }
+  const HM = { range: 1, ch: 'calls' };
+  const HM_PLAT = [['ig', 'Instagram', 'IG'], ['x', 'X', 'X'], ['tiktok', 'TikTok', 'TikTok'], ['facebook', 'Facebook', 'Facebook']];
   async function viewAdminHome() {
+    const d = await api('GET', '/home?range=' + HM.range);
+    const niche = d.focus || 'roofing';
+    const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    const sc = d.score, tier = sc.total >= 80 ? ['A', 'great'] : sc.total >= 60 ? ['B', 'good'] : sc.total >= 40 ? ['C', 'meh'] : ['D', 'bad'];
+    const R = 38, C = 2 * Math.PI * R;
+    const ring = h('div', { class: 'sc-ring ' + tier[1] },
+      h('svg', { viewBox: '0 0 100 100', width: 96, height: 96 }, h('circle', { cx: 50, cy: 50, r: R, class: 'sc-bg' }), h('circle', { cx: 50, cy: 50, r: R, class: 'sc-fg', style: 'stroke-dasharray:' + C + ';stroke-dashoffset:' + (C * (1 - Math.min(100, sc.total) / 100)) })),
+      h('div', { class: 'sc-num' }, h('b', null, sc.total), h('small', null, tier[0])));
+    const scoreCard = h('section', { class: 'panel sc-card' }, h('div', { class: 'sc-head' }, ring,
+      h('div', { class: 'sc-info' }, h('small', null, 'Score of the day'), h('b', null, sc.total + ' of 100'),
+        h('span', null, sc.todos_done + ' of ' + sc.todos_total + ' to-dos · ' + sc.dials + ' / ' + d.goal + ' calls · ' + (sc.texts + sc.dms) + ' texts and DMs'),
+        h('small', { class: 'dim' }, d.streak ? d.streak + '-day streak' : 'Finish the to-dos and hit your calls to build a streak'))));
+    // content table
+    const chips = (opts, cur, on) => h('div', { class: 'hm-chips' }, opts.map(([v, l]) => h('button', { type: 'button', class: 'hm-chip' + (cur === v ? ' on' : ''), onclick: () => on(v) }, l)));
+    const setRange = (v) => { HM.range = v; viewAdminHome(); };
+    const cell = (v, extra) => h('td', null, h('b', null, v), extra ? h('small', { class: extra[0] }, extra[1]) : null);
+    const fmtChange = (c) => (c == null ? null : [c > 0 ? 'up' : c < 0 ? 'down' : '', (c > 0 ? '+' : '') + c.toLocaleString()]);
+    const table = h('div', { class: 'hm-scroll' }, h('table', { class: 'hm-table' },
+      h('thead', null, h('tr', null, h('th', null, ''), HM_PLAT.map(([, , sh]) => h('th', null, sh)))),
+      h('tbody', null,
+        h('tr', null, h('th', null, 'Followers'), HM_PLAT.map(([k]) => { const p = d.platforms[k]; return p.followers == null ? h('td', { class: 'dim' }, h('b', null, '—')) : cell(p.followers.toLocaleString(), fmtChange(p.change)); })),
+        h('tr', null, h('th', null, 'DMs sent'), HM_PLAT.map(([k]) => cell('+' + d.platforms[k].dms.toLocaleString()))))));
+    const openUpdate = () => sheet((box, close) => {
+      const inputs = {}, dmIn = {};
+      box.append(h('h2', null, 'Update today'), h('p', { class: 'sub' }, 'Type your follower count for each app and how many DMs you sent today. Leave a box empty to skip it.'),
+        HM_PLAT.map(([k, name]) => { const fi = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: d.platforms[k].followers != null ? String(d.platforms[k].followers) : 'Followers' }); const di = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: '+ DMs' }); inputs[k] = fi; dmIn[k] = di;
+          return h('div', { class: 'field' }, h('label', null, name), h('div', { class: 'row' }, fi, di)); }),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'),
+          h('button', { class: 'btn primary', onclick: async (e) => {
+            e.currentTarget.disabled = true;
+            try {
+              for (const [k] of HM_PLAT) { const f = inputs[k].value.trim(), a = dmIn[k].value.trim(); if (f || a) await api('PUT', '/social', { platform: k, followers: f, dms_add: a }); }
+              toast('Updated'); close(true); viewAdminHome();
+            } catch (x) { fail(x); e.currentTarget.disabled = false; }
+          } }, 'Save')));
+    });
+    const contentCard = h('section', { class: 'panel hm-card' },
+      h('div', { class: 'hm-head' }, h('h3', null, 'Content'), h('div', { class: 'row' }, chips([[1, 'Today'], [7, '7 days'], [30, '30 days'], [90, '90 days']], HM.range, setRange), h('button', { class: 'btn small primary', onclick: openUpdate }, 'Update'))),
+      table, h('p', { class: 'dim small', style: 'margin:8px 0 0' }, 'Followers show the latest count and the change over the range. Tap Update to add today\'s numbers until the apps are connected.'));
+    // charts
+    const revCard = h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Revenue'), h('span', { class: 'hm-big' }, '$' + d.revenue.total.toLocaleString())),
+      lineChart({ labels: d.labels, values: d.revenue.values, fmt: (v) => '$' + v.toLocaleString() }),
+      h('p', { class: 'dim small', style: 'margin:6px 0 0' }, d.revenue.deals ? d.revenue.deals + ' client' + (d.revenue.deals === 1 ? '' : 's') + ' · $' + d.revenue.mrr.toLocaleString() + '/mo recurring' : 'No clients yet. Log a deal and this line starts moving.'));
+    const chKey = { calls: 'calls', sms: 'sms', email: 'email', social: 'social' }[HM.ch] || 'calls';
+    const outVals = d.outreach[chKey], outTotal = outVals.reduce((a, b) => a + b, 0);
+    const outCard = h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Sales outreach'), h('span', { class: 'hm-big' }, outTotal.toLocaleString())),
+      chips([['calls', 'Cold calling'], ['sms', 'SMS'], ['email', 'Email'], ['social', 'Social media']], HM.ch, (v) => { HM.ch = v; viewAdminHome(); }),
+      lineChart({ labels: d.labels, values: outVals, cls: 'alt' }),
+      h('p', { class: 'dim small', style: 'margin:6px 0 0' }, 'Per day, last ' + d.labels.length + ' days.'));
+    // plan to-dos
+    const nowMin = trkNowMin();
+    const put = async (blocks) => { try { await api('PUT', '/tracker', { blocks }); viewAdminHome(); } catch (e) { fail(e); } };
+    const todoRows = TRK_PLAN.map((b) => { const done = d.blocks.includes(b.id), cur = !done && nowMin >= trkMin(b.from) && nowMin < trkMin(b.to);
+      const title = planTitle(b.title, niche) + (b.quota ? ' (' + b.quota + ' calls)' : '');
+      return h('label', { class: 'hm-todo' + (done ? ' done' : '') + (cur ? ' now' : '') },
+        h('input', { type: 'checkbox', checked: done, onchange: () => put(done ? d.blocks.filter((x) => x !== b.id) : d.blocks.concat(b.id)) }),
+        h('span', { class: 'hm-t' }, title), h('small', null, trk12(b.from))); });
+    const todoCard = h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'To do'), h('span', { class: 'hm-big' }, sc.todos_done + '/' + sc.todos_total)),
+      h('div', { class: 'hm-todos' }, todoRows), h('p', { class: 'dim small', style: 'margin:8px 0 0' }, 'This is your daily plan. Check each one off when it\'s done.'));
+    const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
+    const head = h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine), h('h1', null, 'Day ' + Math.min(d.day_n, 30) + ' of 30'), h('p', { class: 'sub' }, 'Focus: ' + niche + '.')),
+      h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/overview' }, 'Full overview'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
+    shell('home', [head, scoreCard, contentCard, h('div', { class: 'ov-grid' }, revCard, outCard), todoCard, catLauncher()]);
+  }
+
+  async function viewAdminOverview() {
     const ov = await api('GET', '/overview');
     const trk = ov;
     const niche = ov.focus_niche || 'roofing';
@@ -4984,6 +5067,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
 
   /* ---- personal tracker (admin) ---- */
+  const planTitle = (title, focus) => { const f = String(focus || 'lead').toLowerCase(), home = /roof|tile/.test(f); return title.replace(/\{niche\}s/g, home ? 'roofers and tile pros' : f + 's').replace(/\{niche\}/g, home ? 'roofing and tile' : f); };
   const TRK_PLAN = [
     { id: 'pray', from: '06:00', to: '06:30', title: 'Prayer', tag: 'Spiritual win', win: true },
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
@@ -5075,7 +5159,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         const on = day.blocks.includes(b.id), a = trkMin(b.from), z = trkMin(b.to), cur = now >= a && now < z;
         return h('button', { class: 'trk-row' + (on ? ' done' : '') + (cur ? ' now' : '') + (!on && now >= z ? ' late' : ''), onclick: () => toggle(b.id), 'aria-pressed': on },
           h('span', { class: 'trk-box' }, on ? '✓' : ''),
-          h('div', { class: 'trk-what' }, h('b', null, b.title.replace(/\{niche\}/g, r.focus || 'lead')), h('small', null, trk12(b.from) + ' to ' + trk12(b.to) + (b.tag ? ' · ' + b.tag : '') + (b.quota ? ' · ' + quotaOf(b) + ' dials' : ''))),
+          h('div', { class: 'trk-what' }, h('b', null, planTitle(b.title, r.focus)), h('small', null, trk12(b.from) + ' to ' + trk12(b.to) + (b.tag ? ' · ' + b.tag : '') + (b.quota ? ' · ' + quotaOf(b) + ' dials' : ''))),
           cur ? h('span', { class: 'trk-now' }, 'Now') : null);
       }));
       const bars = h('div', { class: 'trk-hist' }, hist.map((d) => {

@@ -167,6 +167,7 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_log (day TEXT NOT NULL, platform TEXT NOT NULL, type TEXT, created_at TEXT, PRIMARY KEY (day, platform))'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, day TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, topic TEXT, title TEXT, cal_id INTEGER, created_at TEXT)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS content_posts_day ON content_posts(day, id)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS social_days (day TEXT NOT NULL, platform TEXT NOT NULL, followers INTEGER, dms INTEGER NOT NULL DEFAULT 0, updated_at TEXT, PRIMARY KEY (day, platform))'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS tracker_days (user_id INTEGER NOT NULL, day TEXT NOT NULL, blocks TEXT NOT NULL DEFAULT '[]',
       dials INTEGER NOT NULL DEFAULT 0, talks INTEGER NOT NULL DEFAULT 0, demos INTEGER NOT NULL DEFAULT 0, note TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`),
   ]);
@@ -2778,6 +2779,58 @@ async function api(request, env, url) {
       .bind(user.id, day, JSON.stringify(out.blocks), out.dials, out.talks, out.demos, out.texts, out.dms, out.posts, out.refs, out.note, now()).run();
     const goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
     return json({ ok: true, day: out, streak: trkStreak(byDay, goal, today), kept: trkKept(out, goal) });
+  }
+
+  /* ---- new Home: score, content table, revenue + outreach charts ---- */
+  if (path === '/home' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date, goal = await trkGoal(env), byDay = await trkLoad(env, user.id, today);
+    const range = [1, 7, 30, 90].includes(+url.searchParams.get('range')) ? +url.searchParams.get('range') : 1;
+    const start = trkShift(today, -(range - 1));
+    const N = Math.max(range, 14), days = []; for (let i = N - 1; i >= 0; i--) days.push(trkShift(today, -i));
+    const first = days[0];
+    const PLAT = ['ig', 'x', 'tiktok', 'facebook'];
+    const soc = (await env.DB.prepare('SELECT day, platform, followers, dms FROM social_days WHERE day >= ? ORDER BY day').bind(trkShift(today, -400)).all()).results;
+    const platforms = {};
+    for (const pl of PLAT) {
+      const rows = soc.filter((r) => r.platform === pl), withF = rows.filter((r) => r.followers != null);
+      const latest = withF.length ? withF[withF.length - 1] : null;
+      const before = withF.filter((r) => r.day < start);
+      const base = before.length ? before[before.length - 1] : withF.find((r) => r.day >= start) || null;
+      platforms[pl] = { followers: latest ? latest.followers : null, as_of: latest ? latest.day : null, change: latest && base && base !== latest ? latest.followers - base.followers : null,
+        dms: rows.filter((r) => r.day >= start).reduce((a, r) => a + (r.dms || 0), 0) };
+    }
+    const deals = (await env.DB.prepare('SELECT amount_cents, mrr_cents, created_at FROM deals').all()).results;
+    const ptd = (iso) => ptParts(new Date(iso)).date;
+    const dealDay = deals.map((d) => ({ day: ptd(d.created_at), c: (d.amount_cents || 0) + (d.mrr_cents || 0) }));
+    let run = dealDay.filter((d) => d.day < first).reduce((a, d) => a + d.c, 0);
+    const rev = days.map((d) => { run += dealDay.filter((x) => x.day === d).reduce((a, x) => a + x.c, 0); return Math.round(run / 100); });
+    const mrr = deals.reduce((a, d) => a + (d.mrr_cents || 0), 0);
+    const emailRows = (await env.DB.prepare("SELECT created_at FROM email_log WHERE kind = 'sent' AND created_at >= ?").bind(new Date(Date.now() - (N + 2) * 864e5).toISOString()).all()).results;
+    const em = days.map((d) => emailRows.filter((r) => ptd(r.created_at) === d).length);
+    const col = (k) => days.map((d) => (byDay.get(d) || {})[k] || 0);
+    const tdy = byDay.get(today) || trkRow(null, today);
+    const base = trkScore(tdy, goal, 0), blocksPct = Math.round((100 * tdy.blocks.length) / TRK_BLOCKS.length);
+    return json({ today, day_n: Math.max(1, Math.floor((Date.parse(today) - Date.parse((await getSetting(env, 'push_start')) || '2026-11-02')) / 864e5) + 1), range, goal,
+      focus: (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT, streak: trkStreak(byDay, goal, today),
+      score: { total: Math.round((base.score + blocksPct) / 2), todos_done: tdy.blocks.length, todos_total: TRK_BLOCKS.length, dials: tdy.dials, texts: tdy.texts, dms: tdy.dms, posts: tdy.posts },
+      blocks: tdy.blocks, platforms, labels: days,
+      revenue: { values: rev, total: rev[rev.length - 1], mrr: Math.round(mrr / 100), deals: deals.length },
+      outreach: { calls: col('dials'), sms: col('texts'), email: em, social: col('dms') } });
+  }
+  if (path === '/social' && method === 'PUT') {
+    need(user, 'admin');
+    const today = ptParts().date, pl = String(body.platform || '');
+    if (!['ig', 'x', 'tiktok', 'facebook'].includes(pl)) bad('Pick Instagram, X, TikTok or Facebook');
+    const f = body.followers === undefined || body.followers === '' || body.followers === null ? null : Math.max(0, Math.min(1e9, parseInt(body.followers, 10)));
+    if (f !== null && !Number.isFinite(f)) bad('Followers must be a number');
+    const add = Math.max(0, Math.min(5000, parseInt(body.dms_add, 10) || 0));
+    const cur = await env.DB.prepare('SELECT followers, dms FROM social_days WHERE day = ? AND platform = ?').bind(today, pl).first();
+    await env.DB.prepare(`INSERT INTO social_days (day, platform, followers, dms, updated_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(day, platform) DO UPDATE SET followers = excluded.followers, dms = excluded.dms, updated_at = excluded.updated_at`)
+      .bind(today, pl, f !== null ? f : (cur ? cur.followers : null), (cur ? cur.dms : 0) + add, now()).run();
+    if (add) await trkBump(env, user.id, { dms: add });
+    return json({ ok: true });
   }
   if (path === '/tracker/goal' && method === 'PUT') {
     need(user, 'admin');
