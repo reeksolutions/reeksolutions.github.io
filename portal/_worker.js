@@ -197,6 +197,17 @@ async function ensureSchema(env) {
   }
   // niche v3: roofers, landscapers, remodelers. Resets the lead finder (types, review caps, progress); your cities and on/off switch stay.
   // niche v4: auto body and collision shops (+ auto repair as overflow). Resets the finder's search types and progress.
+  // niche v5: local businesses with no website or few reviews (groomers, landscapers, painters, detailers, body shops); the offer is AI websites
+  if ((await getSetting(env, 'niche_v5')) !== '1') {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'local services')"),
+      env.DB.prepare("UPDATE settings SET value = json_remove(value, '$.niches', '$.max_reviews', '$.low_review_only', '$.any_site') WHERE key = 'auto_finder' AND json_valid(value)"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'auto_finder_state'"),
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v3', '1')"),
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v4', '1')"),
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v5', '1')"),
+    ]);
+  }
   if ((await getSetting(env, 'niche_v4')) !== '1') {
     await env.DB.batch([
       env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'auto body')"),
@@ -241,47 +252,43 @@ const DEFAULT_SCRIPT = [
   { kind: 'step', title: 'Opener', body:
 `Hey, is this {owner_first}?
 
-[If yes] Hey {owner_first}, it's {rep_first} here in LA. I'll be quick, I know you're probably out in the shop. Got 30 seconds?
+[If yes] Hey {owner_first}, it's {rep_first}, I'm local here in LA. Quick heads up, I record my calls for training, that cool? … I'll be quick. Got 30 seconds?
 
-[If you messaged them] Hey {owner_first}, it's {rep_first}. I texted you a demo built for {business}. Did you get a chance to talk to it?
+[If gatekeeper] Hey! Quick one: who owns {business}? … Is {owner_first} around?` },
+  { kind: 'step', title: 'The hook', body:
+`I was looking up {business} on Google and noticed you don't have a website. [or: only a few reviews]
 
-[If gatekeeper] Hey! Quick one: who handles new jobs and calls for {business}? … Is {owner_first} around?` },
-  { kind: 'step', title: 'The question', body:
-`When you guys are under a car and the phone rings, who picks up?
+So when somebody searches for a {category} near them, they find your competitors first and call them.
 
-[Let them answer. Then:] And what happens to those calls? Somebody just wrecked their car, do they leave a message, or call the next shop on Google?
+[Let them react. Ask:] How are most of your customers finding you right now?` },
+  { kind: 'step', title: 'The pitch (AI website)', body:
+`Here's why I'm calling. I already built a website for {business}. It shows your services, your area and your reviews, and it has an AI assistant that answers questions and books customers for you, even at night.
 
-[Listen. Write what they say in Notes: who answers, how many calls they miss, how big a typical job is.]` },
-  { kind: 'step', title: 'The pitch (voice AI)', body:
-`Here's what I do. I set up a voice assistant that answers every call in {business}'s name, gets the car, the damage and the insurance, and books the estimate. It also handles the "is my car ready yet?" calls. You get a text with everything.
-
-I already built one for {business}. I'll text you the link so you can call it yourself and hear it. Takes a minute.
+Can I text you the link so you can see it? Takes 30 seconds.
 
 [Demo link] {demo_link}` },
   { kind: 'step', title: 'The close', body:
-`Try it, and I'll call you back at [time] to see what you think. Does today after 4 or tomorrow morning work better?
+`[After they look] What do you think?
 
-[Lock a time → tap Callback and put the time in. If they're hot, book a 10-minute screen-share demo instead.]` },
-  { kind: 'objection', title: '"How much is it?"', body:
-`Fair question. It depends on how many calls you get, so I'd rather show you first. One collision job you'd otherwise miss usually pays for it. Want to try the demo and I'll give you the exact number when I call back?` },
-  { kind: 'objection', title: '"I have an answering service / my wife answers"', body:
-`That's great. Does it answer at 7pm, on weekends, and while you're both on a job? And does it book the job, or just take a message? This catches what they can't. Worth a minute to hear it?` },
-  { kind: 'objection', title: '"AI sounds fake"', body:
-`Totally fair. Try it yourself first. If it sounds fake, tell me and I'll stop bugging you. Can I text you the link?` },
-  { kind: 'objection', title: '"I get enough work"', body:
-`Love that. The goal isn't more work than you can handle. It's making sure the jobs you're already paying to get don't leak out through a missed call. Want to hear what that sounds like, free?` },
+If you like it, I can have it live this week. It's {price} to set up, then a small monthly fee for hosting and changes. If you want, I can lock it in right now and send you the payment link.
+
+[Not ready → book a callback: "I'll call you tomorrow at [time] after you've had a look."]` },
+  { kind: 'objection', title: '"How much?"', body:
+`Setup is {price}, then a small monthly fee for hosting, updates and the AI assistant. One new customer from Google usually pays for it.` },
+  { kind: 'objection', title: '"I get customers from Instagram / word of mouth"', body:
+`That's great, keep that. The website catches the people who search Google and never see your Instagram. It just adds a door, it doesn't replace one.` },
+  { kind: 'objection', title: '"I already tried a website"', body:
+`Totally fair. What happened with it? … This one's different: it's built for your phone, it shows your reviews, and the AI answers questions and books people for you.` },
   { kind: 'objection', title: '"Just send me info"', body:
-`For sure, I'll text you the live demo right now. It makes more sense once you've talked to it. What's a good time for me to call you back and see what you think?` },
-  { kind: 'objection', title: '"I\'m on a job right now"', body:
-`Totally get it, that's exactly why I'm calling. When's a better time for a 2-minute call back, early tomorrow or late afternoon?
+`Even better, I'll send you the actual site I built. What's the best number to text? I'll call you back at [time] to see what you think.` },
+  { kind: 'objection', title: '"I\'m busy"', body:
+`Totally get it. I'll text you the link now. When's a good time for a 2-minute call back, later today or tomorrow morning?
 
 [Tap Callback and set the time.]` },
   { kind: 'objection', title: '"Not interested"', body:
-`No problem at all. Is it the timing, or you just don't see a need? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
-  { kind: 'objection', title: '"Is this a robot?"', body:
-`Ha, I'm a real person. The AI only picks up the calls you can't, like when you're under a car, and books the estimate. Anything important goes straight to you.` },
+`No problem at all. Is it the timing, or you just don't need one? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
   { kind: 'step', title: 'Voicemail', body:
-`Hey {owner_first}, it's {rep_first} here in LA. I built a voice assistant for {business} that answers the phone when you're on a job and books the estimate. I'll text you a link so you can call it and hear it. Talk soon!
+`Hey {owner_first}, it's {rep_first} here in LA. I noticed {business} doesn't have a website, so I built you one. I'll text you the link so you can take a look. Talk soon!
 
 [Then tap Voicemail, and text the demo link.]` },
 ];
@@ -344,17 +351,18 @@ function trkScore(t, goal, postedPlatforms) {
   ];
   return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
 }
-const FOCUS_DEFAULT = 'auto body';
+const FOCUS_DEFAULT = 'local services';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
   if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
-  if (/auto ?body|collision|body shop|auto repair/.test(base)) { terms.clear(); ['auto body', 'autobody', 'collision', 'body shop', 'body & paint', 'paint and body', 'auto repair', 'auto service', 'car repair', 'mechanic'].forEach((t) => terms.add(t)); }
+  if (/local service/.test(base)) { terms.clear(); ['groom', 'pet salon', 'dog wash', 'landscap', 'lawn', 'gardener', 'painting', 'painter', 'detailing', 'detailer', 'car wash', 'auto body', 'collision', 'body shop'].forEach((t) => terms.add(t)); }
+  else if (/auto ?body|collision|body shop|auto repair/.test(base)) { terms.clear(); ['auto body', 'autobody', 'collision', 'body shop', 'body & paint', 'paint and body', 'auto repair', 'auto service', 'car repair', 'mechanic'].forEach((t) => terms.add(t)); }
   else if (/roof|landscap|remodel|home service/.test(base)) { terms.clear(); ['roof', 'landscap', 'lawn care', 'hardscape', 'remodel', 'renovation', 'general contractor', 'kitchen and bath', 'home improvement', 'construction'].forEach((t) => terms.add(t)); }
   if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
-  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 16);
+  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 18);
 }
 function focusSql(terms) {
   if (!terms.length) return { sql: '0', args: [] };
@@ -817,7 +825,8 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 const BACKYARD_NICHES = ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'];
 const HOME_NICHES = ['roofing contractor', 'roof repair', 'roofer', 'landscaper', 'landscaping company', 'landscape contractor', 'remodeling contractor', 'kitchen remodeler', 'bathroom remodeler', 'home remodeling', 'general contractor'];
 const AUTO_NICHES = ['auto body shop', 'collision repair', 'collision center', 'auto body and paint', 'body shop', 'auto repair shop', 'auto mechanic', 'car repair'];
-const AUTO_DEFAULTS = { enabled: false, niches: AUTO_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 5000, include_social: true, any_site: false, low_review_only: false, target_ready: 200, expand: true, purge_nonfocus: false };
+const LOCAL_NICHES = ['dog groomer', 'mobile dog grooming', 'pet groomer', 'landscaper', 'lawn care service', 'house painter', 'painting contractor', 'mobile detailing', 'auto detailing', 'auto body shop'];
+const AUTO_DEFAULTS = { enabled: false, niches: LOCAL_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 50, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -1389,8 +1398,9 @@ const LEAD_PRIO = `(${REV_TIER_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1
 const REV_BUSY_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews >= 100 THEN 0 WHEN l.reviews >= 50 THEN 1 WHEN l.reviews >= 25 THEN 2 WHEN l.reviews >= 10 THEN 3 ELSE 4 END';
 const LEAD_PRIO_BUSY = `(${REV_BUSY_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
 const isMedFocus = async (env) => /med(ical|i)?\s*spa|aesthetic/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
-const leadPrio = async (env) => ((await isMedFocus(env)) ? LEAD_PRIO : LEAD_PRIO_BUSY);
-const maxReviews = async (env) => { if (!(await isMedFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
+const isLowRevFocus = async (env) => (await isMedFocus(env)) || /local service/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
+const leadPrio = async (env) => ((await isLowRevFocus(env)) ? LEAD_PRIO : LEAD_PRIO_BUSY);
+const maxReviews = async (env) => { if (!(await isLowRevFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
 /* ---------------- API routes ---------------- */
 async function api(request, env, url) {
@@ -5433,7 +5443,7 @@ async function kitAdmin(env, user, path, method, body, url) {
     const medFocus = await isMedFocus(env);
     if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
     if (body.niche === 'medspa' && !medFocus) body.niche = 'custom';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : medFocus ? '' : 'auto body shop') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : '') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     if (google) data.google = google;
     const slug = kitSlug(data.business), t = now();
