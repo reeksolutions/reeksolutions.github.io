@@ -195,6 +195,15 @@ async function ensureSchema(env) {
       env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v', '2')"),
     ]);
   }
+  // niche v3: roofers, landscapers, remodelers. Resets the lead finder (types, review caps, progress); your cities and on/off switch stay.
+  if ((await getSetting(env, 'niche_v3')) !== '1') {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'home services')"),
+      env.DB.prepare("UPDATE settings SET value = json_remove(value, '$.niches', '$.max_reviews', '$.low_review_only') WHERE key = 'auto_finder' AND json_valid(value)"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'auto_finder_state'"),
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('niche_v3', '1')"),
+    ]);
+  }
   schemaReady = true;
 }
 
@@ -222,7 +231,7 @@ const DEFAULT_SCRIPT = [
   { kind: 'step', title: 'Opener', body:
 `Hey, is this {owner_first}?
 
-[If yes] Hey {owner_first}, it's {rep_first} here in LA. Not selling you a roof, promise. Got 30 seconds?
+[If yes] Hey {owner_first}, it's {rep_first} here in LA. I'll be quick, I know you're probably on a job. Got 30 seconds?
 
 [If you messaged them] Hey {owner_first}, it's {rep_first}. I texted you a demo built for {business}. Did you get a chance to talk to it?
 
@@ -234,7 +243,7 @@ const DEFAULT_SCRIPT = [
 
 [Listen. Write what they say in Notes: who answers, how many calls they miss, how big a typical job is.]` },
   { kind: 'step', title: 'The pitch (voice AI)', body:
-`Here's what I do. I set up a voice assistant that answers every call in {business}'s name, asks what's going on, and books the free inspection or estimate for you. You get a text with the name, the address and the problem.
+`Here's what I do. I set up a voice assistant that answers every call in {business}'s name, asks what's going on, and books the free estimate for you. You get a text with the name, the address and the problem.
 
 I already built one for {business}. I'll text you the link so you can call it yourself and hear it. Takes a minute.
 
@@ -244,7 +253,7 @@ I already built one for {business}. I'll text you the link so you can call it yo
 
 [Lock a time → tap Callback and put the time in. If they're hot, book a 10-minute screen-share demo instead.]` },
   { kind: 'objection', title: '"How much is it?"', body:
-`Fair question. It depends on how many calls you get, so I'd rather show you first. One roof or tile job you'd otherwise miss usually pays for it. Want to try the demo and I'll give you the exact number when I call back?` },
+`Fair question. It depends on how many calls you get, so I'd rather show you first. One job you'd otherwise miss usually pays for it. Want to try the demo and I'll give you the exact number when I call back?` },
   { kind: 'objection', title: '"I have an answering service / my wife answers"', body:
 `That's great. Does it answer at 7pm, on weekends, and while you're both on a job? And does it book the job, or just take a message? This catches what they can't. Worth a minute to hear it?` },
   { kind: 'objection', title: '"AI sounds fake"', body:
@@ -260,7 +269,7 @@ I already built one for {business}. I'll text you the link so you can call it yo
   { kind: 'objection', title: '"Not interested"', body:
 `No problem at all. Is it the timing, or you just don't see a need? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
   { kind: 'objection', title: '"Is this a robot?"', body:
-`Ha, I'm a real person. The AI only picks up the calls you can't, like when you're on a roof, and books the estimate. Anything important goes straight to you.` },
+`Ha, I'm a real person. The AI only picks up the calls you can't, like when you're on a job, and books the estimate. Anything important goes straight to you.` },
   { kind: 'step', title: 'Voicemail', body:
 `Hey {owner_first}, it's {rep_first} here in LA. I built a voice assistant for {business} that answers the phone when you're on a job and books the estimate. I'll text you a link so you can call it and hear it. Talk soon!
 
@@ -325,16 +334,16 @@ function trkScore(t, goal, postedPlatforms) {
   ];
   return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
 }
-const FOCUS_DEFAULT = 'roofing';
+const FOCUS_DEFAULT = 'home services';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
   if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
-  if (/roof|tile|tiling|home service/.test(base)) ['roofing', 'roofer', 'roof repair', 'roofing contractor', 'roof replacement', 'shingle', 'tile', 'tiling', 'tile installer', 'tile contractor', 'grout', 'flooring'].forEach((t) => terms.add(t));
+  if (/roof|landscap|remodel|home service/.test(base)) { terms.clear(); ['roof', 'landscap', 'lawn care', 'hardscape', 'remodel', 'renovation', 'general contractor', 'kitchen and bath', 'home improvement', 'construction'].forEach((t) => terms.add(t)); }
   if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
-  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 14);
+  return [...terms].map((t) => t.replace(/[%_]/g, '')).filter(Boolean).slice(0, 16);
 }
 function focusSql(terms) {
   if (!terms.length) return { sql: '0', args: [] };
@@ -795,7 +804,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
 
 /* ---- Auto lead bot: runs Lead Finder searches on its own every night ---- */
 const BACKYARD_NICHES = ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'];
-const HOME_NICHES = ['roofing contractor', 'roof repair', 'roof replacement', 'tile contractor', 'tile installer', 'bathroom tile installer', 'flooring and tile', 'roofer'];
+const HOME_NICHES = ['roofing contractor', 'roof repair', 'roofer', 'landscaper', 'landscaping company', 'landscape contractor', 'remodeling contractor', 'kitchen remodeler', 'bathroom remodeler', 'home remodeling', 'general contractor'];
 const AUTO_DEFAULTS = { enabled: false, niches: HOME_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 5000, include_social: true, any_site: false, low_review_only: false, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
@@ -2508,10 +2517,11 @@ async function api(request, env, url) {
       `SELECT l.id FROM leads l WHERE l.id != ? AND l.phone_norm IS NOT NULL AND l.phone_norm != ''
          AND l.status IN ('new','demo_needed','demo_ready','called','callback') AND (l.status != 'callback' OR l.callback_at <= ?)
          AND (l.status IN ('callback','demo_ready','called') OR COALESCE(l.reviews, 0) <= ${maxRev})
+         AND (l.status IN ('callback','demo_ready','called') OR ${fx.sql})
          AND (l.last_call_at IS NULL OR l.last_call_at < ?) ${who}
        ORDER BY CASE WHEN l.status = 'callback' THEN 0 ELSE 1 END, ${PRIO}, CASE WHEN ${fx.sql} THEN 0 ELSE 1 END,
          CASE COALESCE(l.heat,'cold') WHEN 'hot' THEN 0 WHEN 'warm' THEN 1 WHEN 'cold' THEN 2 ELSE 3 END, l.attempts ASC, l.id ASC LIMIT 1`
-    ).bind(cur, t, recent, ...(user.role === 'rep' ? [user.id] : []), ...fx.args).first();
+    ).bind(cur, t, ...fx.args, recent, ...(user.role === 'rep' ? [user.id] : []), ...fx.args).first();
     return json({ id: row ? row.id : null });
   }
 
@@ -4761,6 +4771,20 @@ const KIT_TILE = {
   ],
   ideas: ['How much to tile a bathroom?', 'Can you come out this week?', 'Do you supply the tile?', 'How long does a shower take?'],
 };
+const KIT_REMODEL = {
+  type: 'remodeling contractor', visit: 'free estimate', customer: 'homeowner',
+  tagline: 'Kitchens, baths and whole-home remodels in {city}.',
+  services: [
+    { name: 'Kitchen remodel', unit: 'project', lo: 18000, hi: 65000, q: 'Are you keeping the same layout, or moving walls, plumbing or appliances?', blurb: 'Cabinets, counters, flooring and lighting, start to finish.' },
+    { name: 'Bathroom remodel', unit: 'project', lo: 9000, hi: 30000, q: 'Is it a full gut, or mostly the shower, vanity and floor?', blurb: 'New showers, tubs, vanities and tile done right.' },
+    { name: 'Room addition', unit: 'sq ft', lo: 220, hi: 400, q: 'About how many square feet, and what will the room be used for?', blurb: 'More space that looks like it was always part of the house.' },
+    { name: 'Flooring installation', unit: 'sq ft', lo: 6, hi: 14, q: 'About how many square feet, and which rooms?', blurb: 'Hardwood, vinyl plank and tile floors.' },
+    { name: 'Interior painting and drywall', unit: 'room', lo: 450, hi: 1200, q: 'How many rooms, and any drywall repairs?', blurb: 'Clean walls, sharp lines, no mess left behind.' },
+    { name: 'ADU and garage conversion', unit: 'project', lo: 60000, hi: 180000, q: 'Is it a garage conversion or a new unit in the yard?', blurb: 'Turn unused space into a rental or a guest house.' },
+  ],
+  ideas: ['How much to remodel a kitchen?', 'Can you come give an estimate this week?', 'Do you handle permits?', 'How long does a bathroom take?'],
+};
+const REMODEL_RE = /remodel|renovat|general contractor|home improvement|kitchen and bath|\badu\b/i;
 const ROOF_RE = /roof|shingle|gutter/i;
 const TILE_RE = /\btil(e|es|er|ers|ing)\b|grout|backsplash/i;
 const JUNK_RE = /junk|haul|trash|debris|clean\s?-?out|dumpster|waste removal|garbage|rubbish|disposal/i;
@@ -4789,6 +4813,7 @@ function kitProfileClean(o, type) {
 async function kitProfileAI(env, type, business, city) {
   if (ROOF_RE.test(type)) return kitProfileClean(KIT_ROOF, 'roofing contractor');
   if (TILE_RE.test(type)) return kitProfileClean(KIT_TILE, 'tile contractor');
+  if (REMODEL_RE.test(type)) return kitProfileClean(KIT_REMODEL, 'remodeling contractor');
   if (JUNK_RE.test(type)) return kitProfileClean(KIT_JUNK, 'junk removal');
   if (env.AI) {
     try {
@@ -4810,7 +4835,7 @@ async function kitProfileAI(env, type, business, city) {
 // which kind of demo does this business get?
 function kitNicheFor(category, business) {
   const t = String(category || '') + ' ' + String(business || '');
-  if (ROOF_RE.test(t) || TILE_RE.test(t) || JUNK_RE.test(t)) return 'custom';
+  if (ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
   return String(category || '').trim() ? 'custom' : 'medspa';
@@ -5219,9 +5244,9 @@ async function kitAdmin(env, user, path, method, body, url) {
     const bizType = oneLine(body.biz_type, 60);
     if (bizType) body.niche = kitNicheFor(bizType, '') === 'custom' ? 'custom' : kitNicheFor(bizType, '');
     const medFocus = await isMedFocus(env);
-    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : 'custom');
+    if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
     if (body.niche === 'medspa' && !medFocus && !isMedCat(leadCat + ' ' + oneLine(body.business, 80) + ' ' + bizType)) body.niche = 'custom';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : medFocus ? '' : 'roofing contractor') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     const slug = kitSlug(data.business), t = now();
     const r = await env.DB.prepare('INSERT INTO demo_kits (slug, user_id, lead_id, data, created_at, updated_at) VALUES (?,?,?,?,?,?)').bind(slug, user.id, leadId, JSON.stringify(data), t, t).run();

@@ -148,13 +148,13 @@
   /* ================= shell + router ================= */
   // bottom tabs on phones
   function tabsFor(role) {
-    if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['crew', 'Team'], ['more', 'System']];
+    if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['more', 'System']];
     if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
   function navFor(role) {
-    if (role === 'admin') return [[null, [['home', 'Home']]]].concat(['sell', 'create', 'crew', 'more'].flatMap((k) => CATS[k][2].map(([label, items]) => [CATS[k][0] + ' · ' + label, items.map((i) => [i[0], i[1]])])));
+    if (role === 'admin') return [[null, [['home', 'Home']]]].concat(['sell', 'create', 'more'].flatMap((k) => CATS[k][2].map(([label, items]) => [CATS[k][0] + ' · ' + label, items.map((i) => [i[0], i[1]])])));
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
@@ -163,20 +163,15 @@
   // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
   const CATS = {
     sell: ['Sell', 'Leads, calls and money', [
-      ['Pipeline', [['leads', 'Leads', 'Board of every lead', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'], ['finder', 'Lead Finder', 'Find and auto-fill leads', 'search'], ['upload', 'Upload leads', 'Add leads from a file', 'batches'], ['batches', 'Batches', 'Lead lists', 'batches']]],
-      ['Schedule', [['calendar', 'Calendar', 'Audits, closings, posts', 'calendar']]],
-      ['Money', [['deals', 'Deals', 'Closes, payouts, commission', 'deals'], ['cards', 'Review cards', 'NFC plates stock and sales', 'deals']]],
-      ['Score', [['tracker', 'Daily tracker', 'Dials, wins, streak', 'flag'], ['rebrief', 'Daily brief', 'How today went', 'chart']]],
-      ['Outreach tools', [['script', 'Call script', 'What to say', 'script'], ['emailbot', 'Email bot', 'Cold email robot', 'mail']]]]],
-    create: ['Create', 'Posts, videos and demos', [
-      ['Content', [['content', 'Content', 'Start posting and video maker', 'spark']]],
-      ['Demos', [['lab', 'Demo Lab', 'One link, every offer live', 'spark'], ['studio', 'Demo Studio', 'Build a demo site', 'spark'], ['demos', 'Demo queue', 'Demos to build and send', 'demos']]]]],
-    crew: ['Team', 'Reps, devs and recordings', [
-      ['People', [['users', 'Team', 'Reps, devs and logins', 'users']]],
-      ['Calls', [['recordings', 'Recordings', 'Call recordings', 'phone']]]]],
+      ['Leads', [['leads', 'Leads', 'Every lead in one board', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'], ['finder', 'Lead Finder', 'Find roofers, landscapers, remodelers', 'search']]],
+      ['Close', [['script', 'Call script', 'What to say', 'script'], ['calendar', 'Calendar', 'Demos and callbacks', 'calendar'], ['deals', 'Deals', 'Clients and money', 'deals']]]]],
+    create: ['Create', 'Demos and posts', [
+      ['Demos', [['studio', 'Demo Studio', 'Voice AI demo for any lead', 'spark']]],
+      ['Content', [['content', 'Content', 'Start posting and video maker', 'spark']]]]],
+    crew: ['Team', 'Reps and logins', [
+      ['People', [['users', 'Team', 'Reps, devs and logins', 'users']]]]],
     more: ['System', 'Connections and settings', [
-      ['Connections', [['integrations', 'Integrations', 'Google, Discord, API keys', 'bolt']]],
-      ['Setup', [['settings', 'Settings', 'Targets, theme, checklist', 'account'], ['account', 'Account', 'Password and log out', 'account']]]]],
+      ['Setup', [['settings', 'Settings', 'Targets, theme, checklist', 'account'], ['integrations', 'Integrations', 'Google, Discord, API keys', 'bolt'], ['users', 'Team', 'Add your friend as a rep', 'users'], ['account', 'Account', 'Password and log out', 'account']]]]],
   };
   const catItems = (k) => CATS[k][2].flatMap((g) => g[1]);
   const CAT_OF = { lead: 'sell', rep: 'crew', demo: 'create' };
@@ -197,11 +192,11 @@
   }
 
   /* ---- slot-machine page switch: pages sit on a reel in tab order; going to a later page rolls up, an earlier one rolls down ---- */
-  const SLOT_CATS = ['home', 'sell', 'create', 'crew', 'more'];
+  const SLOT_CATS = ['home', 'sell', 'create', 'more'];
   function slotPos(hash) {
     const route = String(hash || '').replace(/^#\/?/, '').split('/')[0] || 'home';
     let cat = CAT_OF[route] || (route === 'home' ? 'home' : SLOT_CATS.includes(route) ? route : 'more');
-    if (route === 'rep' || route === 'users') cat = 'crew';
+    if (route === 'rep' || route === 'users') cat = 'more';
     const base = Math.max(0, SLOT_CATS.indexOf(cat)) * 100;
     if (route === cat) return base;
     const at = CATS[cat] ? catItems(cat).findIndex((i) => i[0] === route) : -1;
@@ -1053,7 +1048,7 @@
     const isMedLead = /med(ical|i)?\s*spa|aesthetic|botox|laser|skin/i.test((L.category || '') + ' ' + L.business);
     const noteMsg = isMedLead
       ? 'Hey, it\'s ' + me1 + '. I called earlier to ask about booking a consultation and nobody picked up. I\'m booking this week and going with whoever responds first. I help med spas stop losing calls like mine. Want me to show you how?'
-      : 'Hey, it\'s ' + me1 + '. I called earlier about a roof/tile job and nobody picked up. I\'m getting quotes this week and going with whoever answers first. I build voice assistants that answer for contractors while they\'re on a job. Want to hear one built for you?';
+      : 'Hey, it\'s ' + me1 + '. I called earlier about a job and nobody picked up. I\'m getting quotes this week and going with whoever answers first. I build voice assistants that answer for contractors while they\'re on a job. Want to hear one built for you?';
     async function logMsg(kind) {
       await flushLive();
       try {
@@ -1793,7 +1788,7 @@
     const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
     const pickBox = h('div', { class: 'sp-leads' });
     const resultBox = h('div');
-    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. roofing, tile, plumber', value: 'roofing contractor', maxlength: 60, class: 'sp-type' });
+    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? roofing, landscaping or remodeling', maxlength: 60, class: 'sp-type' });
     const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready' }[st] || st);
     const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
@@ -2192,7 +2187,7 @@
     const capIn = h('input', { id: 'auto-cap', type: 'number', min: 0, max: 50000, inputmode: 'numeric', value: d.caps.month, oninput: (e) => { cfg.month_cap = +e.target.value || 0; dirty(); } });
     const expandBox = h('input', { id: 'auto-expand', type: 'checkbox', checked: cfg.expand !== false, onchange: (e) => { cfg.expand = e.target.checked; dirty(); } });
     const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
-    const focusName = String(d.focus || 'roofing').toLowerCase(), focusPl = focusName + 's';
+    const focusName = String(d.focus || 'home services').toLowerCase(), focusPl = /home service/.test(focusName) ? 'roofers, landscapers and remodelers' : focusName + 's';
     const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
     const stockBar = h('div', { class: 'stockbar' },
       h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh ' + focusName + ' leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
@@ -2212,9 +2207,7 @@
     const runs = (d.runs || []).slice(0, 8);
     const LA = ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Beverly Hills, CA', 'West Hollywood, CA', 'Irvine, CA'];
     const PRESETS = [
-      { key: 'roofing', label: 'Roofing and tile mode', focus: 'roofing', niches: ['roofing contractor', 'roof repair', 'roof replacement', 'tile contractor', 'tile installer', 'bathroom tile installer', 'flooring and tile', 'roofer'], max: 5000, low: false },
-      { key: 'med spa', label: 'Med spa mode', focus: 'med spa', niches: ['med spa', 'medical spa', 'medspa', 'aesthetic clinic', 'botox injector', 'laser hair removal', 'body contouring', 'skin rejuvenation clinic'], max: 40 },
-      { key: 'backyard contractor', label: 'Backyard contractor mode', focus: 'backyard contractor', niches: ['backyard contractor', 'hardscape contractor', 'paver installer', 'artificial turf installation', 'landscape contractor', 'patio builder', 'concrete contractor', 'fence contractor', 'retaining wall contractor', 'pergola builder'], max: 30 }];
+      { key: 'home services', label: 'Roofers, landscapers and remodelers', focus: 'home services', niches: ['roofing contractor', 'roof repair', 'roofer', 'landscaper', 'landscaping company', 'landscape contractor', 'remodeling contractor', 'kitchen remodeler', 'bathroom remodeler', 'home remodeling', 'general contractor'], max: 5000, low: false }];
     const presetBtns = PRESETS.map((pr) => h('button', { class: 'btn block ' + (focusName === pr.key ? 'ok' : 'primary'), style: 'margin-bottom:10px', disabled: !d.ready, onclick: async () => {
       try {
         await api('PUT', '/finder/auto', { enabled: true, focus: pr.focus, niches: pr.niches, cities: LA, per_night: 20, max_reviews: pr.max, any_site: false, low_review_only: pr.low !== false, include_social: true });
@@ -4309,7 +4302,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   const HM_PLAT = [['ig', 'Instagram', 'IG'], ['x', 'X', 'X'], ['tiktok', 'TikTok', 'TikTok'], ['facebook', 'Facebook', 'Facebook']];
   async function viewAdminHome() {
     const d = await api('GET', '/home?range=' + HM.range);
-    const niche = d.focus || 'roofing';
+    const niche = /home service/.test(d.focus || '') || !d.focus ? 'roofers, landscapers and remodelers' : d.focus;
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     const sc = d.score, tier = sc.total >= 80 ? ['A', 'great'] : sc.total >= 60 ? ['B', 'good'] : sc.total >= 40 ? ['C', 'meh'] : ['D', 'bad'];
     const R = 38, C = 2 * Math.PI * R;
@@ -4375,13 +4368,13 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
     const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
     const head = h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, h('span', { class: 'live' }), dateLine), h('h1', null, 'Day ' + Math.min(d.day_n, 30) + ' of 30'), h('p', { class: 'sub' }, 'Focus: ' + niche + '.')),
       h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/overview' }, 'Full overview'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing')));
-    shell('home', [head, scoreCard, kpis, h('div', { class: 'hm-grid' }, h('div', { class: 'hm-col' }, contentCard, todoCard), h('div', { class: 'hm-col' }, revCard, outCard)), catLauncher()]);
+    shell('home', [head, scoreCard, kpis, h('div', { class: 'hm-grid' }, h('div', { class: 'hm-col' }, contentCard, todoCard), h('div', { class: 'hm-col' }, revCard, outCard))]);
   }
 
   async function viewAdminOverview() {
     const ov = await api('GET', '/overview');
     const trk = ov;
-    const niche = ov.focus_niche || 'roofing';
+    const niche = /home service/.test(ov.focus_niche || '') || !ov.focus_niche ? 'contractor' : ov.focus_niche;
     const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
     const labels = C.days.map(shortDay);
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -4483,9 +4476,9 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   /* ---- Today's score (Home): one number for the day, every row has a button that moves it ---- */
   const FIX_QUEUE = [
     ['Connect Google so Meet links make themselves', '#/integrations'],
-    ['Clear the leads outside roofing and tile out of the list', '#/finder'],
+    ['Clear the leads outside your three trades out of the list', '#/finder'],
     ['Set a dial goal you can actually hit', '#/tracker'],
-    ['Build a roofing or tile voice demo in Demo Studio', '#/studio'],
+    ['Build a voice demo for a lead in Demo Studio', '#/studio'],
     ['Write tomorrow\'s post before you quit for the day', '#/content'],
     ['Call every callback that is due', '#/callbacks'],
     ['Read last week\'s calls and fix the opener', '#/rebrief'],
@@ -5072,7 +5065,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   }
 
   /* ---- personal tracker (admin) ---- */
-  const planTitle = (title, focus) => { const f = String(focus || 'lead').toLowerCase(), home = /roof|tile/.test(f); return title.replace(/\{niche\}s/g, home ? 'roofers and tile pros' : f + 's').replace(/\{niche\}/g, home ? 'roofing and tile' : f); };
+  const planTitle = (title, focus) => { const f = String(focus || 'lead').toLowerCase(), home = /roof|tile|home service|landscap|remodel/.test(f); return title.replace(/\{niche\}s/g, home ? 'roofers, landscapers, remodelers' : f + 's').replace(/\{niche\}/g, home ? 'contractor' : f); };
   const TRK_PLAN = [
     { id: 'pray', from: '06:00', to: '06:30', title: 'Prayer', tag: 'Spiritual win', win: true },
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },
