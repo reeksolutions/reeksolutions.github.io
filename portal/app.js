@@ -1836,7 +1836,7 @@
     shell('studio', h('div', { class: 'sh sh-offer' },
       h('a', { class: 'crumb', href: '#/studio' }, icon('chev'), 'All offers'),
       h('div', { class: 'sh-hero small' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, name), h('p', { class: 'sh-sub' }, line)),
-      h('section', { class: 'sp-card' }, h('h3', null, '1. Connect a lead'), h('p', { class: 'dim small' }, 'Leads who booked an audit or asked for a demo, newest audits first.'), pickBox),
+      h('section', { class: 'sp-card' }, h('h3', null, '1. Connect a lead'), h('p', { class: 'dim small' }, 'Your roofer, landscaper and remodeler leads. Booked and callback leads come first.'), pickBox),
       h('section', { class: 'sp-card' }, h('h3', null, '2. Build and send'), resultBox),
       oid === 'site' ? h('a', { class: 'sh-link', href: '#/studio/build' }, 'Want a fully custom site? Build one with AI', icon('chev')) : null), 'none');
   }

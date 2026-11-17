@@ -1639,3 +1639,28 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .hm-kpi{background:var(--mix-soft)}
 .hub-ic,.kic{background:var(--mix-soft);border-color:rgba(215,255,63,.22)}
 .schip.on{background:var(--mix-soft);border-color:var(--pop)}
+
+/* Demo Studio v2: same dark theme as the rest of the CRM, offers as a tidy grid */
+.sh{margin:0;padding:0 0 40px!important;min-height:0;background:none;color:var(--ink)}
+.sh .crumb{color:var(--muted);border-color:var(--line-2);background:var(--card);margin-top:0}
+.sh-hero,.sh-hero.small{padding:14px 0 16px;max-width:1000px;margin:0 auto;text-align:left}
+.sh-kick{font:500 11px var(--mono);letter-spacing:.14em;color:var(--pop);margin:0 0 8px}
+.sh-hero h1{font:800 clamp(26px,5vw,36px)/1.08 var(--font);letter-spacing:-.035em;display:inline-block;background:var(--mix);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.sh-sub{color:var(--muted);font-size:15px;margin:8px 0 0;max-width:60ch}
+.sh-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:1000px;margin:6px auto 0}
+@media(min-width:900px){.sh-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sh-card{gap:5px;padding:14px;border-radius:16px;background:var(--card);border:1px solid var(--line-2);backdrop-filter:none;-webkit-backdrop-filter:none;color:var(--ink);min-width:0;text-decoration:none}
+.sh-card:hover{background:var(--card-2);border-color:var(--pop)}
+.sh-card b{font:700 15px var(--font);letter-spacing:-.015em}
+.sh-card small{color:var(--muted);font-size:12.5px;line-height:1.35}
+.sh-ic{width:36px;height:36px;border-radius:11px;background:var(--mix-soft);border:1px solid rgba(215,255,63,.22);color:var(--accent-2);margin-bottom:4px}
+.sh-card:first-child{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:12px;padding:16px;background:var(--mix-soft);border-color:rgba(215,255,63,.35);position:relative}
+.sh-card:first-child .sh-ic{margin:0;background:var(--mix);color:#05070d;border-color:transparent}
+.sh-card:first-child b{font-size:18px;flex:1;min-width:0}
+.sh-card:first-child small{flex-basis:100%;font-size:13.5px}
+.sh-card:first-child::after{content:"Your main offer";font:500 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--pop);border:1px solid rgba(215,255,63,.4);border-radius:999px;padding:3px 8px}
+.sh-link{justify-content:flex-start;margin:18px 0 0;color:var(--muted);max-width:1000px}
+.sp-card{max-width:1000px;margin:12px auto 0;border-radius:16px;position:relative;overflow:hidden}
+.sp-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--mix)}
+.sp-lead{background:var(--card)}
+.sp-lead.on{border-color:var(--pop);box-shadow:0 0 0 2px var(--pop-soft)}
