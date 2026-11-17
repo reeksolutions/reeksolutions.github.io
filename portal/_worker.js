@@ -299,7 +299,7 @@ function trkStreak(byDay, goal, today) {
 }
 async function trkGoal(env) {
   const v = parseInt(await getSetting(env, 'tracker_goal'), 10);
-  return v >= 1 && v <= 2000 ? v : 200;
+  return v >= 1 && v <= 2000 ? v : 60;
 }
 async function trkLoad(env, userId, today) {
   const rows = (await env.DB.prepare('SELECT * FROM tracker_days WHERE user_id = ? AND day >= ? ORDER BY day').bind(userId, trkShift(today, -120)).all()).results;
