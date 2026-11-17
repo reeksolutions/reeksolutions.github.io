@@ -1292,6 +1292,10 @@ function leadFilter(p, user) {
   if (p.get('contact') === 'email') where.push("l.email IS NOT NULL AND l.email != ''");
   if (p.get('contact') === 'phone') where.push("l.phone_norm IS NOT NULL AND l.phone_norm != ''");
   if (p.get('contact') === 'unemailed') where.push("l.email IS NOT NULL AND l.email != '' AND l.emailed_at IS NULL");
+  // follow-up lanes after a dialing session
+  if (p.get('contact') === 'to_dm') where.push("COALESCE(l.attempts,0) > 0 AND l.status NOT IN ('won','lost','booked','call2') AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome IN ('dmed','texted','emailed'))");
+  if (p.get('contact') === 'dmed') where.push("EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome IN ('dmed','texted')) AND l.status NOT IN ('won','lost')");
+  if (p.get('contact') === 'has_email') where.push("l.email IS NOT NULL AND l.email != '' AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome = 'emailed') AND l.status NOT IN ('won','lost')");
   const tag = cleanTag(p.get('tag'));
   if (tag) { where.push('l.tags LIKE ?'); args.push('%,' + tag + ',%'); }
   if (p.get('due') === '1') { where.push('l.next_action_at IS NOT NULL AND l.next_action_at < ?'); args.push(validIso(p.get('due_before')) || now()); }
@@ -1759,6 +1763,7 @@ async function api(request, env, url) {
     if (body.demo_url !== undefined) { sets.push('demo_url = ?'); args.push(cleanUrl(body.demo_url)); }
     if (body.email !== undefined) { const e = cleanEmail(body.email); if (str(body.email) && !e) bad('That email does not look right'); sets.push('email = ?'); args.push(e || null); }
     if (body.address !== undefined) { sets.push('address = ?'); args.push(str(body.address, 200) || null); }
+    if (body.instagram !== undefined) { let ig = str(body.instagram, 200).trim(); if (ig && !/^https?:\/\//i.test(ig)) ig = 'https://instagram.com/' + ig.replace(/^@/, '').replace(/^(www\.)?instagram\.com\//i, ''); sets.push('instagram = ?'); args.push(ig ? cleanUrl(ig) : null); }
     if (body.assigned_to !== undefined) {
       if (body.assigned_to === null || body.assigned_to === '') { sets.push('assigned_to = NULL'); }
       else {

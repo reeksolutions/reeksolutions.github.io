@@ -450,7 +450,7 @@
     let tmr;
     const search = h('label', { class: 'tsearch' }, icon('search'),
       h('input', { id: 'lead-search', type: 'search', placeholder: 'Search leads', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
-    const QUICK = [['All', {}], ['No website', { site: 'none' }], ['Low reviews', { lowrev: '1' }], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['Not emailed', { contact: 'unemailed' }]];
+    const QUICK = [['All', {}], ['No website', { site: 'none' }], ['Low reviews', { lowrev: '1' }], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['To DM', { contact: 'to_dm' }], ['DM\'d', { contact: 'dmed' }], ['Has email', { contact: 'has_email' }]];
     const sameQ = (f) => ['heat', 'due', 'contact', 'site', 'lowrev'].every((k) => String(F[k] || '') === String(f[k] || ''));
     const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '', site: '', lowrev: '' }, f); viewLeads(); } }, l)));
     const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact', 'site', 'lowrev'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
@@ -1054,7 +1054,7 @@
       try {
         await api('POST', '/leads/' + id + '/calls', { outcome: kind });
         if (kind === 'dmed') { try { const t = await api('GET', '/tracker'); await api('PUT', '/tracker', { dms: t.day.dms + 1 }); } catch { /* tracker optional */ } }
-        S.justMoved = id; toast(kind === 'dmed' ? 'DM logged ✓' : 'Text logged ✓');
+        S.justMoved = id; toast(kind === 'dmed' ? 'DM logged ✓' : kind === 'emailed' ? 'Email logged ✓' : 'Text logged ✓');
         if (lsGet('rs_autonext', '1') === '1') { const nx = await nextLeadId(id); if (nx && nx.id) { if (D) D.dirty = true; openLead(nx.id); return; } }
         reload();
       } catch (x) { fail(x); }
@@ -1069,18 +1069,46 @@
     const curStep = DONE.findIndex((d) => !d);
     const lastDial = calls.find((c) => ['no_answer', 'voicemail', 'gatekeeper', 'callback', 'booked', 'not_interested'].includes(c.outcome));
     const mtg = L.booked_at ? dayWord(L.booked_at) : null, mlink = event && event.link;
-    const miss = (k, label, cls) => h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: () => logCall(k) }, label);
+    // every action looks like it gets checked off: highlight, tick, then the lead updates
+    const tick = (btn, fn) => async () => { if (btn.classList.contains('picked')) return; btn.parentElement && btn.parentElement.querySelectorAll('.picked').forEach((b) => b.classList.remove('picked')); btn.classList.add('picked'); await new Promise((r) => setTimeout(r, 380)); try { await fn(); } finally { if (document.body.contains(btn)) btn.classList.remove('picked'); } };
+    const miss = (k, label, cls) => { const b = h('button', { type: 'button', class: 'btn chk ' + (cls || '') }, h('span', { class: 'chk-box' }), label); b.onclick = tick(b, () => logCall(k)); return b; };
+    const chkBtn = (label, fn, cls) => { const b = h('button', { type: 'button', class: 'btn chk ' + (cls || '') }, h('span', { class: 'chk-box' }), label); b.onclick = tick(b, fn); return b; };
+    // quick info: each blank field is a step; fill it, it ticks and slides away
+    const INFO = [['owner', 'Owner name', 'text', 'Who runs it?'], ['email', 'Email', 'email', 'name@company.com'], ['instagram', 'Instagram', 'text', '@handle or link']].filter(([k]) => !String(L[k] || '').trim());
+    const infoCard = (() => {
+      if (!INFO.length) return null;
+      const left = h('small', null, INFO.length + ' to fill');
+      const card = h('div', { class: 'qi-card' }, h('div', { class: 'qi-head' }, h('b', null, 'Quick info'), left));
+      let n = INFO.length;
+      const done = () => { n--; left.textContent = n ? n + ' to fill' : 'All set ✓'; if (!n) { card.classList.add('qi-done'); setTimeout(() => card.remove(), 650); } };
+      INFO.forEach(([k, label, type, ph]) => {
+        const inp = h('input', { type, placeholder: ph, autocomplete: 'off', 'aria-label': label, inputmode: type === 'email' ? 'email' : 'text' });
+        const row = h('div', { class: 'qi-row' });
+        const save = async () => {
+          const v = inp.value.trim(); if (!v) { inp.focus(); return; }
+          ok.disabled = true;
+          try { await api('PATCH', '/leads/' + id, { [k]: v }); L[k] = v; row.classList.add('qi-ok'); setTimeout(() => { row.classList.add('qi-gone'); setTimeout(() => { row.remove(); done(); }, 320); }, 420); }
+          catch (x) { fail(x); ok.disabled = false; }
+        };
+        const ok = h('button', { type: 'button', class: 'qi-go', 'aria-label': 'Save ' + label, onclick: save }, '✓');
+        const skip = h('button', { type: 'button', class: 'qi-skip', onclick: () => { row.classList.add('qi-gone'); setTimeout(() => { row.remove(); done(); }, 320); } }, 'Skip');
+        inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+        row.append(h('label', null, label), h('div', { class: 'qi-line' }, inp, ok, skip));
+        card.append(row);
+      });
+      return card;
+    })();
     const STEPS = [
       { t: 'Call', sub: dialed ? (lastDial ? (OUTCOME_LABEL[lastDial.outcome] || lastDial.outcome) + ' · ' + ago(lastDial.created_at) : 'Called') : 'Not called yet',
-        body: [callNow, h('div', { class: 'step-q' }, miss('no_answer', 'No answer'), miss('voicemail', 'Voicemail'), miss('gatekeeper', 'Gatekeeper'), miss('callback', 'Callback'), miss('booked', 'Audit booked', 'primary'), miss('not_interested', 'Not interested'))] },
+        body: [callNow, h('div', { class: 'step-q' }, miss('no_answer', 'No answer'), miss('gatekeeper', 'Gatekeeper'), miss('booked', 'Audit booked', 'primary'), miss('voicemail', 'Voicemail'), miss('callback', 'Callback'), miss('not_interested', 'Not interested'))] },
       { t: 'Message him', sub: messaged ? 'Messaged ✓' : 'Text or DM the missed-call message',
         body: [h('div', { class: 'msgbox' }, noteMsg), h('div', { class: 'step-q' },
           textBtn('Text it', noteMsg, 'primary'), sBtn('Copy message', () => copyTxt(noteMsg, 'Message copied')), h('a', { class: 'btn', href: dmLink, target: '_blank', rel: 'noopener noreferrer' }, L.instagram ? 'Open his Instagram' : 'Find his Instagram'), h('a', { class: 'btn', href: 'https://www.facebook.com/search/top?q=' + encodeURIComponent(L.business + ' ' + (L.city || '')), target: '_blank', rel: 'noopener noreferrer' }, 'Find on Facebook')),
-          h('div', { class: 'step-q' }, sBtn('I texted him', () => logMsg('texted'), 'ok'), sBtn('I DM\'d him', () => logMsg('dmed'), 'ok'))] },
+          h('div', { class: 'step-q' }, chkBtn('I texted him', () => logMsg('texted'), 'ok'), chkBtn('I DM\'d him', () => logMsg('dmed'), 'ok'), L.email ? chkBtn('I emailed him', () => logMsg('emailed'), 'ok') : null)] },
       { t: 'Send demo', sub: demoSent ? 'Demo sent ✓' : L.demo_url ? 'Demo is ready to send' : 'Build one for him',
         body: L.demo_url
           ? [h('div', { class: 'step-q' }, textBtn('Text the demo', 'Hi ' + firstName + ', it\'s ' + me1 + '. Here\'s a sample built for ' + L.business + ': ' + L.demo_url, 'primary'), sBtn('Copy link', () => copyTxt(L.demo_url, 'Demo link copied')), h('a', { class: 'btn', href: L.demo_url, target: '_blank', rel: 'noopener' }, 'Open it')),
-            h('div', { class: 'step-q' }, sBtn('I sent the demo', () => logCall('demo_sent'), 'ok'))]
+            h('div', { class: 'step-q' }, chkBtn('I sent the demo', () => logCall('demo_sent'), 'ok'))]
           : [h('div', { class: 'step-q' }, isAdmin ? sLink('Build demo', '#/lab/' + L.id, 'primary') : sLink('Build demo', '#/studio/' + L.id, 'primary'))] },
       { t: 'Audit booked', sub: DONE[3] ? (mtg ? mtg + (mlink ? ' · Meet link ready' : ' · no Meet link yet') : 'Booked ✓') : 'Pick a time for the free audit',
         body: DONE[3]
@@ -1094,6 +1122,7 @@
         body: [h('div', { class: 'step-q' }, isAdmin ? sBtn('Won: close deal', () => moveStage('won'), 'ok') : null, sBtn('Lost', () => moveStage('lost')))] },
     ];
     const stepsCard = seller ? h('div', { class: 'steps-flow' },
+      infoCard,
       ['lost', 'dnc'].includes(L.status) ? h('div', { class: 'steps-banner' }, h('b', null, L.status === 'dnc' ? 'Do Not Call' : 'Closed as lost'), L.status === 'lost' ? sBtn('Re-open', () => moveStage('called')) : null) : null,
       L.status === 'callback' && L.callback_at ? h('div', { class: 'steps-banner cb' }, h('b', null, 'Callback ' + fmt(L.callback_at))) : null,
       STEPS.map((st, i) => {
