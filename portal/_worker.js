@@ -5546,9 +5546,10 @@ async function kitAdmin(env, user, path, method, body, url) {
   if (path === '/studio/nosite-leads' && method === 'GET') {
     need(user, 'admin', 'rep');
     const mine = user.role === 'rep' ? ' AND l.assigned_to = ?' : '';
+    const fx = focusSql(await focusTerms(env));   // only your niche: groomers, landscapers, painters, detailers, body shops
     const { results } = await env.DB.prepare(`SELECT l.id, l.business, l.city, l.category, l.rating, l.reviews, l.link, l.status, l.demo_url FROM leads l
-      WHERE (l.website IS NULL OR l.website = '') AND l.status NOT IN ('won','lost','dnc','not_interested')${mine}
-      ORDER BY CASE l.status WHEN 'callback' THEN 0 WHEN 'booked' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, l.id DESC LIMIT 150`).bind(...(user.role === 'rep' ? [user.id] : [])).all();
+      WHERE (l.website IS NULL OR l.website = '') AND l.status NOT IN ('won','lost','dnc','not_interested') AND ${fx.sql}${mine}
+      ORDER BY CASE l.status WHEN 'callback' THEN 0 WHEN 'booked' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, l.id DESC LIMIT 150`).bind(...fx.args, ...(user.role === 'rep' ? [user.id] : [])).all();
     return json(results);
   }
   if (path === '/studio/from-google' && method === 'POST') {
