@@ -2903,7 +2903,7 @@ async function api(request, env, url) {
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
-  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo' || path === '/studio/from-google') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
+  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo' || path === '/studio/from-google' || path === '/studio/nosite-leads') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
   if (path === '/studio' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const leadId = +url.searchParams.get('lead') || null;
@@ -5543,6 +5543,14 @@ async function kitAdmin(env, user, path, method, body, url) {
     }
     return { lead, L, city, hit };
   }
+  if (path === '/studio/nosite-leads' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const mine = user.role === 'rep' ? ' AND l.assigned_to = ?' : '';
+    const { results } = await env.DB.prepare(`SELECT l.id, l.business, l.city, l.category, l.rating, l.reviews, l.link, l.status, l.demo_url FROM leads l
+      WHERE (l.website IS NULL OR l.website = '') AND l.status NOT IN ('won','lost','dnc','not_interested')${mine}
+      ORDER BY CASE l.status WHEN 'callback' THEN 0 WHEN 'booked' THEN 1 WHEN 'demo_needed' THEN 2 WHEN 'called' THEN 3 ELSE 4 END, l.id DESC LIMIT 150`).bind(...(user.role === 'rep' ? [user.id] : [])).all();
+    return json(results);
+  }
   if (path === '/studio/from-google' && method === 'POST') {
     need(user, 'admin', 'rep');
     const { lead, L, hit } = await leadFromPaste(body);
@@ -5551,7 +5559,16 @@ async function kitAdmin(env, user, path, method, body, url) {
   if (path === '/quickdemo' && method === 'POST') {
     // pitch on the spot: paste a Google Maps share, a link or just a name, get a demo for that business
     need(user, 'admin', 'rep');
-    const { lead, L, city, hit } = await leadFromPaste(body);
+    let lead, L, city, hit = null;
+    if (+body.lead_id) {
+      // picked from the lead list: use what the Lead Finder already saved from their Google page
+      const l = await env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(+body.lead_id).first();
+      if (!l) throw new HttpError(404, 'Lead not found');
+      if (user.role === 'rep' && l.assigned_to !== user.id) throw new HttpError(403, 'That lead is not yours');
+      lead = { id: l.id }; city = l.city || '';
+      L = { business: l.business, phone: l.phone || '', address: l.address || '', category: l.category || '', rating: l.rating || '', reviews: l.reviews, link: l.link || '', website: l.website || '' };
+      hit = l.link || l.rating ? {} : null;
+    } else ({ lead, L, city, hit } = await leadFromPaste(body));
     const kr = await kitAdmin(env, user, '/kits', 'POST', { lead_id: lead.id, business: L.business, city, phone: L.phone || '', biz_type: oneLine(body.biz_type, 60) || L.category || '' }, url);
     const kj = await kr.json();
     if (!kr.ok) throw new HttpError(kr.status, kj.error || 'Could not build the demo');

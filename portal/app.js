@@ -1804,11 +1804,24 @@
   function pitchNowCard() {
     const ta = h('textarea', { class: 'pn-in', rows: 3, placeholder: 'Paste the business here: share it from Google Maps, paste the link, or just type the name and city' });
     const out = h('div', { class: 'pn-out' });
+    // or pick a lead that has no website: its Google info is already saved
+    const pick = h('select', { class: 'pn-pick', 'aria-label': 'Pick a lead with no website' }, h('option', { value: '' }, 'Loading your leads with no website…'));
+    const fullSite = h('button', { class: 'btn', hidden: true, onclick: () => {
+      const id = +pick.value; if (!id) return;
+      try { sessionStorage.setItem('rs_autobuild', JSON.stringify({ lead: id, msg: 'Build the first version of the site from the business info.' })); } catch { /* ok */ }
+      location.hash = '#/studio/' + id;
+    } }, 'Build full website');
+    api('GET', '/studio/nosite-leads').then((rows) => {
+      pick.replaceChildren(h('option', { value: '' }, rows.length ? 'Pick a lead with no website (' + rows.length + ')' : 'No leads without a website yet'),
+        ...rows.map((l) => h('option', { value: l.id }, l.business + (l.city ? ' · ' + l.city : '') + (l.rating ? ' · ' + l.rating + '★' : '') + (l.demo_url ? ' · has demo' : ''))));
+    }).catch(() => pick.replaceChildren(h('option', { value: '' }, 'Could not load leads')));
+    pick.onchange = () => { const on = !!pick.value; ta.hidden = on; fullSite.hidden = !on; if (on) ta.value = ''; };
     const go = h('button', { class: 'btn primary', onclick: async () => {
-      const text = ta.value.trim(); if (!text) { toast('Paste the business first', true); ta.focus(); return; }
+      const text = ta.value.trim(), lead_id = +pick.value || 0;
+      if (!text && !lead_id) { toast('Pick a lead or paste the business first', true); ta.focus(); return; }
       go.disabled = true; go.textContent = 'Building the demo…'; out.replaceChildren();
       try {
-        const r = await api('POST', '/quickdemo', { text });
+        const r = await api('POST', '/quickdemo', lead_id ? { lead_id } : { text });
         const copy = h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(r.link); toast('Link copied'); } catch { prompt('Copy this link', r.link); } } }, 'Copy link');
         out.replaceChildren(h('div', { class: 'pn-res' },
           h('b', null, r.business),
@@ -1817,12 +1830,12 @@
             h('a', { class: 'btn primary', href: r.link, target: '_blank', rel: 'noopener' }, icon('phone'), 'Open demo'), copy,
             r.phone ? h('a', { class: 'btn', href: 'sms:' + r.phone.replace(/[^\d+]/g, '') + '?&body=' + encodeURIComponent('Here is the demo I built for you: ' + r.link) }, 'Text it to them') : null,
             h('a', { class: 'btn', href: '#/lead/' + r.lead_id }, 'Open lead'))));
-        ta.value = '';
+        ta.value = ''; ta.hidden = false; pick.value = ''; fullSite.hidden = true;
       } catch (e) { fail(e); }
       go.disabled = false; go.textContent = 'Build demo';
     } }, 'Build demo');
     return h('section', { class: 'sp-card pn-card' }, h('h3', null, 'Pitch now'),
-      h('p', { class: 'dim small' }, 'Out and about? Paste any business and get its live demo in a few seconds. It saves them as a lead too.'), ta, h('div', { class: 'row', style: 'margin-top:8px' }, go), out);
+      h('p', { class: 'dim small' }, 'Pick one of your leads with no website, or paste any business. You get its live demo in a few seconds.'), pick, ta, h('div', { class: 'row', style: 'margin-top:8px' }, go, fullSite), out);
   }
   function viewStudioHome() {
     shell('studio', h('div', { class: 'sh' },

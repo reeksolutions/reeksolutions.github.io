@@ -1726,3 +1726,5 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .c3-out{flex-wrap:wrap;justify-content:center;gap:8px}
 .c3-nodes{display:flex;flex-direction:column;gap:6px}
 .c3-node{display:flex;gap:6px;align-items:center}.c3-node input{flex:1}.c3-node select{flex:none;width:96px}
+.pn-pick{width:100%;margin-top:8px;border:1px solid var(--line-2);background:var(--card-2);color:inherit;border-radius:14px;padding:12px;font:inherit;font-size:15px}
+.pn-pick:focus{outline:2px solid var(--pop);outline-offset:1px}
