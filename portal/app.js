@@ -1940,7 +1940,7 @@
     const firstName = first(S.me.name);
 
     const msgs = h('div', { class: 'msgs', 'aria-live': 'polite' });
-    const input = h('textarea', { rows: 1, placeholder: lead ? 'Ask for a change, or paste more info about ' + lead.business + '…' : "Paste a business's info (Google listing, Instagram bio, prices, hours)…" });
+    const input = h('textarea', { rows: 1, placeholder: lead ? 'Ask for a change, or paste more info about ' + lead.business + '…' : "Paste the business's Google page or link (or its name and city)…" });
     const sendBtn = h('button', { class: 'send', 'aria-label': 'Send', onclick: () => send() }, h('span', { html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>', style: 'display:contents' }));
     const engineTag = h('span', { class: 'engine ' + engine }, h('i'), ENGINE_NAME[engine] || engine);
     const frame = h('iframe', { class: 'pframe', title: 'Demo preview', loading: 'lazy' });
@@ -2022,6 +2022,17 @@
     async function send(text) {
       const message = (text || input.value).trim();
       if (!message || busy) return;
+      // no lead yet + a pasted Google page: look the business up, save it as a lead, then build from its real info
+      if (!lead && !(draft && draft.messages && draft.messages.length) && !text) {
+        busy = true; sendBtn.disabled = true;
+        msgs.append(h('div', { class: 'msg ai typing' }, h('span', { class: 'avatar ai' }, icon('spark')), h('div', { class: 'btext' }, 'Looking them up on Google…')));
+        try {
+          const g = await api('POST', '/studio/from-google', { text: message });
+          try { sessionStorage.setItem('rs_autobuild', JSON.stringify({ lead: g.lead_id, msg: 'Build the first version of the site from the business info.' + (message.split('\n').length > 2 ? '\n\nExtra info I pasted:\n' + message.slice(0, 1500) : '') })); } catch { /* ok */ }
+          toast(g.found ? 'Found ' + g.business + (g.rating ? ' · ' + g.rating + '★' : '') + ' on Google. Building…' : 'Not found on Google, building from what you pasted');
+          busy = false; location.hash = '#/studio/' + g.lead_id; return;
+        } catch (e) { msgs.querySelector('.typing') && msgs.querySelector('.typing').remove(); busy = false; sendBtn.disabled = false; }
+      }
       busy = true; sendBtn.disabled = true; input.value = ''; autosize();
       msgs.querySelectorAll('.suggest').forEach((x) => x.remove());
       msgs.append(bubble('user', message), h('div', { class: 'msg ai typing' }, h('span', { class: 'avatar ai' }, icon('spark')), h('div', { class: 'btext' }, h('i'), h('i'), h('i'))));
@@ -2111,6 +2122,7 @@
 
     renderLeadBar(); renderMsgs(); renderTheme(); refresh(); renderSave();
     shell('studio', [paneSeg, shellEl]);
+    try { const ab = JSON.parse(sessionStorage.getItem('rs_autobuild') || 'null'); if (ab && lead && +ab.lead === +lead.id) { sessionStorage.removeItem('rs_autobuild'); if (!(draft && draft.messages && draft.messages.length)) send(ab.msg); } } catch { /* ok */ }
   }
 
   /* ================= Lead Finder (admin) ================= */

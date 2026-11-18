@@ -2903,7 +2903,7 @@ async function api(request, env, url) {
   }
 
   /* ---- Stage 4C: Demo Studio ---- */
-  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
+  if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo' || path === '/studio/from-google') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
   if (path === '/studio' && method === 'GET') {
     need(user, 'admin', 'rep', 'dev');
     const leadId = +url.searchParams.get('lead') || null;
@@ -3580,6 +3580,42 @@ const SITE_SCRIPT = String.raw`<script>
     function widest(){return Math.max.apply(null,ws.map(function(w){return w.getBoundingClientRect().width;}).concat([0]));}
     while(widest()>box&&s>26&&n++<50){s-=2;h.style.fontSize=s+'px';}}
   fitHero();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitHero);addEventListener('resize',fitHero);
+  (function motion(){
+    var calm=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var css=document.createElement('style');
+    css.textContent='.mx-bar{position:fixed;top:0;left:0;height:3px;width:100%;transform-origin:0 50%;transform:scaleX(0);background:var(--accent,#5b8cff);z-index:9999;pointer-events:none}'
+      +'nav{transition:background .35s,box-shadow .35s,backdrop-filter .35s}nav.mx-scrolled{box-shadow:0 10px 30px -18px rgba(0,0,0,.45);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}'
+      +'.btn{will-change:transform}.btn:active{transform:scale(.97)!important}'
+      +'.js .reveal{transition-timing-function:cubic-bezier(.16,1,.3,1)!important;transition-duration:.9s!important}'
+      +'.mx-tilt{transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .5s}.mx-tilt:hover{box-shadow:0 26px 50px -24px rgba(0,0,0,.45)}';
+    document.head.appendChild(css);
+    if(calm) return;
+    var bar=document.createElement('div');bar.className='mx-bar';document.body.appendChild(bar);
+    var nav=document.querySelector('nav'), heroImgs=[].slice.call(document.querySelectorAll('.hero img, .hero .bg'));
+    var ticking=false;
+    function onScroll(){ if(ticking) return; ticking=true; requestAnimationFrame(function(){
+      var y=scrollY, max=document.documentElement.scrollHeight-innerHeight;
+      bar.style.transform='scaleX('+(max>0?Math.min(1,y/max):0)+')';
+      if(nav) nav.classList.toggle('mx-scrolled', y>24);
+      heroImgs.forEach(function(el,i){ if(y<innerHeight*1.2) el.style.transform='translate3d(0,'+(y*(i?0.12:0.22)).toFixed(1)+'px,0)'; });
+      ticking=false; }); }
+    addEventListener('scroll',onScroll,{passive:true}); onScroll();
+    // count up any number that has data-count (ratings, review counts, years)
+    var nums=[].slice.call(document.querySelectorAll('[data-count]'));
+    if(nums.length&&'IntersectionObserver' in window){ var io2=new IntersectionObserver(function(es){es.forEach(function(e){ if(!e.isIntersecting) return; io2.unobserve(e.target);
+      var el=e.target, to=parseFloat(el.getAttribute('data-count'))||0, dec=(String(el.getAttribute('data-count')).split('.')[1]||'').length, t0=performance.now();
+      (function step(t){ var p=Math.min(1,(t-t0)/1200), v=to*(1-Math.pow(1-p,3)); el.textContent=v.toFixed(dec); if(p<1) requestAnimationFrame(step); })(t0); }); },{threshold:.4});
+      nums.forEach(function(n){io2.observe(n);}); }
+    // magnetic buttons + soft tilt on cards (mouse only)
+    if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+      [].slice.call(document.querySelectorAll('.btn')).forEach(function(b){
+        b.addEventListener('mousemove',function(e){var r=b.getBoundingClientRect();b.style.transform='translate('+((e.clientX-r.left-r.width/2)*.18).toFixed(1)+'px,'+((e.clientY-r.top-r.height/2)*.25).toFixed(1)+'px)';});
+        b.addEventListener('mouseleave',function(){b.style.transform='';});});
+      [].slice.call(document.querySelectorAll('.svc, .tile, .why, .g')).forEach(function(c){ c.classList.add('mx-tilt');
+        c.addEventListener('mousemove',function(e){var r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;c.style.transform='perspective(800px) rotateX('+(-y*5).toFixed(2)+'deg) rotateY('+(x*6).toFixed(2)+'deg) translateY(-4px)';});
+        c.addEventListener('mouseleave',function(){c.style.transform='';});});
+    }
+  })();
   var list=document.getElementById('hours'); if(!list) return;
   var days=['sun','mon','tue','wed','thu','fri','sat'], now=new Date(), today=days[now.getDay()];
   function mins(t){var m=/(\d{1,2})(?::(\d{2}))?\s*(a|p)?/i.exec(t); if(!m) return null; var h=+m[1]%12, mi=+(m[2]||0); if(m[3]&&m[3].toLowerCase()==='p') h+=12; return h*60+mi;}
@@ -3751,7 +3787,8 @@ function renderSite(d, D) {
   const motion = { rise: 'translateY(30px)', fade: 'scale(.97)', slide: 'translateX(-30px)' }[D.motion] || 'translateY(30px)';
   const fontLinks = [F.q, B.q].map((q) => `<link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`).join('');
   const open = hours.length ? 'data-hours' : '';
-  const trust = [d.rating ? `<div><b>${esc(d.rating)} ★</b><span>Google rating</span></div>` : '', d.reviews ? `<div><b>${esc(d.reviews)}</b><span>reviews</span></div>` : '',
+  const cnt = (v) => (/^\d+(\.\d+)?$/.test(String(v).trim()) ? ` data-count="${esc(String(v).trim())}"` : '');
+  const trust = [d.rating ? `<div><b><span${cnt(d.rating)}>${esc(d.rating)}</span> ★</b><span>Google rating</span></div>` : '', d.reviews ? `<div><b${cnt(d.reviews)}>${esc(d.reviews)}</b><span>reviews</span></div>` : '',
     services.length ? `<div><b>${services.length}</b><span>${esc(N.services.toLowerCase())}</span></div>` : '', hours.length ? `<div id="todayBox"><b id="todayHrs">—</b><span>today</span></div>` : '',
     d.city ? `<div><b>${esc(d.city)}</b><span>local</span></div>` : ''].filter(Boolean);
   const trustHtml = trust.length >= 2 ? `<div class="trust"><div class="wrap"><div class="trust-row">${trust.join('')}</div></div></div>` : '';
@@ -4120,11 +4157,11 @@ function aiEngine(env) {
   if (env.AI || env.STUDIO_FAKE_AI === '1') return 'workers-ai';
   return 'basic';
 }
-function studioLead(l) { return { id: l.id, business: l.business, owner: l.owner, phone: l.phone, email: l.email, city: l.city, category: l.category, address: l.address, rating: l.rating, link: l.link, website: l.website, demo_url: l.demo_url }; }
+function studioLead(l) { return { id: l.id, business: l.business, owner: l.owner, phone: l.phone, email: l.email, city: l.city, category: l.category, address: l.address, rating: l.rating, reviews: l.reviews, link: l.link, website: l.website, demo_url: l.demo_url }; }
 function draftOut(d) { return { id: d.id, lead_id: d.lead_id, theme: d.theme, data: JSON.parse(d.data || '{}'), messages: JSON.parse(d.messages || '[]'), updated_at: d.updated_at }; }
 function leadSource(l) {
   return ['Business: ' + (l.business || ''), l.category && 'Category: ' + l.category, l.city && 'City: ' + l.city, l.phone && 'Phone: ' + l.phone,
-    l.email && 'Email: ' + l.email, l.address && 'Address: ' + l.address, l.rating && 'Google rating: ' + l.rating].filter(Boolean).join('\n');
+    l.email && 'Email: ' + l.email, l.address && 'Address: ' + l.address, l.rating && 'Google rating: ' + l.rating, l.reviews != null && 'Google reviews: ' + l.reviews].filter(Boolean).join('\n');
 }
 
 const STUDIO_SYSTEM = `You design one-page websites for small local businesses (barbers, nail and lash studios, auto detailers, taco spots, trades...).
@@ -4268,7 +4305,7 @@ function basicBuild(message, data, lead, source, first) {
   if (svc.length) { d.services = svc.slice(0, 24); notes.push(svc.length + ' services'); }
   if (hrs.length) { d.hours = hrs; notes.push('hours'); }
   if (about.length && (first || !d.about)) d.about = about.slice(0, 2).join(' ');
-  if (lead) { d.name = d.name || lead.business; d.category = d.category || lead.category; d.city = d.city || lead.city; d.phone = d.phone || lead.phone; d.address = d.address || lead.address; d.rating = d.rating || lead.rating; }
+  if (lead) { d.name = d.name || lead.business; d.category = d.category || lead.category; d.city = d.city || lead.city; d.phone = d.phone || lead.phone; d.address = d.address || lead.address; d.rating = d.rating || lead.rating; if (!d.reviews && lead.reviews != null) d.reviews = String(lead.reviews); }
   if (!d.name) d.name = (lines[0] || 'Your business').slice(0, 80);
   if (!d.highlights || !d.highlights.length) d.highlights = [{ title: 'Real local service', text: 'A neighborhood spot that knows its regulars by name.' }, { title: 'Easy to book', text: 'Call or book online in under a minute.' }, { title: 'Done right', text: 'Clean work, fair prices, no surprises.' }];
   const reply = first ? 'Built a first version from what you pasted' + (notes.length ? ' (' + notes.join(', ') + ')' : '') + '. Tell me what to change.' :
@@ -4371,7 +4408,7 @@ function cleanDemo(d, lead) {
     name: s(d.name, 120) || lead.business || 'Your business',
     tagline: s(d.tagline, 160), category: s(d.category, 80) || lead.category || '', city: s(d.city, 80) || lead.city || '',
     about: s(d.about, 1200), phone: s(d.phone, 40) || lead.phone || '', email: cleanEmail(d.email) || lead.email || '',
-    address: s(d.address, 200) || lead.address || '', rating: s(d.rating, 12) || lead.rating || '', reviews: s(d.reviews, 12),
+    address: s(d.address, 200) || lead.address || '', rating: s(d.rating, 12) || lead.rating || '', reviews: s(d.reviews, 12) || (lead.reviews != null ? String(lead.reviews) : ''),
     instagram: url(d.instagram), booking: url(d.booking), services, hours, photos, accent,
     highlights: (Array.isArray(d.highlights) ? d.highlights : []).slice(0, 4).map((x) => ({ title: s(x && x.title, 60), text: s(x && x.text, 220) })).filter((x) => x.title),
     cta: s(d.cta, 60),
@@ -5453,9 +5490,8 @@ async function kitAdmin(env, user, path, method, body, url) {
       services: Object.entries(KIT_SERVICES).map(([id, s]) => ({ id, name: s.name })), services_med: Object.entries(KIT_SERVICES_MED).map(([id, s]) => ({ id, name: s.name })), looks: Object.entries(KIT_LOOKS).map(([id, l]) => ({ id, name: l.name, accent: l.accent, bg: l.bg })),
       eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), origin: url.origin });
   }
-  if (path === '/quickdemo' && method === 'POST') {
-    // pitch on the spot: paste a Google Maps share, a link or just a name, get a demo for that business
-    need(user, 'admin', 'rep');
+  // paste a Google Maps share, a link or just a name: look it up once, save or reuse the lead
+  async function leadFromPaste(body) {
     const raw = String(body.text || '').slice(0, 2000).trim();
     if (!raw) bad('Paste the business first');
     const lines = raw.split(/\n+/).map((x) => x.trim()).filter(Boolean);
@@ -5482,9 +5518,13 @@ async function kitAdmin(env, user, path, method, body, url) {
       const nk = name.toLowerCase().replace(/[^a-z0-9]/g, '');
       hit = list.find((x) => { const bk = String(x.business || '').toLowerCase().replace(/[^a-z0-9]/g, ''); return bk && (bk.includes(nk.slice(0, 12)) || nk.includes(bk.slice(0, 12))); }) || null;
     } catch (e) { console.error('quickdemo lookup', e.message || e); }
+    // what the pasted Google page itself says ("4.7 (86) · Dog groomer"), used when the lookup misses
+    const rm = raw.match(/\b([1-5][.,]\d)\s*★?\s*\(([\d,.]+k?)\)/i);
+    const pasteRate = rm ? rm[1].replace(',', '.') : '', pasteRevs = rm ? (/k$/i.test(rm[2]) ? Math.round(parseFloat(rm[2]) * 1000) : parseInt(rm[2].replace(/[,.]/g, ''), 10)) : null;
+    const cm = raw.match(/\)\s*[·•]\s*([A-Za-z][A-Za-z &'-]{2,40})/), pasteCat = cm ? cm[1].trim() : '';
     const L = {
       business: (hit && hit.business) || name, phone: (hit && hit.phone) || (phoneM ? phoneM[0] : ''), address: (hit && hit.address) || addrLine,
-      category: (hit && hit.category) || oneLine(body.biz_type, 60) || '', rating: hit && hit.rating ? String(hit.rating) : '', reviews: hit && hit.reviews != null ? hit.reviews : null,
+      category: (hit && hit.category) || oneLine(body.biz_type, 60) || pasteCat || '', rating: hit && hit.rating ? String(hit.rating) : pasteRate, reviews: hit && hit.reviews != null ? hit.reviews : pasteRevs,
       link: (hit && hit.link) || (urlM ? urlM[0] : ''), website: (hit && hit.website) || '', place_id: (hit && hit.place_id) || null,
     };
     const city = (L.address.match(/,\s*([A-Za-z .'-]+?),\s*[A-Z]{2}\b/) || [])[1] || where.split(',')[0];
@@ -5501,6 +5541,17 @@ async function kitAdmin(env, user, path, method, body, url) {
     } else {
       await env.DB.prepare("UPDATE leads SET rating = COALESCE(rating, ?), reviews = COALESCE(reviews, ?), address = COALESCE(address, ?), link = COALESCE(link, ?), updated_at = ? WHERE id = ?").bind(L.rating || null, L.reviews, L.address || null, L.link || null, t, lead.id).run();
     }
+    return { lead, L, city, hit };
+  }
+  if (path === '/studio/from-google' && method === 'POST') {
+    need(user, 'admin', 'rep');
+    const { lead, L, hit } = await leadFromPaste(body);
+    return json({ lead_id: lead.id, business: L.business, found: !!hit, rating: L.rating, reviews: L.reviews, address: L.address, phone: L.phone, category: L.category });
+  }
+  if (path === '/quickdemo' && method === 'POST') {
+    // pitch on the spot: paste a Google Maps share, a link or just a name, get a demo for that business
+    need(user, 'admin', 'rep');
+    const { lead, L, city, hit } = await leadFromPaste(body);
     const kr = await kitAdmin(env, user, '/kits', 'POST', { lead_id: lead.id, business: L.business, city, phone: L.phone || '', biz_type: oneLine(body.biz_type, 60) || L.category || '' }, url);
     const kj = await kr.json();
     if (!kr.ok) throw new HttpError(kr.status, kj.error || 'Could not build the demo');
