@@ -167,7 +167,7 @@
       ['Close', [['script', 'Call script', 'What to say', 'script'], ['calendar', 'Calendar', 'Demos and callbacks', 'calendar'], ['deals', 'Deals', 'Clients and money', 'deals']]]]],
     create: ['Create', 'Demos and posts', [
       ['Demos', [['studio', 'Demo Studio', 'Voice AI demo for any lead', 'spark']]],
-      ['Content', [['content', 'Content', 'Start posting and video maker', 'spark']]]]],
+      ['Content', [['content', 'Content', 'Plan, posts and web map videos', 'spark']]]]],
     crew: ['Team', 'Reps and logins', [
       ['People', [['users', 'Team', 'Reps, devs and logins', 'users']]]]],
     more: ['System', 'Connections and settings', [
@@ -2800,1446 +2800,274 @@
   }
 
   /* ================= content system (from the notes: problem / demo / audit / result) ================= */
-  const CONTENT_TYPES = [
-    { id: 'problem', name: 'Problem post', job: 'Show where backyard contractors are losing money right now.', visual: 'Text card or screenshot: one big number or one sentence on a dark background. No face needed.' },
-    { id: 'demo', name: 'Demo post', job: 'Show the AI actually working.', visual: 'Screen recording on your phone: the AI receptionist answering a call, or the missed-call text going out. 15–30 seconds.' },
-    { id: 'audit', name: 'Audit post', job: 'Break down a backyard contractor\'s office and show what you would fix.', visual: 'Screenshot of a public Google listing (hours, phone, reviews) with arrows and 3 fixes. Blur the name if you haven\'t asked permission.' },
-    { id: 'result', name: 'Result post', job: 'Show the wins.', visual: 'Screenshot of your own scorecard (dials, audits booked) until you have client results. Never invent a client result.' },
-  ];
-  const CTA = {
-    ig: 'Own a backyard contractor? DM "AUDIT" and I\'ll run a free 30-minute AI audit of your office.',
-    fb: 'Own a backyard contractor? Send me a message with the word AUDIT and I\'ll run a free 30-minute AI audit of your office.',
-    tt: 'Own a backyard contractor? DM me AUDIT for a free AI audit.',
-    yt: 'Own a backyard contractor? DM me AUDIT for a free 30-minute AI audit.',
-    x: 'Own a backyard contractor? DM me "AUDIT" for a free 30-min AI audit.',
-    li: 'If you run a backyard contractor and want a free 30-minute AI audit of your office, send me a message.' };
-  const TAGS = '#backyard #hardscape #landscaping #pavers #aiautomation #smallbusiness';
-  const TAGSBY = { ig: TAGS, fb: '', tt: '#backyard #aiautomation #smallbusiness #businesstips', yt: '#shorts #backyard #aiautomation', x: '', li: '#backyard #aiautomation #smallbusiness' };
-  const CONTENT_LIB = {
-    problem: [
-      { hook: 'Where backyard contractors lose the most money',
-        ig: 'Most backyard contractors don\'t lose clients to a competitor.\n\nThey lose them to a phone that rings and nobody picks up.\n\nYou are on a job site. It\'s after 5pm. It\'s lunch. The caller books somewhere else in under 5 minutes.\n\nExample math (yours will differ): 10 missed calls a week × 3 that would have booked × $400 job = $1,200 a week walking out the door.',
-        x: 'Backyard contractors rarely lose clients to competitors.\n\nThey lose them to a phone nobody answers after 5pm.\n\nExample: 3 missed bookings a week x $400 = $1,200/week gone.',
-        li: 'The most expensive problem I see in backyard contractors isn\'t marketing. It\'s the phone.\n\nA caller who reaches voicemail rarely leaves a message. They call the next contractor on Google.\n\nIllustrative math, not a statistic: if 3 missed calls a week would have booked a $400 job, that\'s about $1,200 a week and over $60,000 a year.\n\nThe fix is simple: every call answered, every missed call texted back within a minute.' },
-      { hook: 'The 5pm problem',
-        ig: 'Think about when people look up a backyard contractor.\n\nEvenings. Weekends. On their phone after work.\n\nThat\'s exactly when most offices are closed.\n\nSo the person who was ready to book an estimate tonight gets voicemail and books with whoever answers.',
-        x: 'People search for backyard contractors at night and on weekends.\n\nMost offices are closed then.\n\nWhoever answers first gets the booking.',
-        li: 'Most backyard contractor searches happen outside business hours. Most backyard contractor phones go to voicemail outside business hours.\n\nThat gap is where bookings quietly leak.\n\nAn AI receptionist that answers, answers basic questions and books the estimate closes that gap without adding staff.' },
-      { hook: 'Speed to lead: who replies first wins',
-        ig: `A new customer fills out a form at 7pm.
-
-If nobody replies until tomorrow, they've already messaged two other contractors.
-
-The business that answers in under a minute usually gets the booking. That's not luck, it's just speed.
-
-An AI can reply in seconds, ask the right questions, and offer a time. Every night. Every weekend.`,
-        x: `A lead fills out a form at 7pm.
-
-The contractor who replies first usually wins.
-
-AI replies in seconds, even at 2am.`,
-        li: `Speed to lead is one of the cheapest wins in a service business. A new inquiry that gets a reply in a minute is far more likely to book than one that waits until morning.
-
-An AI can respond instantly, qualify the inquiry and offer times, without anyone staying late.` },
-      { hook: 'Your past clients are your cheapest revenue',
-        ig: `Every backyard contractor has a list of clients who came once or twice and never came back.
-
-They already trust you. They just haven't heard from you in a while.
-
-A friendly text ("We miss you, want to book?") sent to the right people is the cheapest booking you'll ever get.
-
-Example math (yours will differ): 200 quiet clients × 5% rebook × $300 = $3,000.`,
-        x: `Your past clients already trust you.
-
-They just haven't heard from you in 6 months.
-
-Example: 200 quiet clients x 5% x $300 = $3,000.`,
-        li: `The cheapest new revenue in a backyard contractor is often sitting in the client list: people who visited once or twice and drifted away.
-
-A simple, friendly follow-up to lapsed clients costs almost nothing and requires no new advertising.
-
-Illustrative math, not a statistic: 200 quiet clients, 5% rebook, $300 each, about $3,000.` },
-    ],
-    demo: [
-      { hook: 'Watch an AI receptionist book an estimate',
-        ig: 'This is what happens when a homeowner calls a backyard contractor at 7pm.\n\nThe AI answers on the first ring, answers questions about pavers, turf and patios, and books the estimate into the calendar.\n\nNo voicemail. No missed lead. The office wakes up to a full schedule.',
-        x: '7pm. A homeowner calls a backyard contractor.\n\nThe AI answers, answers questions, books the estimate.\n\nNo voicemail. No lost lead.',
-        li: 'A short demo of an AI voice receptionist handling an after-hours call for a backyard contractor: greeting, project questions, and booking an estimate.\n\nThe point isn\'t the technology. It\'s that the caller never hit voicemail.' },
-      { hook: 'The missed-call text-back',
-        ig: 'A call goes unanswered.\n\n60 seconds later the homeowner gets a text: "Sorry we missed you, want to book an estimate? Here\'s our link."\n\nMost people reply to a text faster than they return a voicemail.',
-        x: 'Missed call.\n\n60 seconds later: an automatic text with a booking link.\n\nPeople answer texts faster than they check voicemail.',
-        li: 'Missed-call text-back in action: a call goes unanswered and the caller gets a friendly text with a booking link within a minute.\n\nIt turns a lost call into a conversation.' },
-      { hook: 'AI answers while your office is busy',
-        ig: `You are on a roof deck with both hands full. The phone rings. Nobody can get it.
-
-An AI receptionist picks up, answers the common questions (hours, prices, what to expect) and books the estimate.
-
-The office keeps doing the work only a human can do.`,
-        x: `You are on a job site. Phone rings.
-
-AI picks up, answers questions, books the estimate.
-
-Humans handle humans. AI handles the phone.`,
-        li: `The busiest moments in a backyard contractor are exactly when the phone goes unanswered.
-
-An AI receptionist covers those moments: it answers common questions, books estimates and passes anything unusual to a person. It supports the office instead of replacing it.` },
-      { hook: 'Website chatbot: the 24/7 front door',
-        ig: `Most people check a backyard contractor's website at night on their phone.
-
-A chatbot that answers "how much is a turf lawn?" and "do you have anything Saturday?" turns that visit into a booking.
-
-No waiting for the office to open.`,
-        x: `People browse backyard contractor sites at night.
-
-A chatbot that answers questions and books the estimate turns a visit into an appointment.`,
-        li: `A website that only displays information is a brochure. A website with an AI assistant that answers questions and books estimates is a front door that never closes.
-
-For businesses that get evening and weekend traffic, that difference shows up in the calendar.` },
-    ],
-    audit: [
-      { hook: 'I audited a backyard contractor\'s office in 10 minutes',
-        ig: 'I looked at one backyard contractor\'s Google listing for 10 minutes. Here\'s what I\'d fix:\n\n1. Phone goes to voicemail after 5pm\n2. No instant reply to new inquiries\n3. Old clients never get a "we miss you" message\n\nNone of it needs more staff. It needs a system.',
-        x: 'Audited a backyard contractor\'s office in 10 minutes.\n\nFixes:\n1. After-hours calls answered\n2. Instant reply to inquiries\n3. Message past clients\n\nNo new staff needed.',
-        li: 'I spent ten minutes reviewing a backyard contractor\'s public presence. Three fixes stood out: after-hours calls, response speed to new inquiries, and reactivating past clients.\n\nNone of them need more staff. They need a system that runs without anyone remembering to do it.' },
-      { hook: 'Three questions to ask your office today',
-        ig: 'Ask your office three questions today:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to a new inquiry?\n3. When did we last message clients who haven\'t booked in 6 months?\n\nIf nobody knows the answers, that\'s where the money is.',
-        x: 'Ask your office:\n\n1. How many calls did we miss this week?\n2. How fast do we reply to new inquiries?\n3. When did we last message lapsed clients?\n\nIf nobody knows, that\'s the leak.',
-        li: 'Three questions every backyard contractor owner should be able to answer: how many calls we missed this week, how quickly we respond to a new inquiry, and when we last contacted clients who haven\'t booked in six months.\n\nIf the answers aren\'t known, that is usually where revenue is leaking.' },
-      { hook: 'Call your own business at 7pm',
-        ig: `Try this tonight: call your own business at 7pm like a customer would.
-
-What happens?
-
-Voicemail? Rings forever? A message that says call back tomorrow?
-
-That's what every after-hours caller hears. It's the easiest leak to find, and the easiest to fix.`,
-        x: `Call your own business at 7pm tonight.
-
-Voicemail? Rings out?
-
-That's what every after-hours customer hears.`,
-        li: `A simple test for any owner: call your own business at 7pm and listen to the experience a new customer gets.
-
-If it ends in voicemail, you have found the easiest revenue leak to fix.` },
-      { hook: '4 things I check on any Google listing',
-        ig: `Four things I look at first on a business's Google listing:
-
-1. Do they answer the phone after 5pm?
-2. Is there a way to message or book without calling?
-3. How fast do they reply to reviews and questions?
-4. Are the hours accurate?
-
-Each one is a place where customers quietly give up.`,
-        x: `4 things I check on a Google listing:
-
-1. After-hours calls
-2. Message/booking options
-3. Reply speed
-4. Accurate hours
-
-Each is where customers quietly give up.`,
-        li: `When I look at a business's Google listing I check four things: whether the phone is answered after hours, whether customers can message or book without calling, how quickly the business replies, and whether the hours are accurate.
-
-Each is a small friction point, and together they decide who gets the booking.` },
-    ],
-    result: [
-      { hook: 'Day-by-day scorecard',
-        ig: 'Day {day} of 30 building my AI agency in public.\n\nDials today: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nNo shortcuts. Inputs drive outputs.',
-        x: 'Day {day} of 30.\n\nDials: {dials}\nPick-ups: {talks}\nAudits booked: {demos}\n\nInputs drive outputs.',
-        li: 'Day {day} of a 30-day push to prove an AI front-desk offer for backyard contractors.\n\nToday: {dials} dials, {talks} conversations, {demos} audits booked.\n\nBuilding in public, and the numbers stay honest.' },
-      { hook: 'What I learned this week',
-        ig: 'Week of calling backyard contractors, what I learned:\n\n• Offices are busiest right before lunch\n• The owner usually picks up after 4pm\n• "We already have someone" usually means "we miss calls and don\'t know it"\n\nDials this week: {week}',
-        x: 'A week of cold calling backyard contractors:\n\n- Owners pick up more after 4pm\n- "We have someone" often means they miss calls and don\'t know it\n\nDials this week: {week}',
-        li: 'A week of calling backyard contractors taught me a few things: owners are easier to reach late in the afternoon, and "we already have someone covering the phones" often means missed calls nobody is counting.\n\nDials this week: {week}.' },
-      { hook: 'Inputs, not outcomes',
-        ig: `Day {day} of 30.
-
-I can't control who says yes. I can control the inputs.
-
-Dials today: {dials}
-Conversations: {talks}
-Audits booked: {demos}
-
-Show up, count honestly, repeat.`,
-        x: `Day {day}/30.
-
-Can't control who says yes. Can control inputs.
-
-Dials: {dials}
-Talks: {talks}
-Audits: {demos}`,
-        li: `Day {day} of the 30-day push. Outcomes are out of my hands; inputs aren't.
-
-Today: {dials} dials, {talks} conversations, {demos} audits booked. Tracking it honestly is the whole system.` },
-      { hook: 'What the free audit actually is',
-        ig: `People hear "free AI audit" and think it's a sales pitch.
-
-It's 30 minutes of me asking how your leads come in, who answers, what software you use, and where customers fall through.
-
-You leave knowing what's leaking and a ballpark of what fixing it costs. No card needed.
-
-Dials this week: {week}`,
-        x: `"Free AI audit" = 30 min.
-
-I ask how leads come in, who answers, where customers fall through.
-
-You leave with a ballpark. No card needed.`,
-        li: `The free AI audit is simple: thirty minutes to understand how a business gets leads, who handles them, what software is in use, and where customers fall through.
-
-The goal is a clear picture of the leak and a ballpark of the fix, whether or not we work together.` },
-    ],
-  };
-  const CPLAT = [['ig', 'Instagram'], ['fb', 'Facebook'], ['tt', 'TikTok'], ['yt', 'YT Shorts'], ['x', 'X'], ['li', 'LinkedIn']];
-
-  /* ================= demo videos (rendered MP4s in /demos, same CTA as the posts) ================= */
-  const DV_STYLES = { A: 'Flow map', B: 'Text thread', C: 'Money counter' };
-  const DV_TOPICS = {
-    missed: { name: 'Missed calls after 5', hook: 'Losing $1,200 a week to missed calls',
-      cap: { ig: 'A customer calls at 6:42 PM. The office is closed. Voicemail. She books your competitor.\n\nThree of those a week at $400 each is $1,200 a week walking out the door.\n\nThe fix: an AI receptionist that answers on the first ring and books the appointment.\n\n(Example numbers. Yours will differ.)', x: 'Customer calls at 6:42 PM. Voicemail. She books your competitor.\n\n3 a week x $400 = $1,200/week gone.\n\nAI answers on ring one and books it.\n\n(Example numbers)', li: 'A customer calls after hours, reaches voicemail and books a competitor. Three of those a week at $400 each is about $1,200 a week.\n\nAn AI receptionist that answers every call and books the appointment closes that gap.\n\n(Illustrative numbers, not a statistic.)' },
-      vo: { hook: "Your business could be losing twelve hundred dollars a week. Here's where it leaks.", problem: "It's Tuesday, six forty-two PM. A customer finds you on Google and calls. Your office is closed. It rings, then goes to voicemail. She doesn't leave a message. She books your competitor instead. That's about four hundred dollars, gone.", cost: "Say that happens three times a week. Three bookings, four hundred dollars each. That's twelve hundred a week. Over a year, over sixty-two thousand dollars walking out the door.", fix: "Now, same call. But an AI receptionist picks up on the first ring. It answers her questions and books her appointment for seven thirty, right on your calendar. She shows up, and you keep the four hundred." } },
-    slow: { name: 'Slow replies lose the job', hook: 'The first to reply wins',
-      cap: { ig: 'A new inquiry comes in at 7 PM. Nobody sees it until morning. By then she has hired someone who replied in minutes.\n\nTwo cold leads a week at $500 each is $1,000 a week.\n\nThe fix: an AI that replies in seconds, asks the right questions and books the visit.\n\n(Example numbers. Yours will differ.)', x: 'New inquiry at 7 PM. No reply until morning. She already hired someone else.\n\n2 leads a week x $500 = $1,000/week.\n\nAI replies in 20 seconds.\n\n(Example numbers)', li: 'A new inquiry that waits until morning has usually gone to whoever replied first. Two lost jobs a week at $500 each is about $1,000 a week.\n\nAn AI that replies in seconds, asks the right questions and books the visit fixes the delay.\n\n(Illustrative numbers, not a statistic.)' },
-      vo: { hook: "The first business to reply usually wins. Slow replies lose the job.", problem: "It's seven PM. A new customer fills out your form and asks for a quote. Nobody sees it tonight. Fourteen hours go by with no reply. By morning, she's already hired someone else. That's about five hundred dollars, gone.", cost: "Two leads a week going cold, at five hundred dollars each, is a thousand dollars every week. Over a year, that's fifty-two thousand dollars going to whoever replied first.", fix: "Now, same inquiry. An AI replies in twenty seconds, asks the right questions, and books the visit for Tuesday morning. You wake up to a booking you would have lost." } },
-    quiet: { name: 'Customers who went quiet', hook: '200 customers went quiet',
-      cap: { ig: 'Every business has customers who came once and never came back. Nobody followed up.\n\n200 quiet customers, 5% come back, $300 each: $3,000 sitting in your list.\n\nThe fix: an AI that texts them a friendly "we miss you" and books the ones who reply.\n\n(Example numbers. Yours will differ.)', x: '200 customers went quiet. Nobody followed up.\n\n5% come back x $300 = $3,000 sitting in your list.\n\nAI texts them and books the replies.\n\n(Example numbers)', li: 'Most businesses have a list of past customers who drifted away without a single follow-up. With 200 of them, a 5% return and $300 per visit, that is about $3,000 sitting unclaimed.\n\nAn AI follow-up that checks the list, sends a friendly text and books the replies costs no staff time.\n\n(Illustrative numbers, not a statistic.)' },
-      vo: { hook: "Two hundred customers went quiet. And nobody ever followed up.", problem: "She loved the service. Then six months passed, with no reminder and no check-in. She forgot about you and booked somewhere else. That's about three hundred dollars lost, and it happened with every one of them.", cost: "Take two hundred customers who've gone quiet. If just five percent come back, at three hundred dollars a visit, that's three thousand dollars sitting in your customer list.", fix: "With an AI follow-up, it checks your list every night and sends a friendly text: we miss you, want to book? She replies, the AI offers times that work, and she's booked with zero staff time." } },
-  };
-  const DV_ORDER = ['A-missed', 'B-slow', 'C-quiet', 'B-missed', 'C-slow', 'A-quiet', 'C-missed', 'A-slow', 'B-quiet'];
-  const DV_TIMES_UNUSED = { A: [['Hook', 0, 'hook'], ['Problem', 3.8, 'problem'], ['The cost', 11, 'cost'], ['The fix', 17.5, 'fix'], ['Call to action', 25.5, 'cta']], B: [['Hook', 0, 'hook'], ['Problem', 3.6, 'problem+cost'], ['The fix', 14.2, 'fix'], ['Call to action', 25, 'cta']], C: [['Hook', 0, 'hook'], ['Problem', 3.6, 'problem+cost'], ['The fix', 14.6, 'fix'], ['Call to action', 25.6, 'cta']] };
-  const VO_CTA = 'Want to know what your business is losing? DM me the word AUDIT for a free thirty-minute AI audit.';
-  const dvOf = (id) => { const [st, tp] = id.split('-'); return { id, style: st, topic: tp, t: DV_TOPICS[tp], styleName: DV_STYLES[st] }; };
-  const dvScript = (v) => ['hook', 'problem', 'cost', 'fix'].map((k) => v.t.vo[k]).concat(VO_CTA).join(' ');
-  const dvToday = (n) => { const i = ((n - 1) * 2) % DV_ORDER.length; return [DV_ORDER[i], DV_ORDER[(i + 1) % DV_ORDER.length]]; };
-  const DV_PLAT = CPLAT;
-  function dvCard(v, dayN, open) {
-    let plat = 'ig';
-    const key = 'rs_dv_' + dayN + '_' + v.id;
-    let posted = false; try { posted = localStorage.getItem(key) === '1'; } catch {}
-    const area = h('textarea', { class: 'ct-text', rows: 9 });
-    const setCap = () => { const ck = { ig: 'ig', fb: 'ig', tt: 'x', yt: 'x', x: 'x', li: 'li' }[plat]; area.value = v.t.cap[ck] + '\n\n' + CTA[plat] + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : ''); };
-    const tabs = h('div', { class: 'stagechips' });
-    const drawTabs = () => tabs.replaceChildren(...DV_PLAT.map(([k, label]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); setCap(); } }, label)));
-    drawTabs(); setCap();
-    const cp = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
-    const script = dvScript(v);
-    const doneBtn = h('button', { class: 'btn' + (posted ? ' ok on' : ''), onclick: () => { posted = !posted; try { localStorage.setItem(key, posted ? '1' : '0'); } catch {} doneBtn.textContent = posted ? 'Posted ✓ (tap to undo)' : 'Mark as posted'; doneBtn.classList.toggle('ok', posted); doneBtn.classList.toggle('on', posted); } }, posted ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
-    return h('div', { class: 'card dv-card' },
-      h('div', { class: 'dv-vid' }, h('video', { src: '/demos/' + v.id + '.mp4', poster: '/demos/' + v.id + '.jpg', controls: true, playsinline: true, preload: 'none', loop: true, muted: true })),
-      h('div', { class: 'dv-body' },
-        h('div', { class: 'dv-meta' }, h('span', { class: 'tag hot' }, v.styleName), h('b', null, v.t.name)),
-        h('p', { class: 'dim small' }, '32 seconds with sound effects. Add your voice in CapCut using the script below (turn the effects down if you want), then post.'),
-        h('a', { class: 'btn primary', href: '/demos/' + v.id + '.mp4', download: 'reekon-' + v.id + '.mp4' }, 'Download video'),
-        tabs, area,
-        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => cp(area.value, 'Caption copied') }, 'Copy caption'), doneBtn),
-        h('details', { class: 'dv-vo', open: !!open }, h('summary', null, 'Voice-over script'),
-          h('p', { class: 'dv-script' }, script), h('button', { class: 'btn', onclick: () => cp(script, 'Script copied. Paste it into your voice tool') }, 'Copy script'))));
-  }
-
-  /* ================= content generator v2: topic x stage x platform, all free and in the CRM ================= */
-  const GEN_TOPICS = {
-    missed: { name: 'Missed calls',
-      hooks: ['Your phone just cost you a booking.', 'Nobody leaves a voicemail anymore.', 'Where your backyard business bleeds money: the phone.'],
-      symptom: 'You are on a job site. The phone rings. Nobody picks up.',
-      diagnosis: "That caller doesn't leave a voicemail. They call the next contractor on Google, usually within minutes.",
-      math: '3 missed bookings a week × $400 = $1,200 a week',
-      surgery: 'An AI receptionist answers every call on the first ring, answers questions and books the estimate.',
-      recovery: 'You keep the booking, and your crew stays on the job.',
-      question: 'How many calls did you miss this week? Be honest 👇',
-      scenes: ['Pickup truck parked outside a backyard patio job at dusk, phone on the dashboard lighting up and ringing, warm light, slow push-in', 'Woman on a couch in the evening looking at her phone, hearing voicemail, frustrated, cinematic', 'Phone screen showing an appointment confirmed, glowing calendar, dark background'] },
-    slow: { name: 'Slow replies',
-      hooks: ['The first contractor to reply wins.', 'A 7pm inquiry and a 9am reply. Already lost.', 'Speed is the whole game.'],
-      symptom: 'A new inquiry comes in at 7pm. Nobody sees it until morning.',
-      diagnosis: 'By then she has messaged two other contractors, and whoever replied first got the booking.',
-      math: '2 lost leads a week × $500 = $1,000 a week',
-      surgery: 'An AI replies in seconds, asks the right questions and offers a time.',
-      recovery: 'You wake up to a booked estimate instead of a cold lead.',
-      question: 'How fast do you reply to a new inquiry? Be honest 👇',
-      scenes: ['Woman at night typing an inquiry on her phone in a dim living room, cinematic close-up', 'Clock on a wall showing hours passing while a phone sits unanswered on a desk', 'Phone lighting up with an instant reply and a booked time, soft glow'] },
-    quiet: { name: 'Quiet customers',
-      hooks: ['200 customers went quiet.', 'Your best leads are already in your list.', 'Past clients are the cheapest bookings.'],
-      symptom: 'Every contractor has clients who came once and never came back. Nobody followed up.',
-      diagnosis: "They didn't leave unhappy. They just forgot, and no one reminded them.",
-      math: '200 quiet clients × 5% returning × $300 = $3,000 sitting in your list',
-      surgery: 'An AI texts them a friendly "we miss you" and books the ones who reply.',
-      recovery: 'Revenue from people you already earned, with zero staff time.',
-      question: 'When did you last follow up with a past client? 👇',
-      scenes: ['Rows of old customer cards in a drawer in a quiet contractor office, soft light, dust in the air', 'Woman smiling as a friendly text message arrives on her phone', 'Treatment room with a client relaxing, calm and premium, shallow depth of field'] },
-    reviews: { name: 'Reviews',
-      hooks: ['Two spas. Same quality. Different reviews.', 'Reviews are a system, not luck.', 'Your Google rating is your office.'],
-      symptom: 'Happy clients leave without ever posting a review.',
-      diagnosis: 'Nobody asks at the right moment, and leaving one takes too many steps.',
-      math: '',
-      surgery: 'One tap after the visit sends them straight to your Google review page, automatically.',
-      recovery: 'More 5-star reviews every week, without the awkward ask.',
-      question: 'How many reviews did you get last month? 👇',
-      scenes: ['Phone showing two contractor listings side by side, one with many five-star reviews, cinematic', 'Happy homeowner standing in a finished backyard holding her phone, golden hour', 'Close-up of a phone tapping a review link, stars lighting up'] },
-    noshow: { name: 'No-shows',
-      hooks: ['No-shows are a leak you can fix.', 'An empty slot costs more than an ad.', 'A text can save the appointment.'],
-      symptom: 'Clients forget their appointment and the slot sits empty.',
-      diagnosis: 'One missed reminder turns a $400 slot into zero, and nobody can fill it last minute.',
-      math: '4 no-shows a week × $300 = $1,200 a week',
-      surgery: 'Automatic reminders and a quick reschedule text keep the calendar full.',
-      recovery: 'Fewer empty slots, and a waitlist that fills open slots.',
-      question: "What's your no-show rate? 👇",
-      scenes: ['Empty slot on a contractor wall calendar in a bright office, clock ticking, quiet and still', 'Woman at home glancing at a phone reminder, then smiling', 'Full appointment calendar on a tablet at a reception desk'] },
-    afterhours: { name: 'After hours',
-      hooks: ['People search for backyard contractors at night.', 'The 5pm problem.', 'Weekends are when they book.'],
-      symptom: 'Most people look up a backyard contractor in the evening or on the weekend.',
-      diagnosis: "That's exactly when most offices are closed, so they book whoever answers.",
-      math: '',
-      surgery: 'An AI answers calls and messages 24/7 and books the estimate.',
-      recovery: 'Your phone never goes unanswered, even when your crew is on a job.',
-      question: 'What happens to calls at 9pm at your business? 👇',
-      scenes: ['City street at night through a window, a closed backyard contractor with a dark office, neon reflections', 'Woman searching on her phone in bed at night, screen glow on her face', 'Phone confirming a booking at 9pm, calm and satisfying'] },
-  };
-  /* ---- more offers: website, client CRM, site chat, review cards (hooks lead with the pain, not the tech) ---- */
-  Object.assign(GEN_TOPICS, {
-    website: { name: 'Website',
-      hooks: ['Can people find you?', 'Your website is your front door.', 'Get found. Get booked.'],
-      symptom: "Someone searches for your service on their phone. Your site loads slowly, looks outdated, or isn't there at all.",
-      diagnosis: 'People decide in seconds. A slow or old site tells them to try the next result.',
-      math: '',
-      surgery: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
-      recovery: 'More calls and bookings from people who were already looking for you.',
-      question: 'When did you last look at your own website on your phone? 👇',
-      scenes: ['Phone screen with a slow-loading outdated website, a thumb scrolling in frustration, cinematic', 'Same phone showing a fast modern contractor website with a Book Now button, soft glow', 'Calendar filling with bookings on a tablet at a reception desk, premium'] },
-    crm: { name: 'Client CRM',
-      hooks: ['Your leads live in your notes app.', 'Where do your leads actually go?', "Texts, DMs, sticky notes. That's not a system."],
-      symptom: 'Leads come in through calls, DMs, texts and forms, and they end up scattered across five places.',
-      diagnosis: "If nobody knows who to follow up with today, the lead you paid for quietly goes cold.",
-      math: '',
-      surgery: 'One simple dashboard on your phone: every lead, every follow-up, every booked appointment in one place.',
-      recovery: 'Nothing slips through the cracks, and you know exactly who to call today.',
-      question: 'Where do your leads live right now: notes app, DMs, or a real system? 👇',
-      scenes: ['Messy desk with sticky notes and a phone full of unread messages, shallow depth of field', 'Clean dashboard on a phone showing a tidy list of leads, dark UI with blue glow', 'Owner glancing at a phone and smiling, organized and calm'] },
-    chatbot: { name: 'Site chat',
-      hooks: ['Your website has questions. Who answers?', "Who answers 'how much is a paver patio?' at 9pm?", 'Visitors leave when nobody replies.'],
-      symptom: 'Someone is on your website at 9pm with a question about pricing or downtime, and there is nobody to ask.',
-      diagnosis: "Most visitors won't send an email and wait. They leave and ask whoever answers now.",
-      math: '',
-      surgery: 'A chat on your site answers the common questions instantly and books the estimate.',
-      recovery: 'Questions get answered while your team sleeps, and curious visitors become booked clients.',
-      question: 'What question do clients ask you ten times a week? 👇',
-      scenes: ['Woman at night on her phone looking at a contractor website with a question, screen glow on her face', 'Chat bubble answering a question on a phone, dark UI with blue glow', 'Booking confirmation on a phone, calm and satisfying'] },
-    plates: { name: 'Review cards',
-      hooks: ['One tap. One more five-star review.', "Reviews shouldn't take eight steps.", 'Your next 50 reviews are one tap away.'],
-      symptom: 'Happy clients mean to leave a review and never do, because it takes too many steps.',
-      diagnosis: 'The fewer taps between the visit and the review page, the more reviews you get.',
-      math: '',
-      surgery: 'A tap card at your office opens your Google review page instantly.',
-      recovery: 'Reviews build up every week, and your listing climbs above the competition.',
-      question: 'How many happy clients left without a review last month? 👇',
-      scenes: ['Hand tapping a phone on a sleek card at a backyard contractor office, shallow depth of field', 'Phone showing a Google review page with five stars lighting up', 'Office with a small tap card stand, warm premium lighting'] },
-  });
-  // plain = the fix without naming the tech; story/tip/save feed the longer face-to-camera scripts
-  const GEN_EXTRA = {
-    missed: { plain: 'A system picks up every call, answers the common questions and books the estimate, so nothing goes to voicemail.',
-      story: "Picture it: a homeowner has been thinking about a new patio for months. Tonight she finally decides to book. She calls your business at 6:40. Nobody answers. She doesn't leave a message. She calls the next contractor on Google.",
-      tip: 'Today, call your own business line at 7pm and hear what a new client hears. Do it again on Saturday. That is your real office.',
-      save: 'Every missed call is ad money and Google ranking you already paid for, wasted at the very last step.' },
-    slow: { plain: 'Every new inquiry gets a reply within a minute, with a link to book, even at 9pm.',
-      story: 'She fills out your form at 7pm. She has also messaged two other contractors. One replies in four minutes with a time. You reply the next morning. She has already booked.',
-      tip: 'Check your last five inquiries and write down how long each one waited for a reply. That number is your leak.',
-      save: 'You already paid to get that lead to your form. A slow reply throws the whole cost away.' },
-    quiet: { plain: 'A friendly text goes out to past clients on a schedule, and the ones who reply get booked.',
-      story: 'You have a list of people who came in once, loved it, and never came back. Not because anything went wrong. Life got busy and nobody reminded them.',
-      tip: 'Pull your client list, sort by last visit, and personally text the ten oldest ones this week. See how many reply.',
-      save: 'Bringing back a past client costs a text. Winning a new one costs ad spend.' },
-    reviews: { plain: 'A tap card at the office and a text after the visit send happy clients straight to your Google review page.',
-      story: "Your client just had a great visit. She'd happily leave five stars, but she has to open Google, search your name and find the button. She's in her car and gone. No review.",
-      tip: 'Look at your Google rating next to the two closest competitors. Count the reviews from the last 90 days. That is the gap.',
-      save: 'Reviews bring in clients for free, and they work while you sleep.' },
-    noshow: { plain: 'Automatic reminders go out before every appointment with a one-tap reschedule, and open slots go to a waitlist.',
-      story: 'Thursday, 2pm. Your estimator is on the way. Nobody is home. The homeowner forgot. That is a wasted drive and an hour gone, with no one to fill it on an hour of notice.',
-      tip: 'Count your no-shows and late cancels from the last month and multiply by the cost of a wasted drive and hour. Write that number on a sticky note.',
-      save: 'A reminder text costs almost nothing. An empty estimate slot costs you a drive and an hour.' },
-    afterhours: { plain: 'Calls and messages after hours are answered and booked on the spot, so the evening and weekend crowd does not bounce.',
-      story: "Sunday night, 9pm. She's scrolling, she's ready, she finds your business and tries to book. There's no online booking and the phone is off. She books the one that lets her.",
-      tip: 'Try booking your own business as a stranger on a Sunday night. Count the steps. Every extra step loses someone.',
-      save: 'Your best booking window is when your team is off the clock. You do not need staff for it, you need a system.' },
-    website: { plain: 'A fast, clean site with a Book Now button on every screen and your Google listing connected.',
-      story: "A woman searches 'backyard contractor near me' on her phone. She taps your listing. The site takes six seconds to load and the text is tiny. She hits back and taps the next one.",
-      tip: 'Open your site on your phone right now, on cellular, not wifi. Time it, and try to book in under thirty seconds.',
-      save: 'Ads and social posts send people to your site. If the site loses them, you pay for traffic that never turns into a booking.' },
-    crm: { plain: 'One simple dashboard on your phone: every lead, every follow-up, every booked appointment in one place.',
-      story: "A lead DMs you on Instagram, another texts, another fills out a form. By Friday you can't remember who asked about what, and one of them already went somewhere else.",
-      tip: 'List every place a lead can reach you. Count them. If it is more than two, people are slipping through the cracks.',
-      save: 'Many CRMs charge per seat and per feature. A simple one built around how you already work costs less, and you will actually use it.' },
-    chatbot: { plain: 'A chat box on your site answers the common questions, like prices, timelines and hours, and books the consult.',
-      story: "It's 9pm. Someone is on your site, wondering how long a paver patio takes and what it costs. There's no one to ask and no price on the page. She closes the tab.",
-      tip: 'Write down the five questions your front desk answers most. If those were answered automatically, how many hours would you get back?',
-      save: 'Answering the same ten questions all day is paid time. Let the site handle the repeats.' },
-    plates: { plain: 'A tap card at your front desk opens your Google review page instantly.',
-      story: "She just loved her facial. She says 'I'll review you later.' She never does. Not because she doesn't care. Because later never comes.",
-      tip: 'Check how many reviews you got this month. Then think about how many happy clients walked out that you never asked.',
-      save: 'A one-time card costs far less than the ad spend it takes to earn the same trust.' },
-  };
-  Object.keys(GEN_EXTRA).forEach((k) => Object.assign(GEN_TOPICS[k], GEN_EXTRA[k]));
-  const GEN_STAGES = [['symptom', 'Symptom'], ['diagnosis', 'Diagnosis'], ['save', 'Save money'], ['surgery', 'The fix'], ['recovery', 'Recovery'], ['story', 'Story'], ['question', 'Question']];
-  const plainCta = (s) => s.replace(/ AI audit/g, ' audit');
-  const ctaFor = (plat, plain) => (plain ? plainCta(CTA[plat]) : CTA[plat]);
-  const tagsFor = (plat, plain) => (plain ? TAGSBY[plat].replace(/ ?#aiautomation/, '') : TAGSBY[plat]);
-  const genEx = (t) => (t.math ? t.math + ' (Example numbers. Yours will differ.)' : '');
-  const fixOf = (t, plain) => (plain ? t.plain : t.surgery);
-  function genLines(tid, stage, plain) {
-    const t = GEN_TOPICS[tid];
-    if (stage === 'symptom') return ['Symptom: ' + t.symptom, genEx(t)].filter(Boolean);
-    if (stage === 'diagnosis') return ['Diagnosis: ' + t.diagnosis, genEx(t)].filter(Boolean);
-    if (stage === 'save') return [t.save, genEx(t)].filter(Boolean);
-    if (stage === 'surgery') return ['The fix: ' + fixOf(t, plain), t.recovery];
-    if (stage === 'recovery') return ['Before: ' + t.symptom, 'After: ' + t.recovery, 'How: ' + fixOf(t, plain)];
-    if (stage === 'story') return [t.story, 'The fix: ' + fixOf(t, plain)];
-    return [t.symptom, t.question];
-  }
-  function genPost(tid, stage, seed, plat, plain) {
-    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length], lines = genLines(tid, stage, plain), cta = ctaFor(plat, plain), tags = tagsFor(plat, plain);
-    if (plat === 'x') {
-      const room = 280 - (hook + '\n\n\n\n' + cta).length;
-      const fit = [];
-      let used = 0;
-      for (const l of lines.slice().sort((a, b) => a.length - b.length)) { if (used + l.length + 2 <= room) { fit.push(l); used += l.length + 2; } }
-      const keep = lines.filter((l) => fit.includes(l));
-      return [hook].concat(keep, [cta]).join('\n\n');
-    }
-    if (plat === 'yt') return 'Title: ' + (hook.length > 52 ? hook.slice(0, 51) + '…' : hook) + ' #shorts\n\nDescription:\n' + lines.join('\n\n') + '\n\n' + cta + '\n\n' + tags;
-    const lead = (plat === 'ig' || plat === 'fb' || plat === 'tt') ? '🩺 ' + hook : hook;
-    const body = plat === 'tt' ? lines.slice(0, 2) : lines;
-    return lead + '\n\n' + body.join('\n\n') + '\n\n' + cta + (tags ? '\n\n' + tags : '');
-  }
-  const spoken = (s) => s.replace(/ × /g, ' times ').replace(/ = /g, ' equals ').replace(/\$([\d,]+)/g, '$1 dollars').replace(/ 👇/g, '').replace(/(\d+)%/g, '$1 percent');
-  function genVideo(tid, seed, plain) {
-    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
-    const vo = plain ? plainCta(VO_CTA) : VO_CTA;
-    const script = [hook, t.symptom, t.diagnosis, t.math ? 'Say that adds up: ' + t.math + '.' : '', 'Now, same situation. ' + fixOf(t, plain), t.recovery, vo].filter(Boolean).map(spoken).join(' ');
-    const captions = [hook, t.symptom, t.math || t.diagnosis, fixOf(t, plain), plain ? 'DM "AUDIT" for a free audit' : 'DM "AUDIT" for a free AI audit'];
-    const scenes = t.scenes.map((s) => 'Vertical 9:16, cinematic, premium, no text, no logos. ' + s);
-    return { script, captions, scenes };
-  }
-  // Longer script to say to the camera: 30 / 60 / 90 seconds, with a cue for each beat
-  function genFace(tid, secs, seed, plain) {
-    const t = GEN_TOPICS[tid], hook = t.hooks[seed % t.hooks.length];
-    const cta = plain ? 'If you own a backyard contractor, DM me the word AUDIT and I will take a free look at your office and show you where bookings are slipping.' : 'If you own a backyard contractor, DM me the word AUDIT and I will run a free AI audit of your office and show you where bookings are slipping.';
-    const ex = t.math ? 'Say that adds up: ' + t.math + '. That is an example, your numbers will differ.' : '';
-    const beats = secs === 30 ? [['HOOK', 'Look at the camera, no intro', hook], ['PAIN', 'Slow down, make it a scene', t.symptom], ['THE FIX', 'Lean in', fixOf(t, plain)], ['CTA', 'Point down at the caption', cta]]
-      : secs === 60 ? [['HOOK', 'Look at the camera, no intro', hook], ['STORY', 'Tell it like a story', t.story], ['WHY IT HAPPENS', 'Show the number on screen', [t.diagnosis, ex].filter(Boolean).join(' ')], ['THE FIX', 'Lean in', fixOf(t, plain) + ' ' + t.recovery], ['CTA', 'Point down at the caption', cta]]
-      : [['HOOK', 'Look at the camera, no intro', hook], ['STORY', 'Tell it like a story', t.story], ['WHY IT HAPPENS', 'Show the number on screen', [t.diagnosis, ex].filter(Boolean).join(' ')], ['WHAT IT COSTS', 'Slow down', t.save], ['THE FIX', 'Lean in', fixOf(t, plain) + ' ' + t.recovery], ['DO THIS TODAY (free)', 'Hold up a finger, give them something real', t.tip], ['CTA', 'Point down at the caption', cta]];
-    const words = beats.reduce((n, b) => n + b[2].split(/\s+/).length, 0);
-    return { beats, text: beats.map(([n, cue, line]) => '[' + n + '] (' + cue + ')\n' + line).join('\n\n'), plainText: beats.map((b) => b[2]).join('\n\n'), est: Math.round(words / 2.6) };
-  }
-  // Weekly AI news: what happened, what it means, and the backyard contractor angle. Source: one roundup, so check each item at the original before posting.
-  const NEWS = { week: 'Nov 2 to 8, 2026', source: 'hellogrowth.ai roundup of AI news (Nov 5, 2026). It is one roundup, so open the original announcement for any item before you post it.',
-    items: [
-      { date: 'Nov 4', title: 'ChatGPT agents that keep working between conversations', hook: 'AI just learned to keep working after you close the chat.',
-        fact: 'OpenAI made "Dots", personal agents that keep working on a task between conversations, available in ChatGPT Enterprise, Edu and Healthcare.',
-        meaning: 'Software that follows up and finishes tasks without being told twice is becoming normal.',
-        angle: 'A backyard contractor has the same problem: leads and follow-ups that depend on someone remembering. The goal is the same, nothing waits for a person to remember.' },
-      { date: 'Oct 28', title: 'AI plans now come with spending limits and monthly credit', hook: 'AI bills just got a spending cap.',
-        fact: 'Anthropic added shared team budgets with alerts at 50, 75, 95 and 100 percent, and said its Team plan includes up to $500 a month in pooled API credit. OpenAI said ChatGPT Pro and Business plans include monthly API credit.',
-        meaning: 'AI costs are getting predictable, because you can cap what a team spends.',
-        angle: 'For a small business, AI no longer has to mean an open-ended bill. You set the limit before you start.' },
-      { date: 'Nov 4', title: 'ChatGPT images got faster and more consistent', hook: 'You can now make a week of branded posts in one afternoon.',
-        fact: 'OpenAI released Images 2.6: faster generation, more consistent results across edits, and animated GIFs, on all plans.',
-        meaning: 'Making branded visuals no longer needs a designer for every post.',
-        angle: 'A contractor can keep the same look on every post without paying someone each time. Keep real before-and-afters real.' },
-      { date: 'This week', title: 'AI-made content is getting labeled', hook: 'AI-made content is about to get a label. Here is what that means for your business.',
-        fact: 'Anthropic began adding invisible watermarks and C2PA provenance data to Claude output to meet EU AI Act Article 50.',
-        meaning: 'Expect labels on AI-made images and text over time. Honest businesses will be fine.',
-        angle: 'Customers will care more about what is real. Real reviews and real results matter more, not less.' },
-      { date: 'Nov 2', title: 'Microsoft is limiting free Copilot Chat features', hook: 'The free AI inside your software is shrinking.',
-        fact: 'Microsoft started limiting more Copilot Chat features for unlicensed users on Nov 2 for organizations with 2,000 or fewer seats.',
-        meaning: 'Free AI inside tools you already pay for is shrinking, and paid tiers are the push.',
-        angle: 'Before you pay for another AI add-on, check what you already have and what it costs per month.' },
-    ] };
-  const newsPost = (n, plat) => {
-    const body = n.hook + '\n\nWhat happened: ' + n.fact + '\n\nWhat it means: ' + n.meaning + '\n\nFor a backyard contractor: ' + n.angle;
-    if (plat === 'x') { const cta = CTA.x; const s = n.hook + '\n\n' + n.meaning + '\n\n' + n.angle; return (s + '\n\n' + cta).length <= 280 ? s + '\n\n' + cta : n.hook + '\n\n' + n.meaning + '\n\n' + cta; }
-    return body + '\n\n' + CTA[plat] + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : '');
-  };
-  const newsFace = (n) => '[HOOK] (Look at the camera, no intro)\n' + n.hook + '\n\n[WHAT HAPPENED] (Show the headline on screen)\n' + n.fact + '\n\n[WHAT IT MEANS]\n' + n.meaning + '\n\n[FOR A MED SPA] (Lean in)\n' + n.angle + '\n\n[CTA] (Point down at the caption)\nIf you own a backyard contractor and want to know what this means for your office, DM me the word AUDIT.';
-  const WEEK1 = [
-    ['Day 1: Intro', "I'm the Business Surgeon. I find where your business is bleeding money and fix it with AI. Missed calls, slow replies, no reviews. Most owners don't know it's happening. I'll show you how to spot it. 🩺"],
-    ['Day 2: Symptom (missed calls)', "Symptom: your phone rings during a job and nobody picks up. That caller doesn't leave a voicemail. They call the next contractor on Google. An AI receptionist answers in seconds, 24/7, and books them. Do you know how many calls you missed this week?"],
-    ['Day 3: Diagnosis (slow replies)', "Diagnosis: you reply to a new lead 3 hours later. They already booked somewhere else. The first business to answer usually wins. Speed is the cure."],
-    ['Day 4: Reviews', "Two spas, same quality. One has 400 reviews and one has 40. Guess who gets the call. Reviews aren't luck, they're a system. Ask every happy client at the right moment, and make it one tap."],
-    ['Day 5: The surgery', "The surgery: 1) AI answers every call. 2) Every lead gets a text back instantly. 3) Reviews are collected automatically. You keep treating clients, and the system does the rest."],
-    ['Day 6: Engagement', "Business owners: what's the one thing in your business you wish ran without you? Drop it below. I'll tell you if AI can fix it. 👇"],
-    ['Day 7: Call to action', 'Free AI audit. I look at your business and show you exactly where you are losing customers. No pitch, no pressure. DM "AUDIT" and I\'ll send it over.'],
-  ];
-  const copyText = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch { toast('Copy not allowed here. Select the text and copy it.', true); } };
-  function newsSection() {
-    const root = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'AI news: what it means for a business'), h('small', { class: 'dim' }, 'Week of ' + NEWS.week)));
-    root.append(h('p', { class: 'dim small' }, 'Source: ' + NEWS.source));
-    NEWS.items.forEach((n) => {
-      let plat = 'ig';
-      const area = h('textarea', { class: 'ct-text', rows: 9 });
-      const set = () => { area.value = newsPost(n, plat); };
-      const tabs = h('div', { class: 'stagechips' });
-      const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, l]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); set(); } }, l)));
-      drawTabs(); set();
-      root.append(h('div', { class: 'ct-tpl' }, h('b', null, n.date + ': ' + n.title), tabs, area,
-        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Post copied') }, 'Copy post'), h('button', { class: 'btn', onclick: () => copyText(newsFace(n), 'Face script copied') }, 'Copy face script'))));
-    });
-    const tpl = 'Hook: [the news in one line a business owner cares about]\n\nWhat happened: [one sentence, with the date and who announced it]\n\nWhat it means: [plain English, no jargon]\n\nFor a backyard contractor: [what changes for their office, bookings or costs]\n\nWhat to do: [one free action they can take today]';
-    root.append(h('div', { class: 'ct-tpl' }, h('b', null, 'Template for any news item'), h('pre', { class: 'gen-pre' }, tpl), h('button', { class: 'btn', onclick: () => copyText(tpl, 'Template copied') }, 'Copy template')));
-    return root;
-  }
-  function weekOneSection() {
-    return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'Week one posts (ready to go)'), h('small', { class: 'dim' }, 'The first 7 days, one per day')),
-      WEEK1.map(([title, text]) => {
-        let plat = 'ig';
-        const area = h('textarea', { class: 'ct-text', rows: 7 });
-        const set = () => { area.value = text + (title.startsWith('Day 7') ? '' : '\n\n' + CTA[plat]) + (TAGSBY[plat] ? '\n\n' + TAGSBY[plat] : ''); };
-        const tabs = h('div', { class: 'stagechips' });
-        const drawTabs = () => tabs.replaceChildren(...CPLAT.map(([k, l]) => h('button', { class: 'schip' + (plat === k ? ' on' : ''), onclick: () => { plat = k; drawTabs(); set(); } }, l)));
-        drawTabs(); set();
-        return h('div', { class: 'ct-tpl' }, h('b', null, title), tabs, area, h('button', { class: 'btn primary', onclick: () => copyText(area.value, 'Copied') }, 'Copy post'));
-      }));
-  }
-
-  /* ================= content: start posting (guided editor), posted log, library ================= */
-  const PN = Object.fromEntries(CPLAT);
-  const FMT_LABEL = { post: 'Text post', video: 'Voiceover video', face: 'Face video', news: 'AI news post' };
-  const CS_APPS = [
-    ['meta', 'Instagram + Facebook', 'Post on Instagram and cross-post to Facebook', 'users', ['ig', 'fb']],
-    ['tt', 'TikTok', 'Short vertical video', 'spark', ['tt']],
-    ['x', 'X', 'Short text, 280 characters max', 'copy', ['x']],
-  ];
-  const appPlats = (k) => (CS_APPS.find((a) => a[0] === k) || CS_APPS[0])[4];
-  const CS_FMT = [
-    ['video', 'Voiceover video', 'A story video with a voice', 'spark'],
-    ['post', 'Text post', 'A caption for any platform', 'copy'],
-    ['face', 'Film myself', 'A script you say to the camera', 'users'],
-  ];
-  const STAGE_SUB = { symptom: 'Show the problem', diagnosis: 'Why it happens', save: 'What it is costing them', surgery: 'The fix', recovery: 'Before and after', story: 'A short scene', question: 'Ask your audience' };
-  const OFFERS = [['missed', 'AI receptionist'], ['slow', 'Instant replies'], ['quotes', 'Quote follow-ups'], ['quiet', 'Win back customers'], ['reviews', 'Review requests'], ['plates', 'Tap review cards'], ['noshow', 'Reminders'], ['afterhours', 'After-hours booking'], ['website', 'Website'], ['chatbot', 'Website chat'], ['crm', 'Lead tracker'], ['ballpark', 'Instant ballpark'], ['jobdone', 'Job-done automation']];
-  const CS = { business: (function () { try { const v = localStorage.getItem('rs_biz2'); return !v || v === 'backyard contractor' || v === 'med spa' ? 'roofing contractor' : v; } catch { return 'roofing contractor'; } })(), offers: [], cardFmt: null, cardLines: null, app: null, step: 'app', fmt: null, topic: null, stage: null, plain: true, seed: 1, plat: 'ig', secs: 60, news: 0, posted: {}, edits: {}, idea: null, ideaN: 0, chat: [], busy: false };
-  const csReset = () => { try { localStorage.removeItem(CS_KEY); } catch { /* ignore */ } vmClear(true); Object.assign(CS, { step: 'app', app: null, fmt: null, topic: null, stage: null, seed: 1 + Math.floor(Math.random() * 50), news: 0, posted: {}, edits: {}, idea: null, chat: [], busy: false, cardFmt: null, cardLines: null }); };
-  const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  /* ================= Content v3: plan, ideas from calls, text/photo posts, web maps (no voiceovers) ================= */
   const crumbTo = (href, label) => h('a', { class: 'crumb', href }, icon('chev'), label);
+  const C3P = [['ig', 'Instagram'], ['fb', 'Facebook'], ['tt', 'TikTok'], ['x', 'X'], ['li', 'LinkedIn']];
+  const C3PN = Object.fromEntries(C3P);
+  const C3K = { problem: ['#ff7a7a', 'Problem'], cause: ['#f5b84b', 'Why'], cost: ['#ff9f5a', 'Cost'], fix: ['#5b8cff', 'Fix'], result: ['#3ddc97', 'Result'], step: ['#c9cfdc', 'Step'] };
+  const c3Day = (d) => new Date(d + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const c3Save = (blob, name) => { const u = URL.createObjectURL(blob); const a = h('a', { href: u, download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); };
+  const c3Copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { prompt('Copy this', t); } };
+  const C3_DRAFT = 'rs_c3_draft';
 
-  /* ================= video maker: draws the video on a canvas in the browser and records it (no paid tools) ================= */
-  const VFONT = '-apple-system, "SF Pro Display", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
-  // sizes for each place a video or picture is posted. capY/capW keep the captions where the apps do not cover them.
-  const VFMT = {
-    '9x16': { w: 720, h: 1280, label: 'Vertical 9:16', note: 'TikTok, Instagram Reels, YouTube Shorts, Facebook Reels, Stories', capY: 0.68, capW: 540, ph: { cx: 360, y: 270, w: 440, h: 620 }, bub: { x: 56, y: 112, w: 608 }, zones: [[0, 0, 1, 0.11, 'top bar'], [0, 0.78, 1, 0.22, 'name, caption and buttons'], [0.85, 0.42, 0.15, 0.36, 'like and share']] },
-    '4x5': { w: 720, h: 900, label: 'Portrait 4:5', note: 'Instagram and Facebook feed', capY: 0.84, capW: 620, ph: { cx: 360, y: 215, w: 330, h: 540 }, bub: { x: 50, y: 56, w: 620 }, zones: [] },
-    '1x1': { w: 720, h: 720, label: 'Square 1:1', note: 'Facebook, X and LinkedIn feed', capY: 0.85, capW: 620, ph: { cx: 360, y: 170, w: 250, h: 410 }, bub: { x: 50, y: 28, w: 620 }, zones: [] },
-    '16x9': { w: 1280, h: 720, label: 'Wide 16:9', note: 'X, LinkedIn and YouTube', capY: 0.86, capW: 1000, ph: { cx: 950, y: 28, w: 320, h: 566 }, bub: { x: 70, y: 0, w: 620 }, zones: [] },
-  };
-  let VW = 720, VH = 1280, VCAP = VFMT['9x16'];
-  const setFmt = (id) => { VCAP = VFMT[id] || VFMT['9x16']; VW = VCAP.w; VH = VCAP.h; };
-  const VM = { face: null, voice: null, sfx: true, result: null, busy: false, style: 'flow', patch: {}, len: 'full', hd: false, speed: 0.95, sol: null, solFor: null, fmt: '9x16', zones: false };
-  /* ---- keep the work when the app is closed or reloads: small state in localStorage, voice and finished video in IndexedDB ---- */
-  const CS_KEY = 'rs_cs_v1';
-  const idb = (function () {
-    let dbp = null;
-    const open = () => dbp || (dbp = new Promise((res, rej) => { const q = indexedDB.open('rs_content', 1); q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }));
-    const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode), r = fn(t.objectStore('kv')); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
-    return { put: (k, v) => run('readwrite', (st) => st.put(v, k)).catch(() => {}), get: (k) => run('readonly', (st) => st.get(k)).catch(() => null), del: (k) => run('readwrite', (st) => st.delete(k)).catch(() => {}) };
-  })();
-  const csSave = () => {
-    try {
-      if ((CS.step === 'fmt' || CS.step === 'app') && !CS.chat.length && !CS.idea) { localStorage.removeItem(CS_KEY); return; }
-      const idea = CS.idea && !CS.idea.byPlat ? JSON.parse(JSON.stringify(CS.idea)) : null;
-      localStorage.setItem(CS_KEY, JSON.stringify({ t: Date.now(), business: CS.business, offers: CS.offers, cardFmt: CS.cardFmt, cardLines: CS.cardLines, app: CS.app, step: CS.step, fmt: CS.fmt, topic: CS.topic, plat: CS.plat, secs: CS.secs, edits: CS.edits, posted: CS.posted, ideaN: CS.ideaN, chat: CS.chat.slice(-24), idea, vm: { style: VM.style, fmt: VM.fmt } }));
-    } catch { /* storage can be blocked */ }
-  };
-  (function csLoad() {
-    try {
-      const d = JSON.parse(localStorage.getItem(CS_KEY) || 'null'); if (!d || Date.now() - d.t > 3 * 864e5) return;
-      ['business', 'offers', 'cardFmt', 'cardLines', 'app', 'step', 'fmt', 'topic', 'plat', 'secs', 'edits', 'posted', 'ideaN'].forEach((k) => { if (d[k] !== undefined && d[k] !== null) CS[k] = d[k]; });
-      if (!CS.app && CS.step !== 'app') CS.app = CS.plat === 'tt' ? 'tt' : CS.plat === 'x' ? 'x' : 'meta';
-      CS.chat = Array.isArray(d.chat) ? d.chat : []; CS.idea = d.idea || null; if (!CS.idea && CS.step === 'edit') CS.step = 'idea';
-      if (d.vm) { VM.style = d.vm.style === 'site' ? 'site' : 'flow'; VM.fmt = VFMT[d.vm.fmt] ? d.vm.fmt : '9x16'; }
-    } catch { /* start fresh */ }
-  })();
-  VM.restore = (async () => {
-    try {
-      if (!CS.idea) return;
-      const v = await idb.get('voice');
-      if (v && v.ab) { const blob = new Blob([v.ab], { type: v.type || 'audio/mpeg' }), buf = await decodeVoice(blob); VM.voice = { blob, buf, dur: buf.duration, parts: v.parts, words: v.words, sig: v.sig, name: v.name, url: URL.createObjectURL(blob) }; }
-      const r = await idb.get('result');
-      if (r && r.ab && VM.voice && VM.voice.sig === r.sig) { const blob = new Blob([r.ab], { type: r.type }); VM.result = { blob, url: URL.createObjectURL(blob), ext: r.ext, type: r.type, secs: r.secs, w: r.w, h: r.h }; }
-    } catch { /* nothing to restore */ }
-  })();
-  const patchKey = (tid, seed) => tid + ':' + seed;
-  const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
-  const vmClear = (voiceToo) => { if (VM.result) { try { URL.revokeObjectURL(VM.result.url); } catch { /* ignore */ } VM.result = null; idb.del('result'); } if (voiceToo) { VM.voice = null; idb.del('voice'); } };
-  const wordCount = (s) => spoken(s).split(/\s+/).filter(Boolean).length;
-  const lc = (x) => (x ? x.charAt(0).toLowerCase() + x.slice(1) : x);
-  const dot = (x) => String(x || '').replace(/[.\s]+$/, '');
-  const BEAT_STYLE = { setup: 'warn', pain: 'bad', why: 'plain', cost: 'bad', fix: 'ai', step: 'plain', proof: 'ok', result: 'warn', cta: 'cta' };
-  const BEAT_LINK = { setup: '', pain: 'so', why: 'because', cost: 'adds up to', fix: 'the fix', step: '', proof: 'so', result: 'which means', cta: 'next' };
-  function beatsFromTopic(tid, seed, plain, secs) {
-    const t = GEN_TOPICS[tid], F = FLOW[tid], hook = t.hooks[seed % t.hooks.length], fix = fixOf(t, plain), fx = plain ? F.fix : F.fixAI;
-    const m = t.math && t.math.match(/\$([\d,]+) a week/), week = m ? +m[1].replace(/,/g, '') : 0;
-    const cost = week ? { kind: 'cost', say: 'Say that adds up: ' + t.math + '.', text: '$' + week.toLocaleString('en-US') + ' a week' } : { kind: 'cost', say: t.save, text: F.lost };
-    const cta = { kind: 'cta', say: plain ? plainCta(VO_CTA) : VO_CTA, text: 'DM me AUDIT' };
-    if (secs < 60) return [{ kind: 'hook', say: hook, text: F.title }, { kind: 'pain', say: t.symptom, text: F.pain[1] }, { kind: 'why', say: t.diagnosis, text: F.why }, cost, { kind: 'fix', say: fix + ' ' + t.recovery, text: fx }, cta];
-    return [{ kind: 'hook', say: hook, text: F.title }, { kind: 'setup', say: 'Picture this. ' + dot(F.trigger) + '.', text: F.trigger },
-      { kind: 'pain', say: dot(F.pain[0]) + '.', text: F.pain[0] }, { kind: 'pain', say: dot(F.pain[1]) + '.', text: F.pain[1] }, { kind: 'pain', say: t.symptom, text: F.pain[2] },
-      { kind: 'why', say: t.diagnosis, text: F.why }, cost, { kind: 'fix', say: fix, text: fx },
-      { kind: 'step', say: 'First, ' + lc(dot(F.steps[0])) + '.', text: F.steps[0] }, { kind: 'step', say: 'Then, ' + lc(dot(F.steps[1])) + '.', text: F.steps[1] }, { kind: 'step', say: 'And ' + lc(dot(F.steps[2])) + '.', text: F.steps[2] },
-      { kind: 'proof', say: dot(F.check) + '.', text: 'Checkpoint: ' + F.check }, { kind: 'result', say: 'Before, ' + lc(dot(F.before)) + '. After, ' + lc(dot(F.after)) + '. ' + t.recovery, text: 'Before: ' + F.before + '\nAfter: ' + F.after }, cta];
+  function c3Wrap(ctx, text, maxW) {
+    const words = String(text || '').split(/\s+/).filter(Boolean), lines = []; let line = '';
+    words.forEach((w) => { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; });
+    if (line) lines.push(line); return lines;
   }
-  function vidPlan(beats, title, voiceDur) {
-    const scenes = beats.map((b, i) => ({ key: 'b' + i, kind: b.kind, label: String(b.kind).toUpperCase(), text: b.text || b.say, link: b.link != null ? b.link : BEAT_LINK[b.kind], vo: b.say, focus: i === 0 ? ['_overview'] : ['n' + i] }));
-    const sig = scenes.map((x) => x.vo).join('|'), useV = !!(VM.voice && VM.voice.sig === sig && VM.voice.parts && VM.voice.parts.length === scenes.length), parts = useV ? VM.voice.parts : null;
-    const words = scenes.map((s) => Math.max(3, wordCount(s.vo)));
-    let durs;
-    if (voiceDur && parts) { durs = parts.slice(); durs[0] += 0.4; durs[durs.length - 1] += 0.9; }
-    else if (voiceDur) {
-      const tot = words.reduce((a, b) => a + b, 0), body = Math.max(8, voiceDur);
-      durs = words.map((w) => Math.max(2.2, (w / tot) * body));
-      const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => (d * (body / sum)));
-      durs[0] += 0.4; durs[durs.length - 1] += 0.9;
-    } else durs = words.map((w) => Math.min(12, Math.max(2.8, 1.0 + w * 0.42)));
-    let at = 0; scenes.forEach((s, i) => { s.start = at; s.dur = durs[i]; at += durs[i]; s.end = at; if (useV && VM.voice.words) s.words = VM.voice.words[i].map((x) => ({ w: x.w, t: x.t + 0.4 })); });
-    return { scenes, beats, title, sig, total: at, lead: voiceDur ? 0.4 : 0, graph: flowGraph(beats, title) };
+  function c3Round(ctx, x, y, w, hh, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + hh, r); ctx.arcTo(x + w, y + hh, x, y + hh, r); ctx.arcTo(x, y + hh, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  const C3F = '"Inter Tight", Inter, -apple-system, "Segoe UI", Roboto, sans-serif';
+  function c3Bg(ctx, W, H) {
+    ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, W, H);
+    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, W * 1.1); g.addColorStop(0, 'rgba(91,140,255,.28)'); g.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    g = ctx.createRadialGradient(W, H, 0, W, H, W * 0.9); g.addColorStop(0, 'rgba(215,255,63,.12)'); g.addColorStop(1, 'rgba(215,255,63,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  const mixC = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
-  const clamp01 = (x) => Math.max(0, Math.min(1, x));
-  const easeOut = (x) => 1 - Math.pow(1 - clamp01(x), 3);
-  const easeBack = (x) => { const c = 1.7, k = clamp01(x) - 1; return 1 + (c + 1) * k * k * k + c * k * k; };
-  function layoutText(ctx, text, maxW, fs) {
-    ctx.font = '800 ' + fs + 'px ' + VFONT;
-    const sp = ctx.measureText(' ').width, words = text.split(/\s+/), lines = []; let cur = [], w = 0;
-    words.forEach((word) => { const ww = ctx.measureText(word).width; if (cur.length && w + sp + ww > maxW) { lines.push({ items: cur, w }); cur = []; w = 0; } w += (cur.length ? sp : 0) + ww; cur.push({ word, ww }); });
-    if (cur.length) lines.push({ items: cur, w });
-    return { lines, sp, fs, lh: Math.round(fs * 1.18) };
+  const c3Mix = (ctx, x0, x1) => { const g = ctx.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, '#5b8cff'); g.addColorStop(0.52, '#46c8d8'); g.addColorStop(1, '#d7ff3f'); return g; };
+
+  /* ---- photo post slides (1080x1350) ---- */
+  function c3Slide(text, i, n, handle) {
+    const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+    c3Bg(ctx, W, H);
+    ctx.fillStyle = c3Mix(ctx, 90, 990); ctx.fillRect(90, 110, 140, 10);
+    ctx.font = '600 30px ' + C3F; ctx.fillStyle = '#a2a8b8'; ctx.fillText(String(i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0'), 90, 180);
+    const fs = i === 0 ? 92 : 74; ctx.font = '800 ' + fs + 'px ' + C3F;
+    const lines = c3Wrap(ctx, text, W - 180), lh = fs * 1.12, top = H / 2 - (lines.length * lh) / 2 + fs * 0.4;
+    lines.forEach((l, k) => { ctx.fillStyle = i === 0 ? c3Mix(ctx, 90, 990) : '#f4f6fb'; ctx.fillText(l, 90, top + k * lh); });
+    ctx.font = '600 30px ' + C3F; ctx.fillStyle = '#a2a8b8'; ctx.fillText(handle || '@reekonsystems', 90, H - 110);
+    if (i < n - 1) { ctx.fillStyle = '#d7ff3f'; ctx.textAlign = 'right'; ctx.fillText('swipe →', W - 90, H - 110); ctx.textAlign = 'left'; }
+    return c;
   }
-  function ekgY(p, healthy) {
-    if (!healthy) return 0.06 * Math.sin(p * 1.7) + 0.03 * Math.sin(p * 4.1);
-    const q = ((p % 6.283) + 6.283) % 6.283;
-    if (q > 1.0 && q < 1.35) return 0.25 * Math.sin((q - 1.0) / 0.35 * Math.PI);
-    if (q > 2.35 && q < 2.55) return -0.35 * ((q - 2.35) / 0.2);
-    if (q >= 2.55 && q < 2.8) return -0.35 + 2.35 * ((q - 2.55) / 0.25);
-    if (q >= 2.8 && q < 3.05) return 2.0 - 2.8 * ((q - 2.8) / 0.25);
-    if (q >= 3.05 && q < 3.2) return -0.8 + 0.8 * ((q - 3.05) / 0.15);
-    if (q > 3.9 && q < 4.6) return 0.4 * Math.sin((q - 3.9) / 0.7 * Math.PI);
-    return 0;
-  }
-  const RED = [255, 90, 106], BLUE = [91, 140, 255], GREEN = [61, 220, 151];
-  function drawFrame(ctx, plan, t, cache) {
-    const W = VW, H = VH, tt = Math.min(t, plan.total - 0.001);
-    let i = plan.scenes.findIndex((s) => tt < s.end); if (i < 0) i = plan.scenes.length - 1;
-    const sc = plan.scenes[i], lt = tt - sc.start;
-    const fixIdx = plan.scenes.findIndex((s) => s.label === 'THE FIX');
-    const sick = i < fixIdx ? 1 : i === fixIdx ? clamp01(1 - lt / 0.7) : 0;
-    const accent = mixC(RED, i >= fixIdx ? GREEN : BLUE, 1 - sick);
-    const accentRaw = i < fixIdx ? RED : (i === fixIdx ? [0, 0, 0].map((_, k) => Math.round(RED[k] + (GREEN[k] - RED[k]) * (1 - sick))) : GREEN);
-    const rgba = (a) => 'rgba(' + accentRaw.join(',') + ',' + a + ')';
-    // background
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#04060c'); g.addColorStop(1, '#0a1022'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const gx = W * (0.5 + 0.25 * Math.sin(tt * 0.5)), gy = H * (0.38 + 0.08 * Math.cos(tt * 0.4));
-    const rg = ctx.createRadialGradient(gx, gy, 20, gx, gy, 620); rg.addColorStop(0, rgba(0.28)); rg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 1; const off = (tt * 14) % 60;
-    for (let x = 0; x <= W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = -60 + off; y <= H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-    // ripples
-    for (let k = 0; k < 3; k++) { const pr = ((tt * 0.3 + k / 3) % 1); ctx.strokeStyle = rgba((1 - pr) * 0.28); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2, H * 0.42, 60 + pr * 520, 0, 6.283); ctx.stroke(); }
-    // top bar
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, W, 6); ctx.fillStyle = accent; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 6);
-    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.font = '700 24px ' + VFONT; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText('REEKON SYSTEMS', 40, 72);
-    const lab = sc.label, lw = (ctx.measureText(lab).width || 200) + 36;
-    ctx.textAlign = 'right'; ctx.font = '800 22px ' + VFONT; const lw2 = ctx.measureText(lab).width + 34;
-    ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W - 40 - lw2, 44, lw2, 38, 19) : ctx.rect(W - 40 - lw2, 44, lw2, 38); ctx.stroke();
-    ctx.fillStyle = accent; ctx.fillText(lab, W - 40 - 17, 71);
-    // EKG
-    const by = H * 0.91, amp = 58; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = accent; ctx.shadowColor = accent; ctx.shadowBlur = 14; ctx.beginPath();
-    for (let x = 0; x <= W; x += 4) { const p = x * 0.016 - tt * 5.2; const y = by - amp * ((1 - sick) * ekgY(p, true) + sick * ekgY(p, false)); x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
-    ctx.stroke(); ctx.shadowBlur = 0;
-    // scene content
-    ctx.textAlign = 'center';
-    const aIn = easeOut(lt / 0.35);
-    if (sc.kind === 'cost') {
-      const val = Math.round(sc.week * easeOut(lt / 2.2));
-      ctx.globalAlpha = aIn; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '700 40px ' + VFONT; ctx.fillText('Walking out the door', W / 2, H * 0.30);
-      ctx.fillStyle = mixC(RED, RED, 0); ctx.font = '900 150px ' + VFONT; ctx.shadowColor = 'rgba(255,90,106,.6)'; ctx.shadowBlur = 30; ctx.fillText('$' + val.toLocaleString('en-US'), W / 2, H * 0.46); ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fff'; ctx.font = '700 46px ' + VFONT; ctx.fillText('every week', W / 2, H * 0.52);
-      if (lt > 2.5) { ctx.globalAlpha = easeOut((lt - 2.5) / 0.4); ctx.fillStyle = 'rgb(255,150,160)'; ctx.font = '800 54px ' + VFONT; ctx.fillText('about $' + (sc.week * 52).toLocaleString('en-US') + ' a year', W / 2, H * 0.62); }
-      ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '600 28px ' + VFONT; if (lt > 1) ctx.fillText(sc.sub, W / 2, H * 0.70);
-    } else if (sc.kind === 'cta') {
-      ctx.globalAlpha = aIn; ctx.fillStyle = '#fff'; ctx.font = '800 80px ' + VFONT; ctx.fillText('DM me', W / 2, H * 0.34);
-      const pulse = 1 + 0.035 * Math.sin(lt * 5);
-      ctx.save(); ctx.translate(W / 2, H * 0.49); ctx.scale(pulse, pulse);
-      ctx.shadowColor = rgba(0.8); ctx.shadowBlur = 50; ctx.fillStyle = accent; const pw = 520, ph = 190; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 44) : ctx.rect(-pw / 2, -ph / 2, pw, ph); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.fillStyle = '#04120a'; ctx.font = '900 130px ' + VFONT; ctx.textBaseline = 'middle'; ctx.fillText('AUDIT', 0, 6); ctx.restore(); ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '700 46px ' + VFONT; ctx.fillText(sc.text, W / 2, H * 0.64);
-      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '600 30px ' + VFONT; ctx.fillText('Reekon Systems · Los Angeles', W / 2, H * 0.70); ctx.globalAlpha = 1;
-    } else {
-      const key = sc.label + sc.text, fs0 = sc.big ? 92 : 62;
-      let L = cache[key]; if (!L) { for (const k of [1, 0.88, 0.78, 0.7]) { L = layoutText(ctx, sc.text, W - 110, Math.round(fs0 * k)); if (L.lines.length <= (sc.sub ? 5 : 6)) break; } cache[key] = L; }
-      const total = L.lines.reduce((n, l) => n + l.items.length, 0), step = Math.min(0.3, (sc.dur * 0.55) / Math.max(1, total));
-      const block = L.lines.length * L.lh, y0 = H * (sc.sub ? 0.40 : 0.44) - block / 2 + L.lh * 0.8;
-      ctx.font = '800 ' + L.fs + 'px ' + VFONT; ctx.textAlign = 'left'; let wi = 0;
-      L.lines.forEach((ln, li) => {
-        let x = (W - ln.w) / 2;
-        ln.items.forEach((it) => {
-          const p = clamp01((lt - 0.2 - wi * step) / 0.24); wi++;
-          if (p > 0) { const hi = /^[$\d]|^AUDIT|%/.test(it.word); ctx.globalAlpha = p; ctx.fillStyle = hi ? 'rgb(169,194,255)' : '#fff'; if (hi && accentRaw === RED) ctx.fillStyle = 'rgb(255,150,160)'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 12; ctx.fillText(it.word, x, y0 + li * L.lh + (1 - easeBack(p)) * 26); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
-          x += it.ww + L.sp;
-        });
-      });
-      if (sc.sub) { const a = easeOut((lt - 0.2 - total * step - 0.2) / 0.5); if (a > 0) { ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.font = '600 38px ' + VFONT; const sl = layoutText(ctx, sc.sub, W - 140, 38); ctx.font = '600 38px ' + VFONT; sl.lines.forEach((ln, k) => ctx.fillText(ln.items.map((x) => x.word).join(' '), W / 2, y0 + block + 24 + k * 48)); ctx.globalAlpha = 1; } }
-    }
-    ctx.textAlign = 'center';
-    if (lt < 0.25) { ctx.fillStyle = 'rgba(255,255,255,' + ((1 - lt / 0.25) * 0.14) + ')'; ctx.fillRect(0, 0, W, H); }
-  }
-  // sound effects made in the browser: whoosh between scenes, a hit on the hook, ticks on the counter, a chime on the fix
-  function sfxSchedule(ac, out, plan, t0) {
-    const noise = (when, dur, f0, f1, vol) => { const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0); for (let n = 0; n < len; n++) d[n] = Math.random() * 2 - 1;
-      const src = ac.createBufferSource(); src.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.9; f.frequency.setValueAtTime(f0, when); f.frequency.exponentialRampToValueAtTime(f1, when + dur);
-      const gn = ac.createGain(); gn.gain.setValueAtTime(0.0001, when); gn.gain.exponentialRampToValueAtTime(vol, when + dur * 0.4); gn.gain.exponentialRampToValueAtTime(0.0001, when + dur); src.connect(f); f.connect(gn); gn.connect(out); src.start(when); };
-    const tone = (when, freq, dur, vol, type, endFreq) => { const o = ac.createOscillator(); o.type = type || 'sine'; o.frequency.setValueAtTime(freq, when); if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, when + dur); const gn = ac.createGain(); gn.gain.setValueAtTime(vol, when); gn.gain.exponentialRampToValueAtTime(0.0001, when + dur); o.connect(gn); gn.connect(out); o.start(when); o.stop(when + dur + 0.05); };
-    plan.scenes.forEach((s, i) => {
-      const w = t0 + s.start;
-      if (i === 0) tone(w + 0.05, 80, 0.5, 0.9, 'sine', 32); else noise(w - 0.05, 0.45, 400, 3200, 0.5);
-      if (s.kind === 'cost') for (let k = 0; k < 24; k++) tone(w + 0.1 + k * 0.085, 520 + k * 28, 0.05, 0.12, 'triangle');
-      if (s.kind === 'fix') { [660, 990, 1320].forEach((f, k) => tone(w + 0.1 + k * 0.09, f, 0.9, 0.16, 'sine')); }
-      if (s.kind === 'cta') tone(w + 0.05, 220, 0.35, 0.5, 'sine', 110);
+
+  /* ---- web map: layout, draw, animate ---- */
+  function c3Layout(map) {
+    const W = 1080, nodes = map.nodes.map((n) => ({ ...n })), byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const root = nodes.find((n) => n.parent == null) || nodes[0];
+    const levels = []; let cur = [root]; const seen = new Set([root.id]);
+    while (cur.length) { levels.push(cur); const nxt = []; cur.forEach((p) => nodes.forEach((n) => { if (n.parent === p.id && !seen.has(n.id)) { seen.add(n.id); nxt.push(n); } })); cur = nxt; }
+    nodes.filter((n) => !seen.has(n.id)).forEach((n) => { n.parent = root.id; (levels[1] = levels[1] || []).push(n); });
+    const c = document.createElement('canvas').getContext('2d');
+    const rows = []; levels.forEach((lv, li) => { for (let i = 0; i < lv.length; i += 3) rows.push({ li, items: lv.slice(i, i + 3) }); });
+    let y = 330; const gap = 34, padX = 60;
+    rows.forEach((row) => {
+      const k = row.items.length, w = row.li === 0 ? 760 : Math.min(620, (W - padX * 2 - gap * (k - 1)) / k), fs = row.li === 0 ? 46 : k === 1 ? 38 : k === 2 ? 34 : 29;
+      let rowH = 0;
+      row.items.forEach((n) => { c.font = '800 ' + fs + 'px ' + C3F; n.lines = c3Wrap(c, n.label, w - 52).slice(0, 4); c.font = '500 ' + Math.round(fs * 0.62) + 'px ' + C3F; n.noteLines = n.note ? c3Wrap(c, n.note, w - 52).slice(0, 3) : []; n.fs = fs; n.w = w; n.h = 44 + n.lines.length * fs * 1.12 + (n.noteLines.length ? 14 + n.noteLines.length * fs * 0.62 * 1.3 : 0) + 34; rowH = Math.max(rowH, n.h); });
+      const total = k * w + (k - 1) * gap; let x = (W - total) / 2;
+      row.items.forEach((n) => { n.x = x; n.y = y + (rowH - n.h) / 2; x += w + gap; });
+      y += rowH + 110;
     });
-    // quiet low pad under everything
-    [110, 164.81, 220].forEach((f) => { const o = ac.createOscillator(), lp = ac.createBiquadFilter(), gn = ac.createGain(); o.type = 'sine'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 500;
-      gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(0.045, t0 + 1.5); gn.gain.setValueAtTime(0.045, t0 + plan.total - 1.5); gn.gain.linearRampToValueAtTime(0.0001, t0 + plan.total); o.connect(lp); lp.connect(gn); gn.connect(out); o.start(t0); o.stop(t0 + plan.total + 0.1); });
+    const order = []; levels.forEach((lv) => lv.forEach((n) => order.push(n)));
+    return { W, H: Math.max(1920, y + 120), nodes: order, byId, title: map.title || root.label };
   }
-  function joinVoice(bufs, gap) {
-    const sr = bufs[0].sampleRate, g = Math.round(gap * sr), lens = bufs.map((x) => x.length + g), total = lens.reduce((a, b) => a + b, 0);
-    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), out = ac.createBuffer(1, total, sr); try { ac.close(); } catch { /* ignore */ }
-    const d = out.getChannelData(0); let at = 0;
-    bufs.forEach((x, i) => { const c0 = x.getChannelData(0), c1 = x.numberOfChannels > 1 ? x.getChannelData(1) : null; for (let k = 0; k < x.length; k++) d[at + k] = c1 ? (c0[k] + c1[k]) / 2 : c0[k]; at += lens[i]; });
-    return { buf: out, parts: lens.map((l) => l / sr) };
+  function c3DrawMap(ctx, L, t, opts) {
+    // t: seconds into the reveal; opts.still draws everything
+    const per = 1.25, start = 1.1, W = L.W, H = 1920;
+    const shown = (i) => (opts.still ? 1 : Math.max(0, Math.min(1, (t - start - i * per) / 0.55)));
+    // camera follows the newest node, then pulls back at the end
+    const idx = Math.min(L.nodes.length - 1, Math.max(0, Math.floor((t - start) / per)));
+    const endT = start + L.nodes.length * per;
+    let zoom = 1, cx = W / 2, cy = Math.min(L.H, 1920) / 2;
+    if (!opts.still) {
+      const n = L.nodes[idx], tgtX = n.x + n.w / 2, tgtY = n.y + n.h / 2;
+      const pull = Math.max(0, Math.min(1, (t - endT) / 1.2)), ease = (x) => x * x * (3 - 2 * x);
+      const fit = Math.min(1, 1920 / L.H);
+      zoom = 1.25 + (fit - 1.25) * ease(pull); cx = tgtX + (W / 2 - tgtX) * ease(pull); cy = tgtY + (L.H / 2 - tgtY) * ease(pull);
+      if (t < start) { zoom = 1.25; cx = W / 2; cy = 260; }
+    } else if (L.H > 1920) { zoom = 1920 / L.H; cy = L.H / 2; }
+    c3Bg(ctx, W, H);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy);
+    // grid dots
+    ctx.fillStyle = 'rgba(255,255,255,.05)'; for (let gx = 0; gx < W; gx += 54) for (let gy = 0; gy < L.H; gy += 54) ctx.fillRect(gx, gy, 3, 3);
+    // title
+    const ta = opts.still ? 1 : Math.min(1, t / 0.6);
+    ctx.globalAlpha = ta; ctx.font = '800 64px ' + C3F; const tl = c3Wrap(ctx, L.title, W - 140).slice(0, 2);
+    tl.forEach((l, k) => { ctx.fillStyle = c3Mix(ctx, 70, W - 70); ctx.fillText(l, 70, 140 + k * 72); });
+    ctx.globalAlpha = 1;
+    // connectors
+    L.nodes.forEach((n, i) => {
+      const p = n.parent != null ? L.byId[n.parent] && L.nodes.find((x) => x.id === n.parent) : null; if (!p) return;
+      const a = shown(i); if (!a) return;
+      const x1 = p.x + p.w / 2, y1 = p.y + p.h, x2 = n.x + n.w / 2, y2 = n.y, my = (y1 + y2) / 2;
+      ctx.save(); ctx.strokeStyle = C3K[n.kind] ? C3K[n.kind][0] : '#c9cfdc'; ctx.globalAlpha = 0.85; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.setLineDash([1400]); ctx.lineDashOffset = 1400 * (1 - Math.min(1, a * 1.6));
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.bezierCurveTo(x1, my, x2, my, x2, y2); ctx.stroke(); ctx.restore();
+    });
+    // nodes
+    L.nodes.forEach((n, i) => {
+      const a = shown(i); if (!a) return;
+      const col = (C3K[n.kind] || C3K.step)[0], s = 0.9 + 0.1 * a;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(n.x + n.w / 2, n.y + n.h / 2); ctx.scale(s, s); ctx.translate(-(n.x + n.w / 2), -(n.y + n.h / 2));
+      ctx.shadowColor = col; ctx.shadowBlur = i === idx && !opts.still ? 36 : 14;
+      c3Round(ctx, n.x, n.y, n.w, n.h, 28); ctx.fillStyle = '#10141e'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+      ctx.font = '700 22px ' + C3F; ctx.fillStyle = col; ctx.fillText((C3K[n.kind] || C3K.step)[1].toUpperCase(), n.x + 26, n.y + 40);
+      ctx.font = '800 ' + n.fs + 'px ' + C3F; ctx.fillStyle = '#f4f6fb';
+      n.lines.forEach((l, k) => ctx.fillText(l, n.x + 26, n.y + 44 + n.fs + k * n.fs * 1.12));
+      if (n.noteLines.length) { const nf = Math.round(n.fs * 0.62); ctx.font = '500 ' + nf + 'px ' + C3F; ctx.fillStyle = '#a2a8b8'; const ny = n.y + 44 + n.lines.length * n.fs * 1.12 + 14; n.noteLines.forEach((l, k) => ctx.fillText(l, n.x + 26, ny + nf + k * nf * 1.3)); }
+      ctx.restore();
+    });
+    ctx.restore();
+    if (opts.handle) { ctx.font = '600 30px ' + C3F; ctx.fillStyle = 'rgba(244,246,251,.7)'; ctx.fillText(opts.handle, 70, H - 70); }
   }
-  function wavBlob(buf) {
-    const d = buf.getChannelData(0), n = d.length, sr = buf.sampleRate, ab = new ArrayBuffer(44 + n * 2), v = new DataView(ab), w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
-    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
-    for (let i = 0; i < n; i++) { const x = Math.max(-1, Math.min(1, d[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
-    return new Blob([ab], { type: 'audio/wav' });
-  }
-  async function decodeVoice(blob) {
-    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
-    try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf; } finally { try { ac.close(); } catch { /* ignore */ } }
-  }
-  const pickMime = () => ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
-  /* ---- auto-edit for your own recording: cut dead air, word-for-word captions from what you said, post caption ---- */
-  // finds the stretches where you are talking. Pauses longer than 0.7s are cut down to about a quarter second.
-  function speechSegments(buf) {
-    const d = buf.getChannelData(0), sr = buf.sampleRate, hop = Math.round(sr * 0.02), n = Math.floor(d.length / hop), rms = new Float32Array(n);
-    for (let i = 0; i < n; i++) { let a = 0; for (let j = i * hop; j < (i + 1) * hop; j++) a += d[j] * d[j]; rms[i] = Math.sqrt(a / hop); }
-    const sorted = Array.from(rms).sort((a, b) => a - b), floor = sorted[Math.floor(n * 0.1)] || 0.002, thr = Math.max(0.01, floor * 3.5);
-    const voiced = Array.from(rms, (x) => x > thr), runs = []; let st = -1;
-    for (let i = 0; i <= n; i++) { if (i < n && voiced[i]) { if (st < 0) st = i; } else if (st >= 0) { if (i - st >= 3) runs.push([st, i]); st = -1; } }
-    if (!runs.length) return [{ a: 0, b: buf.duration }];
-    const gap = 0.7 / 0.02, pad = 0.13, merged = [runs[0].slice()];
-    for (let i = 1; i < runs.length; i++) { const m = merged[merged.length - 1]; if (runs[i][0] - m[1] <= gap) m[1] = runs[i][1]; else merged.push(runs[i].slice()); }
-    return merged.map(([a, b]) => ({ a: Math.max(0, a * 0.02 - pad), b: Math.min(buf.duration, b * 0.02 + pad) }));
-  }
-  function stitchAudio(buf, segs) {
-    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), sr = buf.sampleRate;
-    const len = segs.reduce((n, x) => n + Math.round((x.b - x.a) * sr), 0), out = ac.createBuffer(buf.numberOfChannels, Math.max(1, len), sr);
-    for (let c = 0; c < buf.numberOfChannels; c++) {
-      const src = buf.getChannelData(c), dst = out.getChannelData(c); let o = 0;
-      for (const x of segs) { const a = Math.round(x.a * sr), b = Math.round(x.b * sr), f = Math.round(sr * 0.008); for (let i = a; i < b && o < dst.length; i++, o++) { let g = 1; if (i - a < f) g = (i - a) / f; else if (b - i < f) g = (b - i) / f; dst[o] = src[i] * g; } }
-    }
-    try { ac.close(); } catch { /* ignore */ } return out;
-  }
-  function wav16b64(buf) {
-    const d = buf.getChannelData(0), ratio = buf.sampleRate / 16000, n = Math.floor(d.length / ratio), ab = new ArrayBuffer(44 + n * 2), dv = new DataView(ab), w = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
-    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
-    for (let i = 0; i < n; i++) { const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)); let sum = 0; for (let j = a; j < b; j++) sum += d[j]; const v = Math.max(-1, Math.min(1, sum / (b - a))); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
-    const u = new Uint8Array(ab); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin);
-  }
-  // output time -> where to read in your original recording
-  const srcTime = (segs, t) => { let acc = 0; for (let i = 0; i < segs.length; i++) { const len = segs[i].b - segs[i].a; if (t < acc + len || i === segs.length - 1) return { i, t: segs[i].a + Math.min(len, Math.max(0, t - acc)) }; acc += len; } return { i: 0, t: 0 }; };
-  async function autoEdit(buf, onStep) {
-    onStep('Cutting the dead air…');
-    const segs = speechSegments(buf), edited = stitchAudio(buf, segs), cut = Math.max(0, buf.duration - edited.duration);
-    const edit = { segs, dur: edited.duration, cut, words: null, text: '', copy: null };
-    try {
-      onStep('Listening to what you said…');
-      const r = await api('POST', '/video/transcribe', { audio: wav16b64(edited) });
-      if (r.words && r.words.length) { edit.words = r.words.map((x) => ({ w: x.w, t: x.s })); edit.text = r.text || r.words.map((x) => x.w).join(' '); }
-    } catch (e) { edit.err = e.message || 'Could not transcribe'; }
-    if (edit.text) {
-      try { onStep('Writing your caption…'); edit.copy = await api('POST', '/video/postcopy', { transcript: edit.text, business: CS.business }); } catch { /* optional */ }
-    }
-    return { edit, edited };
-  }
-  // word captions that follow your real words (chunks of up to 4, break on sentence ends and long pauses)
-  function voiceCaps(edit, lead) {
-    if (edit.capsCache && edit.capsLead === lead) return edit.capsCache;
-    const chunks = []; let cur = [];
-    edit.words.forEach((w, i) => { const x = { w: w.w, t: w.t + lead }; cur.push(x); const nx = edit.words[i + 1]; if (cur.length >= 4 || /[.!?]$/.test(w.w) || (nx && nx.t - w.t > 0.9)) { chunks.push({ t0: cur[0].t, words: cur }); cur = []; } });
-    if (cur.length) chunks.push({ t0: cur[0].t, words: cur });
-    edit.capsCache = { chunks }; edit.capsLead = lead; return edit.capsCache;
-  }
-  // your camera video: full screen for the hook, then it shrinks into a circle in a corner while the board plays
-  function drawFaceLayer(c, fv, face, tv) {
-    if (tv < -0.05 || !fv.videoWidth) return;
-    const W = VW, H = VH, intro = Math.min(4, Math.max(2, face.dur * 0.18)), tr = 0.7;
-    let k = tv <= intro ? 0 : tv >= intro + tr ? 1 : (tv - intro) / tr; k = k * k * (3 - 2 * k);
-    const D = Math.round(W * 0.3), m = Math.round(W * 0.05), tx = face.pos === 'bl' ? m : W - m - D, ty = Math.round(H * (face.pos === 'bl' ? 0.56 : 0.14));
-    const lerp = (a, b) => a + (b - a) * k, x = lerp(0, tx), y = lerp(0, ty), w = lerp(W, D), h = lerp(H, D), r = lerp(0, D / 2);
-    c.save();
-    if (k > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 24 * k; }
-    c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
-    c.fillStyle = '#000'; c.fill(); c.shadowBlur = 0; c.clip();
-    const sw = fv.videoWidth, sh = fv.videoHeight, sc = Math.max(w / sw, h / sh), dw = sw * sc, dh = sh * sc;
-    c.drawImage(fv, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
-    c.restore();
-    if (k > 0.02) { c.save(); c.globalAlpha = k; c.lineWidth = 5; c.strokeStyle = '#fff'; c.beginPath(); c.arc(tx + D / 2, ty + D / 2, D / 2, 0, Math.PI * 2); c.stroke(); c.restore(); }
-  }
-  async function recordVideo(plan, voiceBuf, sfxOn, onProgress, hd) {
-    try { await Promise.race([Promise.all([document.fonts.load('700 40px Kalam'), document.fonts.load('800 50px "Inter Tight"')]), new Promise((r) => setTimeout(r, 2500))]); } catch { /* fall back to system fonts */ }
-    setFmt(VM.fmt); const SC = hd ? 1.5 : 1, canvas = document.createElement('canvas'); canvas.width = Math.round(VW * SC); canvas.height = Math.round(VH * SC); const ctx = canvas.getContext('2d');
-    if (!canvas.captureStream || !window.MediaRecorder) throw new Error('This browser cannot record video. Try Safari or Chrome up to date.');
-    const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(); await ac.resume();
-    const dest = ac.createMediaStreamDestination(), out = ac.createGain(); out.gain.value = 1; out.connect(dest);
-    if (plan.beats) plan.graph = flowGraph(plan.beats, plan.title);
-    let wl = null; try { if (navigator.wakeLock) wl = await navigator.wakeLock.request('screen'); } catch { /* optional */ }
-    const t0 = ac.currentTime + 0.25;
-    if (voiceBuf) { const src = ac.createBufferSource(); src.buffer = voiceBuf; const vg = ac.createGain(); vg.gain.value = 1.0; src.connect(vg); vg.connect(out); src.start(t0 + plan.lead); }
-    if (sfxOn) { const sg = ac.createGain(); sg.gain.value = voiceBuf ? 0.45 : 0.8; sg.connect(out); sfxSchedule(ac, sg, plan, t0); }
-    const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
-    const mime = pickMime(), rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: hd ? 9000000 : 4500000 } : undefined), chunks = [];
+  const c3MapLen = (L) => 1.1 + L.nodes.length * 1.25 + 2.6;
+  async function c3RecordMap(L, onP) {
+    const c = document.createElement('canvas'); c.width = 1080; c.height = 1920; const ctx = c.getContext('2d');
+    const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+    const type = types.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+    if (!type || !c.captureStream) throw new Error('This browser can not record video. Use Download image instead, or try Chrome or Safari.');
+    const stream = c.captureStream(30), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6e6 }), chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((res) => { rec.onstop = res; });
-    let fv = null; const face = VM.face;
-    if (face) {
-      fv = document.createElement('video'); fv.src = face.url; fv.muted = true; fv.playsInline = true; fv.setAttribute('playsinline', ''); fv.preload = 'auto';
-      fv.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.02;pointer-events:none'; document.body.append(fv);
-      await new Promise((res) => { fv.onloadeddata = res; fv.onerror = res; setTimeout(res, 4000); });
-    }
-    let faceOn = false, segI = 0;
-    const cache = {}, vt = stream.getVideoTracks()[0], draw = (c, p, t, k) => { c.setTransform(SC, 0, 0, SC, 0, 0); draw0(c, p, t, k); if (fv) { if (!faceOn && t >= plan.lead) { faceOn = true; segI = 0; try { fv.currentTime = face.edit ? face.edit.segs[0].a : 0; fv.play().catch(() => {}); } catch { /* ignore */ } }
-      if (faceOn && face.edit) { const m = srcTime(face.edit.segs, t - plan.lead); if (m.i !== segI || Math.abs(fv.currentTime - m.t) > 0.35) { segI = m.i; try { fv.currentTime = m.t; } catch { /* ignore */ } } } c.setTransform(SC, 0, 0, SC, 0, 0); drawFaceLayer(c, fv, face, t - plan.lead); } };
-    let bg = 0, lastVis = performance.now(), errN = 0;
-    const draw0 = VM.style === 'site' ? drawSite : drawFlow; draw(ctx, plan, 0, cache); rec.start(250);
-    const start = performance.now() + 250;
-    await new Promise((resolve) => {
-      let fin = false, last = -1;
-      const tick = () => {
-        if (fin) return; const now = performance.now(), t = Math.max(0, (now - start) / 1000);
-        if (document.hidden) bg += (now - lastVis) / 1000; lastVis = now;
-        if (now - last < 20) return; last = now;
-        try { draw(ctx, plan, t, cache); } catch (e) { errN++; console.error('frame', e); }
-        try { if (vt && vt.requestFrame) vt.requestFrame(); } catch { /* optional */ }
-        onProgress(clamp01(t / plan.total));
-        if (t >= plan.total + 0.2) { fin = true; clearInterval(iv); resolve(); } else requestAnimationFrame(tick);
-      };
-      const iv = setInterval(tick, 33); requestAnimationFrame(tick);
-    });
-    if (bg > 2) { rec.stop(); await done; try { ac.close(); } catch { /* ignore */ } try { if (wl) wl.release(); } catch { /* ignore */ } throw new Error('The page went to the background while recording, so the video would freeze. Keep the screen on and stay on this page, then try again.'); }
-    rec.stop(); await done; try { ac.close(); } catch { /* ignore */ } try { if (wl) wl.release(); } catch { /* ignore */ } canvas.width = 1; canvas.height = 1;
-    if (fv) { try { fv.pause(); fv.remove(); } catch { /* ignore */ } }
-    const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
-    return { blob: new Blob(chunks, { type }), type, ext: type.includes('mp4') ? 'mp4' : 'webm' };
+    const len = c3MapLen(L); c3DrawMap(ctx, L, 0, {}); rec.start(250);
+    const t0 = performance.now();
+    await new Promise((res) => { const step = () => { const t = (performance.now() - t0) / 1000; c3DrawMap(ctx, L, Math.min(t, len), { handle: '@reekonsystems' }); onP && onP(Math.min(1, t / len)); if (t < len) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+    rec.stop(); await done;
+    return { blob: new Blob(chunks, { type: type.split(';')[0] }), ext: type.includes('mp4') ? 'mp4' : 'webm' };
   }
-  /* ================= flow-map look: a hand-drawn board the camera travels across, karaoke captions, brand colors ================= */
-  const HAND = '"Kalam", "Segoe Print", "Bradley Hand", "Marker Felt", "Comic Sans MS", cursive';
-  const FLOW = {
-    missed: { title: 'stop losing calls to voicemail', titleAI: 'AI receptionist for backyard contractors', trigger: 'A new client calls at 6:40pm', pain: ['You are on a job site', 'Nobody picks up', 'She hangs up. No voicemail.'], why: 'She books the next contractor on Google', lost: 'Bookings lost every week', fix: 'Every call answered on ring one', fixAI: 'An AI receptionist answers on ring one', steps: ['Answers common questions', 'Checks the calendar', 'Books the estimate'], check: 'Confirmation text goes out', before: 'Missed calls, lost bookings', after: 'Every call answered' },
-    slow: { title: 'win the first reply', titleAI: 'instant replies for backyard contractors', trigger: 'A new inquiry at 7pm', pain: ['Nobody sees it tonight', 'She messages two other spas', 'One replies in 4 minutes'], why: 'The first reply wins the booking', lost: 'Leads that went cold', fix: 'Every inquiry answered in a minute', fixAI: 'An AI replies to every inquiry in a minute', steps: ['Replies right away', 'Asks the right questions', 'Offers a time to book'], check: 'Booked before she looks elsewhere', before: 'Reply tomorrow, lose the lead', after: 'Reply in a minute, win it' },
-    quiet: { title: 'bring back quiet clients', titleAI: 'AI follow-ups for backyard contractors', trigger: 'A client visits once', pain: ['She loved it', 'Life got busy', 'Nobody follows up'], why: 'She forgot. She was not unhappy.', lost: 'Revenue sitting in your list', fix: 'A friendly text brings them back', fixAI: 'An AI texts them and books the replies', steps: ['Finds clients gone quiet', 'Sends a friendly text', 'Books the ones who reply'], check: 'Back on the calendar', before: 'A list nobody touches', after: 'Past clients rebooked' },
-    reviews: { title: 'get more 5-star reviews', titleAI: 'automatic reviews for backyard contractors', trigger: 'A client loves her visit', pain: ['She says "I\'ll review later"', 'Finding the page takes 8 steps', 'Later never comes'], why: 'No ask, and too many steps', lost: 'Reviews that never get posted', fix: 'One tap to your Google review page', fixAI: 'One tap or text, straight to your review page', steps: ['Tap card at the office', 'Text after the visit', 'Straight to the review page'], check: 'Review posted', before: 'Happy clients, few reviews', after: 'New reviews every week' },
-    noshow: { title: 'fill the empty slot', titleAI: 'no-show protection for backyard contractors', trigger: 'Thursday, 2pm estimate', pain: ['The client forgot', 'The slot sits empty', 'No one to fill it'], why: 'One missed reminder, zero revenue', lost: 'Treatments lost every week', fix: 'Reminders and one-tap rescheduling', fixAI: 'Automatic reminders with one-tap reschedule', steps: ['Reminder goes out', 'One-tap reschedule', 'Waitlist fills the slot'], check: 'The chair stays full', before: 'Empty chairs', after: 'A full calendar' },
-    afterhours: { title: 'book clients after hours', titleAI: 'an AI that never closes', trigger: 'Sunday, 9pm', pain: ['She is ready to book', 'No online booking, phone off', 'She books whoever answers'], why: 'Your best hours are when you are closed', lost: 'Bookings lost after close', fix: 'Booking that works while you sleep', fixAI: 'An AI answers and books 24/7', steps: ['Answers calls and messages', 'Checks the calendar', 'Books the consult'], check: 'Confirmed while you sleep', before: 'Closed means lost', after: 'Open all night' },
-    website: { title: 'a website that gets you booked', titleAI: 'a website that gets you booked', trigger: 'She searches "backyard contractor near me"', pain: ['Taps your listing', 'The site loads in 6 seconds', 'She taps the next one'], why: 'People decide in seconds', lost: 'Visitors who never booked', fix: 'Fast site, Book Now on every screen', fixAI: 'Fast site, Book Now on every screen', steps: ['Loads fast on phones', 'Book Now on every screen', 'Google listing connected'], check: 'Booked from the search', before: 'Old, slow site', after: 'Found. Booked.' },
-    crm: { title: 'one place for every lead', titleAI: 'one place for every lead', trigger: 'A lead DMs on Instagram', pain: ['Another one texts', 'Another fills out a form', 'By Friday, who was who?'], why: 'Leads scattered in five places', lost: 'Leads that went cold', fix: 'One dashboard for every lead', fixAI: 'One dashboard for every lead', steps: ['Every lead in one list', 'Follow-ups scheduled', 'Bookings tracked'], check: 'You know who to call today', before: 'Notes, DMs, sticky notes', after: 'One clean list' },
-    chatbot: { title: 'answer clients at 9pm', titleAI: 'AI chat for backyard contractor websites', trigger: 'It is 9pm on your website', pain: ['She wonders what a patio costs', 'No one to ask', 'She closes the tab'], why: 'Visitors will not wait for an email', lost: 'Questions that never became bookings', fix: 'Answers on your site, instantly', fixAI: 'An AI chat answers instantly', steps: ['Answers prices and downtime', 'Handles the common questions', 'Books the estimate'], check: 'Booked while you sleep', before: 'Unanswered questions', after: 'Instant answers' },
-    plates: { title: 'one tap, one more review', titleAI: 'one tap, one more review', trigger: 'A happy client at checkout', pain: ['She wants to leave a review', 'She has to search Google', 'She walks out the door'], why: 'Too many steps between happy and posted', lost: 'Reviews you earned and never got', fix: 'A tap card opens your review page', fixAI: 'A tap card opens your review page', steps: ['Tap card at the front desk', 'Review page opens instantly', 'Tap, review, done'], check: 'Review posted', before: 'Happy clients, no reviews', after: 'Reviews every week' },
-  };
-  const FK = { warn: ['#f5b84b', 'rgba(245,184,75,.13)'], bad: ['#ff7a7a', 'rgba(255,122,122,.13)'], plain: ['#e9edf7', 'rgba(255,255,255,.05)'], ai: ['#5b8cff', 'rgba(91,140,255,.2)'], ok: ['#3ddc97', 'rgba(61,220,151,.14)'], cta: ['#5b8cff', 'rgba(91,140,255,.28)'] };
-  const hashStr = (s) => { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
-  const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  function roughRectPts(x, y, w, h, r, seed, amp) {
-    const R = rng(seed), pts = [], j = () => (R() - 0.5) * 2 * amp, step = 14;
-    const seg = (x0, y0, x1, y1) => { const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / step)); for (let i = 0; i < n; i++) pts.push([x0 + (x1 - x0) * i / n + j(), y0 + (y1 - y0) * i / n + j()]); };
-    const arc = (cx, cy, a0) => { for (let i = 0; i <= 4; i++) { const a = a0 + (Math.PI / 2) * i / 4; pts.push([cx + Math.cos(a) * r + j(), cy + Math.sin(a) * r + j()]); } };
-    seg(x + r, y, x + w - r, y); arc(x + w - r, y + r, -Math.PI / 2); seg(x + w, y + r, x + w, y + h - r); arc(x + w - r, y + h - r, 0);
-    seg(x + w - r, y + h, x + r, y + h); arc(x + r, y + h - r, Math.PI / 2); seg(x, y + h - r, x, y + r); arc(x + r, y + r, Math.PI);
-    pts.push(pts[0].slice()); return pts;
+
+  /* ---- shared bits: platforms, day, save/posted ---- */
+  function c3Meta(it) {
+    const chipsBox = h('div', { class: 'hm-chips' });
+    const drawChips = () => chipsBox.replaceChildren(...C3P.map(([k, l]) => h('button', { type: 'button', class: 'hm-chip' + (it.platforms.includes(k) ? ' on' : ''), onclick: () => { it.platforms = it.platforms.includes(k) ? it.platforms.filter((x) => x !== k) : it.platforms.concat(k); drawChips(); } }, l)));
+    drawChips();
+    const day = h('input', { type: 'date', value: it.day || '', class: 'c3-date', onchange: (e) => { it.day = e.target.value || null; } });
+    return h('div', { class: 'c3-meta' }, h('label', null, 'Post on'), chipsBox, h('label', null, 'Plan it for'), h('div', { class: 'row' }, day, h('button', { type: 'button', class: 'btn small', onclick: () => { day.value = new Date().toLocaleDateString('en-CA'); it.day = day.value; } }, 'Today')));
   }
-  let MCX = null;
-  const measureCtx = () => (MCX || (MCX = document.createElement('canvas').getContext('2d')));
-  function flowGraph(beats, title) {
-    const mc = measureCtx(), R = rng(hashStr(title + beats.length)), N = {}, E = [], cx = 450; let y = 90, prev = null;
-    beats.slice(1).forEach((b, i) => {
-      const id = 'n' + (i + 1), kind = BEAT_STYLE[b.kind] || 'plain', cost = b.kind === 'cost', cta = b.kind === 'cta', small = b.kind === 'step', text = String(b.text || b.say);
-      const w = cta ? 660 : cost ? 660 : small ? 520 : 600, fs = cost ? 44 : small ? 34 : 38; mc.font = '700 ' + fs + 'px ' + HAND;
-      const lines = wrapLines(mc, text, w - 60).length, h = cta ? 300 : cost ? Math.max(200, lines * 62 + 90) : Math.max(130, lines * fs * 1.3 + 64);
-      const x = cx + (cta || cost ? 0 : [-70, 55, -35, 70, 0, -55][i % 6] * (R() > 0.2 ? 1 : 0));
-      N[id] = { id, x, y, w, h, kind, bkind: b.kind, text, star: b.kind === 'fix', cta, cost, small, double: b.kind === 'result' };
-      N[id].paths = [roughRectPts(x - w / 2, y, w, h, 22, hashStr(id + title), 1.6), roughRectPts(x - w / 2, y, w, h, 22, hashStr(id + title) + 7, 2.4)];
-      if (prev) { const A = N[prev], x0 = A.x, y0 = A.y + A.h, x1 = x, y1 = y, ER = rng(hashStr(prev + id)); E.push({ a: prev, b: id, label: b.link != null ? b.link : BEAT_LINK[b.kind], x0, y0, x1, y1, mx: (x0 + x1) / 2 + (ER() - 0.5) * 18, my: (y0 + y1) / 2, seed: hashStr(prev + id) }); }
-      prev = id; y += h + 130 + Math.round(R() * 70);
-    });
-    return { N, E, title, WW: 900, WH: y + 20 };
+  async function c3Persist(it) {
+    const body = { kind: it.kind, title: it.title, body: it.body, platforms: it.platforms, day: it.day, map: it.map };
+    const r = it.id ? await api('PATCH', '/content3/items/' + it.id, body) : await api('POST', '/content3/items', body);
+    it.id = r.id; return r;
   }
-  function flowFocus(plan) {
-    const G = plan.graph, W = VW, H = VH;
-    return plan.scenes.map((sc, i) => {
-      if (i === 0) { const s = (H * 0.5) / G.WH; return { t: sc.start, cx: 450, cy: G.WH * 0.5 - (H * 0.14) / s, s, id: null }; }
-      const n = G.N['n' + i]; if (!n) return { t: sc.start, cx: 450, cy: G.WH, s: 0.5, id: null };
-      return { t: sc.start, cx: n.x, cy: n.y + n.h / 2, s: Math.min(1.3, (W * 0.86) / n.w, (H * 0.44) / n.h), id: n.id };
-    });
+  function c3Actions(it, back) {
+    const save = h('button', { class: 'btn', onclick: async () => { save.disabled = true; try { await c3Persist(it); toast(it.day ? 'Saved to your plan for ' + c3Day(it.day) : 'Saved as a draft'); } catch (e) { fail(e); } save.disabled = false; } }, 'Save');
+    const posted = h('button', { class: 'btn primary chk' }, h('span', { class: 'chk-box' }), 'I posted it');
+    posted.onclick = async () => {
+      if (!it.platforms.length) { toast('Pick where you posted it first', true); return; }
+      posted.classList.add('picked'); posted.disabled = true;
+      try { await c3Persist(it); await api('POST', '/content3/items/' + it.id + '/posted'); try { localStorage.removeItem(C3_DRAFT); } catch { /* ok */ } toast('Logged on ' + it.platforms.map((p) => C3PN[p]).join(', ') + ' ✓'); setTimeout(() => { location.hash = back || '#/content'; }, 500); }
+      catch (e) { fail(e); posted.classList.remove('picked'); posted.disabled = false; }
+    };
+    return h('div', { class: 'row c3-actions' }, save, posted);
   }
-  const lerp = (a, b, k) => a + (b - a) * k, easeIO = (x) => { x = clamp01(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
-  function wrapLines(ctx, text, maxW) {
-    const out = [];
-    text.split('\n').forEach((para) => { let line = ''; para.split(/\s+/).forEach((w) => { const tst = line ? line + ' ' + w : w; if (line && ctx.measureText(tst).width > maxW) { out.push(line); line = w; } else line = tst; }); out.push(line); });
-    return out;
-  }
-  function drawPath(ctx, pts) { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); }
-  function drawFlow(ctx, plan, t, cache) {
-    const W = VW, H = VH, tt = Math.min(Math.max(0, t), plan.total - 0.001), G = plan.graph, key = cache.key || (cache.key = flowFocus(plan));
-    let si = plan.scenes.findIndex((x) => tt < x.end); if (si < 0) si = plan.scenes.length - 1;
-    const sc = plan.scenes[si], lt = tt - sc.start, q = clamp01(lt / Math.max(0.5, sc.dur)), cur = key[si], prev = key[Math.max(0, si - 1)];
-    const dr = (k, qq) => 1 + (k.id ? 0.1 : 0.18) * qq, pS = prev.s * dr(prev, 1), cS = cur.s * dr(cur, q), p = si === 0 ? 1 : easeIO(lt / 0.9);
-    const s = Math.exp(lerp(Math.log(pS), Math.log(cS), p)), cx = lerp(prev.cx, cur.cx, p) + Math.sin(tt * 0.9) * 6, cy = lerp(prev.cy, cur.cy, p) + Math.cos(tt * 0.7) * 6 + (cur.id ? q * 14 : 0);
-    const costI = plan.scenes.findIndex((x) => x.kind === 'cost'), focusId = cur.id;
-    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
-    const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, 700); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
-    ctx.save(); ctx.translate(W / 2 - cx * s, H * 0.4 - cy * s); ctx.scale(s, s);
-    const lw = Math.max(3, 1.7 / s);
-    if (s > 0.45) { ctx.fillStyle = 'rgba(169,194,255,.09)'; const x0 = Math.floor((cx - W / s) / 60) * 60, x1 = cx + W / s, y0 = Math.floor((cy - H / s) / 60) * 60, y1 = cy + H / s; for (let x = x0; x < x1; x += 60) for (let y = y0; y < y1; y += 60) ctx.fillRect(x, y, 3, 3); }
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    G.E.forEach((e) => {
-      const R = rng(e.seed); ctx.strokeStyle = 'rgba(233,237,247,.62)'; ctx.lineWidth = lw;
-      for (let pass = 0; pass < 2; pass++) { ctx.globalAlpha = pass ? 0.35 : 1; ctx.beginPath(); ctx.moveTo(e.x0 + (R() - 0.5) * 4, e.y0 + 2); ctx.quadraticCurveTo(e.mx + (R() - 0.5) * 18, e.my, e.x1 + (R() - 0.5) * 4, e.y1 - 4); ctx.stroke(); }
-      ctx.globalAlpha = 1; const ang = Math.atan2(e.y1 - e.my, e.x1 - e.mx);
-      ctx.beginPath(); ctx.moveTo(e.x1, e.y1 - 3); ctx.lineTo(e.x1 - Math.cos(ang - 0.45) * 22, e.y1 - 3 - Math.sin(ang - 0.45) * 22); ctx.moveTo(e.x1, e.y1 - 3); ctx.lineTo(e.x1 - Math.cos(ang + 0.45) * 22, e.y1 - 3 - Math.sin(ang + 0.45) * 22); ctx.stroke();
-      if (e.label) { ctx.font = '600 26px ' + HAND; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.textAlign = 'left'; ctx.fillText(e.label, e.mx + 18, e.my + 8); }
-    });
-    Object.values(G.N).forEach((n) => {
-      const [stroke, fill] = FK[n.kind] || FK.plain, on = n.id === focusId, pulse = on ? 0.6 + 0.4 * Math.sin(tt * 4) : 0, ni = +n.id.slice(1), seen = si >= ni;
-      ctx.save(); if (on) { ctx.shadowColor = stroke; ctx.shadowBlur = 28 + 14 * pulse; }
-      drawPath(ctx, n.paths[0]); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = lw * (on ? 1.5 : 1.1); ctx.stroke(); ctx.restore();
-      ctx.globalAlpha = 0.55; drawPath(ctx, n.paths[1]); ctx.strokeStyle = stroke; ctx.lineWidth = lw * 0.7; ctx.stroke(); ctx.globalAlpha = 1;
-      if (n.double) { const o = roughRectPts(n.x - n.w / 2 - 12, n.y - 12, n.w + 24, n.h + 24, 30, hashStr(n.id) + 21, 3); drawPath(ctx, o); ctx.strokeStyle = 'rgba(245,184,75,.8)'; ctx.lineWidth = lw * 1.2; ctx.stroke(); }
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = seen ? '#eef2fb' : 'rgba(238,242,251,.55)';
-      if (n.cta) {
-        const mm = n.text.match(/^dm me\s+(.+)$/i), top = mm ? 'DM me' : '', big = mm ? mm[1].toUpperCase() : n.text;
-        if (top) { ctx.font = '700 64px ' + HAND; ctx.fillText(top, n.x, n.y + 78); }
-        ctx.fillStyle = '#5b8cff'; ctx.shadowColor = 'rgba(91,140,255,.8)'; ctx.shadowBlur = 24; ctx.font = '800 ' + (big.length > 9 ? 70 : 112) + 'px "Inter Tight", ' + VFONT; ctx.fillText(big, n.x, n.y + (top ? 188 : n.h / 2)); ctx.shadowBlur = 0;
-      } else if (n.cost) {
-        const e = si > costI ? 1 : si === costI ? easeOut(lt / 1.8) : 0;
-        const disp = n.text.replace(/\$([\d,]+)/g, (m0, d) => (e <= 0 ? '$•••' : '$' + Math.round(+d.replace(/,/g, '') * e).toLocaleString('en-US')));
-        ctx.font = '800 44px "Inter Tight", ' + VFONT; ctx.fillStyle = '#ff9a9a'; const lines = wrapLines(ctx, disp, n.w - 60);
-        lines.forEach((l, i) => ctx.fillText(l, n.x, n.y + n.h / 2 + (i - (lines.length - 1) / 2) * 62));
-      } else {
-        const fs = n.small ? 34 : 38; ctx.font = '700 ' + fs + 'px ' + HAND; const lines = wrapLines(ctx, n.text, n.w - (n.star ? 100 : 60)), lh = fs * 1.3;
-        lines.forEach((l, i) => ctx.fillText(l, n.x + (n.star ? 22 : 0), n.y + n.h / 2 + (i - (lines.length - 1) / 2) * lh));
-        if (n.star) { ctx.strokeStyle = '#a9c2ff'; ctx.lineWidth = lw; const sx = n.x - n.w / 2 + 44, sy = n.y + n.h / 2; for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4 + tt; ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * 9, sy + Math.sin(an) * 9); ctx.lineTo(sx + Math.cos(an) * 24, sy + Math.sin(an) * 24); ctx.stroke(); } }
-      }
-      ctx.textBaseline = 'alphabetic';
-    });
-    ctx.restore();
-    const tA = si === 0 ? 1 - easeOut((lt - (sc.dur - 0.9)) / 0.7) : 0;
-    if (tA > 0.01) {
-      ctx.globalAlpha = tA; ctx.textAlign = 'center'; ctx.fillStyle = '#f2f5fc'; ctx.font = '700 88px ' + HAND;
-      const lines = wrapLines(ctx, G.title, W - 120), y0 = 150; lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * 100));
-      const ly = y0 + (lines.length - 1) * 100 + 34, wl = Math.min(W - 160, ctx.measureText(lines[lines.length - 1]).width + 20), R = rng(11);
-      ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(W / 2 - wl / 2, ly); for (let k = 1; k <= 12; k++) ctx.lineTo(W / 2 - wl / 2 + wl * k / 12, ly + (R() - 0.5) * 8 + (k % 2 ? 3 : -3)); ctx.stroke(); ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, W, 5); ctx.fillStyle = '#5b8cff'; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 5);
-    ctx.textAlign = 'left'; ctx.font = '700 22px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.55)'; ctx.fillText('REEKON SYSTEMS', 36, 52);
-    drawCaps(ctx, plan, tt);
-    ctx.textAlign = 'center';
-  }
-  // karaoke captions that always fit the picture: shrink first, then split into two lines, placed where the apps do not cover them
-  function drawCaps(ctx, plan, tt) {
-    const vc = VM.face && VM.face.edit && VM.face.edit.words && VM.face.vc !== false;
-    if (VM.face && !VM.face.caps && !vc) return;
-    const W = VW, H = VH, cap = vc ? voiceCaps(VM.face.edit, plan.lead) : (plan.caps || (plan.caps = karaoke(plan))), cy = Math.round(H * VCAP.capY), maxW = VCAP.capW - 40;
-    let ci = 0; for (let i = 0; i < cap.chunks.length; i++) if (tt >= cap.chunks[i].t0) ci = i;
-    const ch = cap.chunks[ci];
-    if (!ch || tt < cap.chunks[0].t0 - 0.05) return;
-    const gb = ctx.createLinearGradient(0, cy - 150, 0, cy + 120); gb.addColorStop(0, 'rgba(5,7,13,0)'); gb.addColorStop(0.3, 'rgba(5,7,13,.74)'); gb.addColorStop(0.7, 'rgba(5,7,13,.74)'); gb.addColorStop(1, 'rgba(5,7,13,0)'); ctx.fillStyle = gb; ctx.fillRect(0, cy - 150, W, 270);
-    const words = ch.words.map((w, i) => ({ w: w.w, i, t: w.t }));
-    const meas = (list, fs) => { ctx.font = '800 ' + fs + 'px "Inter Tight", ' + VFONT; const sp = ctx.measureText(' ').width, widths = list.map((x) => ctx.measureText(x.w).width); return { sp, widths, total: widths.reduce((a, b) => a + b, 0) + sp * Math.max(0, list.length - 1) }; };
-    let fs = 50, m = meas(words, fs); while (m.total > maxW && fs > 38) { fs -= 2; m = meas(words, fs); }
-    let rows = [words]; if (m.total > maxW && words.length > 1) { const k = Math.ceil(words.length / 2); rows = [words.slice(0, k), words.slice(k)]; fs = 44; }
-    let wi = -1; ch.words.forEach((w, i) => { if (tt >= w.t) wi = i; });
-    const lh = Math.round(fs * 1.5), y0 = cy - ((rows.length - 1) * lh) / 2;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    rows.forEach((row, ri) => {
-      const mm = meas(row, fs); let x = (W - mm.total) / 2; const y = y0 + ri * lh;
-      row.forEach((w, k) => {
-        if (w.i === wi) { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 12, y - fs * 1.02, mm.widths[k] + 24, fs * 1.36, 16) : ctx.rect(x - 12, y - fs * 1.02, mm.widths[k] + 24, fs * 1.36); ctx.fill(); }
-        ctx.fillStyle = w.i === wi ? '#ffffff' : 'rgba(255,255,255,.93)'; ctx.fillText(w.w, x, y); x += mm.widths[k] + mm.sp;
-      });
-    });
-    ctx.textAlign = 'center';
-  }
-  // preview only: shows where TikTok, Reels and Shorts cover the picture
-  function drawZones(ctx) {
-    const W = VW, H = VH; ctx.save(); ctx.setLineDash([10, 8]); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.strokeRect(W * 0.05, H * 0.05, W * 0.9, H * 0.9); ctx.setLineDash([]);
-    (VCAP.zones || []).forEach(([x, y, w, h, lab]) => { ctx.fillStyle = 'rgba(255,60,80,.28)'; ctx.fillRect(W * x, H * y, W * w, H * h); ctx.fillStyle = '#fff'; ctx.font = '700 22px ' + VFONT; ctx.textAlign = 'center'; ctx.fillText(lab, W * (x + w / 2), H * (y + h / 2) + 8); });
-    ctx.restore();
-  }
-  const titleCase = (x) => String(x || '').replace(/\b\w/g, (c) => c.toUpperCase());
-  // faceless website video: a phone shows a business that is invisible on Google, then the site builds itself and a job lands
-  function drawSite(ctx, plan, t) {
-    const W = VW, H = VH, F = VCAP, tt = Math.min(Math.max(0, t), plan.total - 0.001);
-    let si = plan.scenes.findIndex((x) => tt < x.end); if (si < 0) si = plan.scenes.length - 1;
-    const sc = plan.scenes[si], lt = tt - sc.start, fixI = plan.scenes.findIndex((x) => x.kind === 'fix');
-    const bs = fixI >= 0 ? plan.scenes[fixI].start + 0.15 : plan.total * 0.45;
-    const endI = plan.scenes.findIndex((x, i) => i > fixI && (x.kind === 'result' || x.kind === 'cta'));
-    const be = Math.max(bs + 3, Math.min(bs + 12, (endI >= 0 ? plan.scenes[endI].start : plan.total) - 0.2));
-    const biz = titleCase((CS.idea && CS.idea.business) || CS.business || 'roofing contractor'), cta = sc.kind === 'cta', rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
-    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
-    const rg = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, Math.max(W, H) * 0.6); rg.addColorStop(0, 'rgba(91,140,255,.16)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
-    // phone
-    const P = F.ph, px = P.cx - P.w / 2, pa = cta ? 1 - 0.88 * easeOut(lt / 0.5) : 1;
-    ctx.save(); ctx.globalAlpha = pa; ctx.shadowColor = 'rgba(91,140,255,.35)'; ctx.shadowBlur = 40; rr(px, P.y, P.w, P.h, 46); ctx.fillStyle = '#0c1220'; ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = 4; ctx.strokeStyle = '#2a3552'; ctx.stroke();
-    const sx = px + 14, sy = P.y + 14, sw = P.w - 28, sh = P.h - 28, k = sw / 380, vh = sh / k;
-    rr(sx, sy, sw, sh, 34); ctx.clip(); ctx.fillStyle = '#f4f6fb'; ctx.fillRect(sx, sy, sw, sh); ctx.translate(sx, sy); ctx.scale(k, k);
-    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-    const SF = '-apple-system, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-    if (tt < bs + 0.6) {
-      const fade = tt < bs ? 1 : 1 - easeOut((tt - bs) / 0.6); ctx.globalAlpha = pa * fade;
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, vh);
-      rr(14, 20, 352, 46, 23); ctx.fillStyle = '#eef1f6'; ctx.fill();
-      const q = biz.toLowerCase() + ' near me', nch = Math.min(q.length, Math.floor(tt * 12)); ctx.fillStyle = '#1c2330'; ctx.font = '600 17px ' + SF; ctx.fillText(q.slice(0, nch) + (nch < q.length && Math.floor(tt * 3) % 2 ? '|' : ''), 52, 49);
-      ctx.strokeStyle = '#5b6578'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(34, 42, 7, 0, 6.283); ctx.moveTo(39, 47); ctx.lineTo(45, 53); ctx.stroke();
-      const rows = [['Fast Haul Crew', '4.9 · Open 24 hours · Calls answered'], ['Same Day Junk Pros', '4.8 · Free estimates · Book online'], ['Clear It Out Hauling', '4.7 · Reviews · Quote in minutes']];
-      rows.forEach((r0, i) => { const a = easeOut((tt - 0.9 - i * 0.4) / 0.4); if (a <= 0) return; ctx.globalAlpha = pa * fade * a; const y = 96 + i * 88;
-        ctx.fillStyle = '#1a4fd1'; ctx.font = '700 18px ' + SF; ctx.fillText(r0[0], 18, y + 20); ctx.fillStyle = '#f5b84b'; ctx.fillText('★', 18, y + 44); ctx.fillStyle = '#5b6578'; ctx.font = '500 14px ' + SF; ctx.fillText(r0[1], 40, y + 44); ctx.fillStyle = '#e3e7ef'; ctx.fillRect(18, y + 58, 300, 7); });
-      const a3 = easeOut((tt - 2.4) / 0.5); if (a3 > 0) { ctx.globalAlpha = pa * fade * a3; const y = 96 + 3 * 88 + 6, pu = 0.6 + 0.4 * Math.sin(tt * 5); ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(229,72,77,' + (0.5 + 0.5 * pu) + ')'; ctx.lineWidth = 2.5; rr(14, y, 352, 92, 14); ctx.fillStyle = 'rgba(229,72,77,.07)'; ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#e5484d'; ctx.font = '800 19px ' + SF; ctx.fillText(biz.slice(0, 26), 28, y + 36); ctx.font = '700 16px ' + SF; ctx.fillText('Not on Google. Customers never see you.', 28, y + 62); }
-    }
-    if (tt >= bs) {
-      ctx.globalAlpha = pa; const sec = (n) => easeOut((tt - (bs + (be - bs) * n / 5)) / 0.7), tail = Math.max(0, 780 - vh);
-      const scroll = tail * easeIO((tt - bs - 0.9) / Math.max(1, be - bs - 0.9));
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, vh);
-      ctx.save(); ctx.translate(0, -scroll);
-      const blk = (n, fn) => { const e = sec(n); if (e <= 0) return; ctx.save(); ctx.globalAlpha = pa * e; ctx.translate(0, (1 - e) * 26); fn(); ctx.restore(); };
-      blk(0, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 380, 56); rr(16, 14, 28, 28, 8); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#0b1220'; ctx.font = '800 17px ' + SF; ctx.fillText(biz.toUpperCase().slice(0, 20), 54, 34); for (let i = 0; i < 3; i++) ctx.fillRect(338, 20 + i * 8, 24, 3); });
-      blk(1, () => { const g = ctx.createLinearGradient(0, 56, 0, 300); g.addColorStop(0, '#0b1a3a'); g.addColorStop(1, '#183a8c'); ctx.fillStyle = g; ctx.fillRect(0, 56, 380, 244); ctx.fillStyle = '#fff'; ctx.font = '800 34px ' + SF; ctx.fillText('Junk gone.', 24, 118); ctx.fillText('Same day.', 24, 158); ctx.fillStyle = '#cdd9ff'; ctx.font = '500 16px ' + SF; ctx.fillText('Free quote in 60 seconds.', 24, 190); rr(24, 214, 200, 50, 25); ctx.fillStyle = '#2f62ff'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText('Get my free quote', 48, 245); rr(236, 214, 120, 50, 25); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillText('Call now', 262, 245); });
-      blk(2, () => { ctx.fillStyle = '#f4f6fb'; ctx.fillRect(0, 300, 380, 82); ctx.fillStyle = '#0b1220'; ctx.font = '800 16px ' + SF; ctx.fillText(/junk|haul|remov/i.test(biz) ? 'What we haul' : /backyard|hardscape|paver|turf|landscap|patio|fence|deck/i.test(biz) ? 'What we build' : 'What we do', 20, 326); const chips = /junk|haul|remov/i.test(biz) ? ['Furniture', 'Appliances', 'Yard waste', 'Cleanouts'] : /backyard|hardscape|paver|turf|landscap|patio|fence|deck/i.test(biz) ? ['Pavers', 'Turf', 'Patios', 'Walls'] : ['Free quotes', 'Fast service', 'Fair prices', 'Local team']; let x = 20; ctx.font = '700 14px ' + SF; chips.forEach((c0) => { const w = ctx.measureText(c0).width + 24; rr(x, 340, w, 30, 15); ctx.fillStyle = '#e1e8fb'; ctx.fill(); ctx.fillStyle = '#1a3a8c'; ctx.fillText(c0, x + 12, 360); x += w + 8; }); });
-      blk(3, () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 382, 380, 118); ctx.fillStyle = '#f5b84b'; ctx.font = '700 28px ' + SF; ctx.fillText('★★★★★', 20, 420); ctx.fillStyle = '#55607a'; ctx.font = '600 14px ' + SF; ctx.fillText('Your real Google reviews show here', 20, 446); ctx.fillStyle = '#e3e7ef'; ctx.fillRect(20, 462, 300, 7); ctx.fillRect(20, 478, 220, 7); });
-      blk(4, () => { ctx.fillStyle = '#eef2fb'; ctx.fillRect(0, 500, 380, 220); ctx.fillStyle = '#0b1220'; ctx.font = '800 20px ' + SF; ctx.fillText('Get a free quote', 20, 534);
-        const fields = [['Name', 'Jordan'], ['Phone', '(555) 010-0142'], ['What needs to go?', 'Couch and two mattresses']], t0 = bs + (be - bs) * 0.8; let typed = 0;
-        fields.forEach((f0, i) => { const y = 548 + i * 46; rr(20, y, 340, 38, 10); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#d3daea'; ctx.lineWidth = 1.5; ctx.stroke(); const n = Math.max(0, Math.floor((tt - t0 - typed * 0.5) * 16)); const txt = f0[1].slice(0, n); ctx.font = '600 15px ' + SF; ctx.fillStyle = txt ? '#0b1220' : '#8b95ab'; ctx.fillText(txt || f0[0], 32, y + 24); typed += 1; });
-        });
-      blk(4, () => { const t0 = bs + (be - bs) * 0.8, sent = tt > t0 + 2.2; rr(20, 692, 340, 44, 22); ctx.fillStyle = sent ? '#2fbf7a' : '#2f62ff'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText(sent ? '✓ Sent, we will call you' : 'Send', sent ? 82 : 160, 720); });
-      blk(4, () => { ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 744, 380, 60); ctx.fillStyle = '#fff'; ctx.font = '700 14px ' + SF; ctx.fillText('Open 24/7 · Free estimates · Call or text', 20, 780); });
-      ctx.restore();
-      const cb = sec(4); if (cb > 0) { ctx.save(); ctx.globalAlpha = pa * cb; ctx.translate(0, (1 - cb) * 20); rr(176, vh - 118, 188, 64, 18); ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = '#d3daea'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.fillStyle = '#0b1220'; ctx.font = '700 14px ' + SF; ctx.fillText('Hi! Need a free quote?', 190, vh - 80); ctx.fillStyle = '#5b6578'; ctx.font = '500 12px ' + SF; ctx.fillText('AI chat · replies in seconds', 190, vh - 62); ctx.restore(); }
-      const tz = (sc.kind === 'proof' || sc.kind === 'result' || tt > be + 0.4) ? easeOut(tt > be + 0.4 && sc.kind !== 'proof' && sc.kind !== 'result' ? (tt - be - 0.4) / 0.5 : lt / 0.5) : 0;
-      if (tz > 0 && !cta) { ctx.save(); ctx.globalAlpha = pa * tz; ctx.translate(0, -70 + 80 * tz); rr(18, 6, 344, 52, 16); ctx.fillStyle = '#16a05f'; ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 16; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = '800 16px ' + SF; ctx.fillText('✓ New job booked · 11:42 pm', 34, 38); ctx.restore(); }
-    }
-    ctx.restore();
-    // beat text card
-    const B = F.bub, kind = BEAT_STYLE[sc.kind] || 'plain', [stroke] = FK[kind] || FK.plain;
-    if (cta) {
-      const a = easeOut(lt / 0.4); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = '#eef2fb'; ctx.font = '700 64px ' + HAND; const mx = W > H ? W * 0.5 : W / 2, my = H * 0.3; ctx.fillText('DM me', mx, my);
-      ctx.fillStyle = '#5b8cff'; ctx.shadowColor = 'rgba(91,140,255,.8)'; ctx.shadowBlur = 26; ctx.font = '800 118px "Inter Tight", ' + VFONT; ctx.fillText('AUDIT', mx, my + 130); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-    } else {
-      let text = si === 0 && plan.graph ? plan.graph.title : String(sc.text || '');
-      if (sc.kind === 'cost') { const e = easeOut(lt / 1.8); text = text.replace(/\$([\d,]+)/g, (m0, d) => '$' + Math.round(+d.replace(/,/g, '') * e).toLocaleString('en-US')); }
-      let fs = 42, lines; for (const f of [42, 38, 34, 30]) { fs = f; ctx.font = '700 ' + fs + 'px ' + HAND; lines = wrapLines(ctx, text, B.w - 56); if (lines.length <= 3) break; }
-      const bh = lines.length * fs * 1.3 + 40, a = easeOut(lt / 0.35), by = (W > H ? H * 0.42 - bh / 2 : B.y) + (1 - a) * -22;
-      ctx.globalAlpha = a; rr(B.x, by, B.w, bh, 24); ctx.fillStyle = 'rgba(7,10,20,.93)'; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 3.5; ctx.stroke();
-      ctx.fillStyle = sc.kind === 'cost' ? '#ff9a9a' : '#f2f5fc'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 ' + fs + 'px ' + HAND; lines.forEach((l, i) => ctx.fillText(l, B.x + B.w / 2, by + 20 + fs * 0.65 + i * fs * 1.3)); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, W, 5); ctx.fillStyle = '#5b8cff'; ctx.fillRect(0, 0, W * clamp01(tt / plan.total), 5);
-    ctx.textAlign = 'left'; ctx.font = '700 22px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.55)'; ctx.fillText('REEKON SYSTEMS', 36, 52);
-    drawCaps(ctx, plan, tt);
-    ctx.textAlign = 'center';
-  }
-  // picture card for a text post
-  function drawCard(ctx, W, H, lines, SC) {
-    ctx.setTransform(SC, 0, 0, SC, 0, 0); const u = Math.min(W, H) / 720, m = Math.round(Math.min(W, H) * 0.09), maxW = W - m * 2;
-    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
-    const rg = ctx.createRadialGradient(W * 0.5, H * 0.38, 20, W * 0.5, H * 0.38, Math.max(W, H) * 0.7); rg.addColorStop(0, 'rgba(91,140,255,.2)'); rg.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(169,194,255,.09)'; for (let x = 24; x < W; x += 48) for (let y = 24; y < H; y += 48) ctx.fillRect(x, y, 3, 3);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = '700 ' + Math.round(22 * u) + 'px "Inter Tight", ' + VFONT; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText('REEKON SYSTEMS', m, m * 0.85 + 10 * u);
-    const head = lines[0] || 'Write your post lines here', rest = lines.slice(1), hf = '800 ', sans = '"Inter Tight", ' + VFONT, bottom = Math.round(110 * u), availH = H - m * 1.9 - bottom - m * 0.5;
-    let hs = Math.round(96 * u), HL, rs = Math.round(36 * u), RL;
-    const layoutAll = () => { ctx.font = hf + hs + 'px ' + sans; HL = wrapLines(ctx, head, maxW); ctx.font = '600 ' + rs + 'px ' + sans; RL = rest.map((r0) => wrapLines(ctx, r0, maxW - 44 * u)); return HL.length * hs * 1.1 + (rest.length ? 34 * u : 0) + RL.reduce((a, l) => a + l.length * rs * 1.3 + 14 * u, 0); };
-    let ch = layoutAll(); while ((ch > availH || HL.length > 4) && hs > 40 * u) { hs -= 4; if (rs > 26 * u && ch > availH) rs -= 1; ch = layoutAll(); }
-    let y = Math.max(m * 1.5, m * 1.2 + (availH - ch) / 2) + hs * 0.95;
-    ctx.font = hf + hs + 'px ' + sans; ctx.fillStyle = '#ffffff'; HL.forEach((l, i) => ctx.fillText(l, m, y + i * hs * 1.1));
-    const ly = y + (HL.length - 1) * hs * 1.1 + 18 * u, lw = Math.min(maxW, ctx.measureText(HL[HL.length - 1]).width), R = rng(7); ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 7 * u; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(m, ly); for (let k = 1; k <= 14; k++) ctx.lineTo(m + lw * k / 14, ly + (R() - 0.5) * 6 * u + (k % 2 ? 2 : -2) * u); ctx.stroke();
-    y = ly + 44 * u; ctx.font = '600 ' + rs + 'px ' + sans;
-    RL.forEach((ls) => { ctx.fillStyle = '#5b8cff'; ctx.beginPath(); ctx.arc(m + 8 * u, y - rs * 0.3, 8 * u, 0, 6.283); ctx.fill(); ctx.fillStyle = 'rgba(238,242,251,.94)'; ls.forEach((l, i) => ctx.fillText(l, m + 44 * u, y + i * rs * 1.3)); y += ls.length * rs * 1.3 + 14 * u; });
-    const by = H - m * 0.9 - 8 * u, pw = 250 * u, ph = 64 * u; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, by - ph, pw, ph, ph / 2) : ctx.rect(m, by - ph, pw, ph); ctx.fillStyle = '#5b8cff'; ctx.fill(); ctx.fillStyle = '#04120a'; ctx.font = '800 ' + Math.round(30 * u) + 'px ' + sans; ctx.textBaseline = 'middle'; ctx.fillText('DM me AUDIT', m + 30 * u, by - ph / 2 + 2 * u);
-    ctx.textBaseline = 'alphabetic'; ctx.font = '600 ' + Math.round(22 * u) + 'px ' + sans; ctx.fillStyle = 'rgba(233,237,247,.6)'; ctx.fillText('AI for local businesses', m + pw + 26 * u, by - ph / 2 + 8 * u);
-  }
-  function karaoke(plan) {
-    const words = [];
-    plan.scenes.forEach((sc, i) => {
-      if (sc.words && sc.words.length) { sc.words.forEach((x) => words.push({ w: x.w, t: x.t })); return; }
-      const ws = spoken(sc.vo).split(/\s+/).filter(Boolean), a = sc.start + (i === 0 ? plan.lead + 0.1 : 0.15), b = sc.end - (i === plan.scenes.length - 1 ? 0.7 : 0.25), span = Math.max(0.5, b - a);
-      ws.forEach((w, k) => words.push({ w, t: a + span * k / ws.length }));
-    });
-    const chunks = []; let cur = [];
-    words.forEach((w) => { cur.push(w); if (cur.length >= 4 || /[.!?]$/.test(w.w)) { chunks.push({ t0: cur[0].t, words: cur }); cur = []; } });
-    if (cur.length) chunks.push({ t0: cur[0].t, words: cur });
-    return { chunks };
-  }
-  async function makeVoice(plan) {
-    const lines = plan.scenes.map((x) => spoken(x.vo)), text = lines.join(' ');
-    const r = await api('POST', '/voice/tts', { text, speed: VM.speed });
-    const bin = atob(r.audio), u = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
-    const blob = new Blob([u], { type: r.mime || 'audio/mpeg' }), buf = await decodeVoice(blob);
-    let parts = null, words = null;
-    if (r.starts && r.nchars === text.length && r.starts.length === text.length) {
-      let off = 0; const startsAt = []; words = lines.map((ln) => { const ws = []; (ln.match(/\S+/g) || []).length; const re = /\S+/g; let m; while ((m = re.exec(ln))) ws.push({ w: m[0], t: r.starts[off + m.index] }); startsAt.push(r.starts[off] || 0); off += ln.length + 1; return ws; });
-      startsAt[0] = 0; parts = startsAt.map((st, i) => (i + 1 < startsAt.length ? startsAt[i + 1] : buf.duration) - st);
-      if (parts.some((p) => !(p > 0.3))) { parts = null; words = null; }
-    }
-    VM.voice = { blob, buf, dur: buf.duration, parts, words, sig: plan.sig, name: r.engine === 'eleven' ? 'ElevenLabs voice' : 'AI voice', url: URL.createObjectURL(blob) };
-    blob.arrayBuffer().then((ab) => idb.put('voice', { ab, type: blob.type, parts, words, sig: plan.sig, name: VM.voice.name })).catch(() => {});
-    return VM.voice;
-  }
-  // a moving loader: spinning ring, a line that changes every couple of seconds, and a bar (a real percent when known)
-  function loaderEl(title, lines) {
-    const t = h('b', null, title), sub = h('small', { class: 'dim' }, lines[0] || ''), pct = h('span', { class: 'ld-pct' }), fill = h('i'), bar = h('div', { class: 'ld-bar ind' }, fill);
-    const el = h('div', { class: 'ld' }, h('div', { class: 'ld-ring' }), h('div', { class: 'ld-t' }, t, sub, bar), pct);
-    let n = 0, away = 0; const iv = setInterval(() => { if (!el.isConnected) { if (++away > 3) clearInterval(iv); return; } n++; if (lines.length > 1 && !el.dataset.fixed) sub.textContent = lines[n % lines.length]; }, 2200);
-    return { el, set: (ti, su, p) => { if (ti != null) t.textContent = ti; if (su != null) { sub.textContent = su; el.dataset.fixed = su ? '1' : ''; } if (p == null) { bar.classList.add('ind'); fill.style.width = ''; pct.textContent = ''; } else { bar.classList.remove('ind'); fill.style.width = Math.round(p * 100) + '%'; pct.textContent = Math.round(p * 100) + '%'; } } };
-  }
-  function videoMaker(parent, opts) {
-    const idea = CS.idea, beats = idea.beats, title = idea.title;
-    const plan0 = vidPlan(beats, title, 0);
-    if (VM.voice && VM.voice.sig && VM.voice.sig !== plan0.sig) VM.voice = null;
-    let plan = VM.voice ? vidPlan(beats, title, VM.voice.dur) : plan0;
-    const wrap = h('div', { class: 'vm' });
-    setFmt(VM.fmt);
-    const prev = h('canvas', { class: 'vm-prev', width: VW, height: VH, style: 'aspect-ratio:' + VW + '/' + VH + ';width:min(100%,' + (VW > VH ? 440 : 260) + 'px)' });
-    const pv = () => {
+
+  /* ---- post maker ---- */
+  async function c3PostView(id, seed) {
+    let it = { kind: 'post', title: '', body: '', platforms: ['ig', 'fb'], day: null, map: null, style: 'photo', slides: [], tags: [] };
+    if (id) { const r = await api('GET', '/content3'); const f = r.items.find((x) => String(x.id) === String(id)); if (f) it = { ...it, ...f, style: f.map && f.map.slides ? 'photo' : 'text', slides: (f.map && f.map.slides) || [] }; }
+    if (seed) it.title = seed;
+    const idea = h('textarea', { class: 'pn-in', rows: 3, placeholder: 'What is the post about? e.g. "Called 20 groomers today, half had no website. Here is what that costs them."' }); idea.value = it.title;
+    const styleBox = h('div', { class: 'hm-chips' });
+    const drawStyle = () => styleBox.replaceChildren(...[['photo', 'Photo post (slides)'], ['text', 'Text post'], ['thread', 'Thread (X)']].map(([k, l]) => h('button', { type: 'button', class: 'hm-chip' + (it.style === k ? ' on' : ''), onclick: () => { it.style = k; drawStyle(); drawSlides(); } }, l)));
+    const cap = h('textarea', { class: 'pn-in', rows: 9, placeholder: 'Your caption shows up here. Edit it however you want.' }); cap.value = it.body;
+    cap.oninput = () => { it.body = cap.value; };
+    const slidesBox = h('div', { class: 'c3-slides' }), slidesWrap = h('div', null);
+    const drawSlides = () => {
+      slidesWrap.hidden = it.style !== 'photo';
+      if (it.style !== 'photo') return;
+      const n = it.slides.length;
+      slidesBox.replaceChildren(...(n ? it.slides.map((s, i) => { const c = c3Slide(s, i, n); c.className = 'c3-slide'; const inp = h('input', { type: 'text', value: s, oninput: (e) => { it.slides[i] = e.target.value; clearTimeout(it._t); it._t = setTimeout(drawSlides, 500); } }); return h('div', { class: 'c3-sl' }, c, inp); }) : [h('p', { class: 'dim small' }, 'Tap "Write it" and your slides show up here.')]));
+    };
+    slidesWrap.append(h('div', { class: 'hm-head' }, h('h3', null, 'Slides'), h('div', { class: 'row' },
+      h('button', { class: 'btn small', onclick: () => { it.slides.push('New slide'); drawSlides(); } }, '+ Slide'),
+      h('button', { class: 'btn small primary', onclick: () => { if (!it.slides.length) return; it.slides.forEach((s, i) => c3Slide(s, i, it.slides.length).toBlob((b) => c3Save(b, 'slide-' + (i + 1) + '.png'), 'image/png')); toast('Saving ' + it.slides.length + ' images'); } }, 'Download images'))), slidesBox);
+    const write = h('button', { class: 'btn primary', onclick: async () => {
+      const t = idea.value.trim(); if (!t) { toast('Type the idea first', true); idea.focus(); return; }
+      write.disabled = true; write.textContent = 'Writing…';
       try {
-        setFmt(VM.fmt); const c = prev.getContext('2d'), fixS = plan.scenes.find((x) => x.kind === 'fix');
-        const resS = plan.scenes.find((x) => x.kind === 'result');
-        if (VM.style === 'site') drawSite(c, plan, resS ? Math.min(plan.total - 0.3, resS.start + 1.4) : fixS ? Math.min(plan.total - 0.3, fixS.start + 9) : plan.total * 0.8);
-        else drawFlow(c, plan, plan.scenes[Math.min(2, plan.scenes.length - 1)].start + 1.4, {});
-        if (VM.zones) drawZones(c);
-      } catch { /* preview only */ }
-    };
-    pv(); try { document.fonts.load('700 40px Kalam').then(pv); } catch { /* ignore */ }
-    const estSecs = Math.round(plan0.scenes.reduce((a, x) => a + wordCount(x.vo), 0) / 2.4);
-    const chips = (cur, list, set) => h('div', { class: 'stagechips' }, list.map(([val, l]) => h('button', { class: 'schip' + (cur === val ? ' on' : ''), disabled: CS.busy, onclick: () => set(val) }, l)));
-    const lenChips = chips(CS.secs, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']], (n) => { if (n !== CS.secs && opts.onLen) opts.onLen(n); });
-    const restyle = () => { vmClear(false); parent(); };
-    const styleChips = chips(VM.style, [['flow', 'Hand-drawn board'], ['site', 'Website demo']], (v) => { VM.style = v; restyle(); });
-    const fmtChips = chips(VM.fmt, Object.entries(VFMT).map(([k, f]) => [k, f.label]), (v) => { VM.fmt = v; restyle(); });
-    const zoneChips = chips(VM.zones, [[false, 'Hide'], [true, 'Show where the apps cover the video']], (v) => { VM.zones = v; parent(); });
-    const hdChips = chips(VM.hd, [[false, 'Standard 720p (safest)'], [true, 'HD 1080p (can crash phones)']], (v) => { VM.hd = v; parent(); });
-    const spChips = chips(VM.speed, [[0.95, 'Natural'], [0.85, 'Slower'], [1.05, 'Quicker']], (v) => { VM.speed = v; vmClear(true); parent(); });
-    const sfxChips = chips(VM.sfx, [[true, 'Sound effects on'], [false, 'No sound effects']], (val) => { VM.sfx = val; parent(); });
-    const editBox = () => {
-      const ta = h('textarea', { rows: 3, placeholder: 'Tell it what to change. Example: "make the hook hit harder", "talk about winter", "more detail on the cost", "end with a question"' });
-      const go = h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = ta.value.trim(); if (!v) return toast('Type what to change first', true); if (opts.onEdit) opts.onEdit(v); } }, CS.busy ? 'Rewriting…' : 'Fix it');
-      return h('div', { class: 'cs-blk' }, h('b', null, 'Edit video'), h('p', { class: 'dim small' }, 'The bot rewrites the whole video with your change. Then tap Generate video again. The voice is remade for you.'), ta, go);
-    };
-    const upload = h('label', { class: 'btn small' }, VM.voice && VM.voice.manual ? 'Replace voice file' : 'Use my own voice file instead', h('input', { type: 'file', accept: 'audio/*,video/*', hidden: true, onchange: async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      try { const buf = await decodeVoice(f); vmClear(true); VM.voice = { blob: f, buf, dur: buf.duration, name: f.name.slice(0, 28), url: URL.createObjectURL(f), manual: true }; toast('Voice file added'); parent(); } catch { toast('Could not read that audio file', true); }
-    } }));
-    const faceIn = h('input', { type: 'file', accept: 'video/*', hidden: true, onchange: async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      try {
-        const buf = await decodeVoice(f), url = URL.createObjectURL(f);
-        const keep = VM.face; vmClear(true);
-        VM.voice = { blob: f, buf, dur: buf.duration, name: 'Audio from your video', url, manual: true };
-        VM.face = { blob: f, url, dur: buf.duration, pos: keep ? keep.pos : 'tr', caps: keep ? keep.caps : false, vc: true, auto: keep ? keep.auto !== false : true };
-        if (VM.face.auto) {
-          L.el.hidden = false; L.set('Editing your recording', '', null);
-          try {
-            const r = await autoEdit(buf, (m) => L.set('Editing your recording', m, null));
-            VM.face.edit = r.edit; VM.face.dur = r.edit.dur;
-            VM.voice = { blob: f, buf: r.edited, dur: r.edited.duration, name: 'Edited audio from your video', url, manual: true };
-          } catch (x) { console.error(x); toast('Could not auto-edit that one. Using it as it is.', true); }
-          L.el.hidden = true;
-          const ed = VM.face.edit; toast(ed ? 'Edited: ' + ed.cut.toFixed(1) + ' sec of dead air cut' + (ed.words ? ', captions from your voice ready' : ', captions need your script (could not hear it)') : 'Video added');
-        } else toast('Video added. It will start full screen, then shrink to the corner.');
-        parent();
-      } catch (x) { toast('Could not read that video. Try recording it again on your phone.', true); }
-    } });
-    const faceBox = h('div', { class: 'cs-blk' }, h('b', null, 'Your camera video'),
-      h('p', { class: 'dim small' }, VM.face ? 'Added (' + VM.face.dur.toFixed(1) + ' sec). You start full screen for the first few seconds, then shrink to a circle in the corner while the board plays. Your own voice is used.' : 'Record yourself talking (computer or phone), then add it here. It cuts the dead air, captions your real words, writes the post caption, and puts you over the board: full screen for the hook, then a circle in the corner.'),
-      h('div', { class: 'row wrap' }, h('label', { class: 'btn small primary' }, VM.face ? 'Replace my video' : 'Add my camera video', faceIn),
-        VM.face ? h('button', { class: 'btn small', onclick: () => { VM.face = null; vmClear(true); toast('Removed'); parent(); } }, 'Remove') : null),
-      VM.face ? [h('p', { class: 'dim small' }, 'Where to put you'), chips(VM.face.pos, [['tr', 'Top right'], ['bl', 'Lower left']], (v) => { VM.face.pos = v; parent(); }),
-        h('p', { class: 'dim small' }, 'Captions'), (() => {
-          const ed = VM.face.edit, hasV = !!(ed && ed.words), cur = hasV && VM.face.vc !== false ? 'voice' : VM.face.caps ? 'script' : 'off';
-          return chips(cur, [...(hasV ? [['voice', 'From your voice (matches what you said)']] : []), ['script', 'Script captions (only if word for word)'], ['off', 'Off']], (v) => { VM.face.vc = v === 'voice'; VM.face.caps = v === 'script'; vmClear(false); parent(); });
-        })(),
-        VM.face.edit ? h('p', { class: 'dim small' }, 'Auto-edit: cut ' + VM.face.edit.cut.toFixed(1) + ' sec of dead air' + (VM.face.edit.words ? ', ' + VM.face.edit.words.length + ' words captioned from your voice.' : '. ' + (VM.face.edit.err || 'Could not hear it, so use script captions or none.'))) : null,
-        VM.face.edit && VM.face.edit.copy ? h('div', { class: 'cs-blk' }, h('b', null, 'Post caption'), h('p', { style: 'white-space:pre-wrap' }, VM.face.edit.copy.caption + '\n\n' + VM.face.edit.copy.hashtags.join(' ')),
-          h('button', { class: 'btn small', onclick: async () => { try { await navigator.clipboard.writeText(VM.face.edit.copy.caption + '\n\n' + VM.face.edit.copy.hashtags.join(' ')); toast('Caption copied'); } catch { toast('Could not copy. Press and hold the text to copy it.', true); } } }, 'Copy caption and hashtags')) : null,
-        h('p', { class: 'dim small' }, 'Auto-edit for the next recording you add'), chips(VM.face.auto !== false, [[true, 'On (cut dead air, caption, write post)'], [false, 'Off']], (v) => { VM.face.auto = v; parent(); })] : null);
-    const more = h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, 'More options'), h('small', { class: 'dim' }, 'quality, voice speed, your own voice file')),
-      h('p', { class: 'dim small' }, 'Video quality'), hdChips, h('p', { class: 'dim small' }, 'Voice speed'), spChips, h('p', { class: 'dim small' }, 'Sound'), sfxChips,
-      VM.voice ? h('div', { class: 'cs-blk' }, h('b', null, 'Voice: ' + VM.voice.name + ' (' + VM.voice.dur.toFixed(1) + ' sec)'), h('audio', { controls: true, src: VM.voice.url, style: 'width:100%' }), h('button', { class: 'btn small', onclick: () => { vmClear(true); parent(); } }, 'Remake the voice')) : null, upload);
-    const L = loaderEl('Making your video', ['Keep this screen open and stay on this page', 'Drawing every scene…', 'Syncing the captions to the voice…', 'Mixing the sound effects…']); L.el.hidden = true;
-    const genBtn = h('button', { class: 'btn primary big', disabled: CS.busy, onclick: async () => {
-      if (VM.busy) return; VM.busy = true; vmClear(false); genBtn.disabled = true;
-      try {
-        if (!VM.voice) { L.el.hidden = false; L.set('Making the voice', 'Turning your script into a real voice…', null); await makeVoice(plan0); plan = vidPlan(beats, title, VM.voice.dur); }
-        L.el.hidden = false; L.set('Recording your video', '', 0); L.el.dataset.fixed = '';
-        const r = await recordVideo(plan, VM.voice ? VM.voice.buf : null, VM.sfx, (p) => { L.set(null, null, p); }, VM.hd);
-        if (!r.blob.size) throw new Error('The video came out empty. Try again.');
-        VM.result = { blob: r.blob, url: URL.createObjectURL(r.blob), ext: r.ext, type: r.type, secs: Math.round(plan.total), w: VFMT[VM.fmt].w, h: VFMT[VM.fmt].h };
-        r.blob.arrayBuffer().then((ab) => idb.put('result', { ab, type: r.type, ext: r.ext, secs: Math.round(plan.total), w: VFMT[VM.fmt].w, h: VFMT[VM.fmt].h, sig: plan.sig })).catch(() => {});
-        toast('Video ready'); VM.busy = false; parent();
-      } catch (e) { VM.busy = false; fail(e); genBtn.disabled = false; L.el.hidden = true; }
-    } }, VM.result ? 'Generate again' : 'Generate video');
-    const res = VM.result ? h('div', { class: 'cs-blk' }, h('video', { class: 'vm-video', src: VM.result.url, controls: true, playsinline: true, loop: true, style: 'aspect-ratio:' + VM.result.w + '/' + VM.result.h + ';width:min(100%,' + (VM.result.w > VM.result.h ? 460 : 300) + 'px)' }),
-      h('p', { class: 'dim small' }, VM.result.secs + ' seconds · ' + (VM.result.blob.size / 1048576).toFixed(1) + ' MB · ' + VM.result.ext.toUpperCase()),
-      h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: async () => {
-        const file = new File([VM.result.blob], 'reekon-video-' + new Date().toISOString().slice(0, 10) + '.' + VM.result.ext, { type: VM.result.type });
-        try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
-        const a = h('a', { href: VM.result.url, download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the video');
-      } }, 'Save or share'), h('a', { class: 'btn', href: VM.result.url, download: 'reekon-video.' + VM.result.ext }, 'Download'))) : null;
-    wrap.append(...[prev, faceBox, h('p', { class: 'dim small' }, 'Look'), styleChips, h('p', { class: 'dim small' }, 'Size: ' + VFMT[VM.fmt].note), fmtChips, h('p', { class: 'dim small' }, 'Captions stay inside the safe area for each size. Check it on the preview:'), zoneChips, h('p', { class: 'dim small' }, 'Length. About ' + (VM.voice ? Math.round(VM.voice.dur) : estSecs) + ' seconds right now.'), lenChips, genBtn, L.el, res, VM.result ? editBox() : null, more].filter(Boolean));
-    return wrap;
+        const r = await api('POST', '/content3/write', { idea: t, style: it.style });
+        it.title = r.hook || t; it.body = r.caption + (r.hashtags && r.hashtags.length ? '\n\n' + r.hashtags.join(' ') : ''); cap.value = it.body;
+        it.slides = (r.slides && r.slides.length ? [r.hook].concat(r.slides) : [r.hook]).filter(Boolean).slice(0, 7); drawSlides();
+        if (!r.ai) toast('The AI is busy, so I made a simple version. Edit it to fit.');
+      } catch (e) { fail(e); }
+      write.disabled = false; write.textContent = 'Write it';
+    } }, 'Write it');
+    idea.oninput = () => { if (!it.id) try { localStorage.setItem(C3_DRAFT, idea.value); } catch { /* ok */ } };
+    if (!it.title && !id) try { idea.value = localStorage.getItem(C3_DRAFT) || ''; } catch { /* ok */ }
+    drawStyle(); drawSlides();
+    const keep = () => { it.title = idea.value.trim() || it.title; it.map = it.style === 'photo' && it.slides.length ? { title: it.title, nodes: [], slides: it.slides } : null; };
+    const acts = c3Actions(it); acts.querySelectorAll('button').forEach((b) => b.addEventListener('click', keep, true));
+    shell('content', [crumbTo('#/content', 'Content'),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Post'), h('h1', null, id ? 'Edit post' : 'Write a post'))),
+      h('section', { class: 'sp-card' }, h('h3', null, '1. The idea'), idea, styleBox, h('div', { class: 'row', style: 'margin-top:8px' }, write)),
+      h('section', { class: 'sp-card' }, slidesWrap, h('div', { class: 'hm-head', style: 'margin-top:8px' }, h('h3', null, '2. Caption'), h('button', { class: 'btn small', onclick: () => c3Copy(cap.value) }, 'Copy caption')), cap),
+      h('section', { class: 'sp-card' }, h('h3', null, '3. Plan and post'), c3Meta(it), acts)]);
   }
 
-  function contentStart(r) {
-    const root = h('div', { class: 'cs' });
-    const tile = (title, sub, ic, fn) => h('button', { class: 'hub-tile', type: 'button', onclick: fn }, ic ? h('span', { class: 'hub-ic' }, icon(ic)) : null, h('b', null, title), sub ? h('small', null, sub) : null);
-    const go = (step) => { CS.step = step; CS.posted = {}; if (step === 'fmt') vmClear(true); draw(); window.scrollTo(0, 0); };
-    const ideaKey = () => ['i', CS.ideaN, CS.fmt, CS.plat].join('|');
-    const field = (rows, gen) => {
-      const k = ideaKey(), ta = h('textarea', { class: 'ct-text', rows });
-      ta.value = CS.edits[k] != null ? CS.edits[k] : gen;
-      ta.oninput = () => { CS.edits[k] = ta.value; csSave(); };
-      return ta;
+  /* ---- web map maker ---- */
+  async function c3MapView(id, seed) {
+    let it = { kind: 'map', title: '', body: '', platforms: ['tt', 'ig'], day: null, map: null };
+    if (id) { const r = await api('GET', '/content3'); const f = r.items.find((x) => String(x.id) === String(id)); if (f) it = { ...it, ...f }; }
+    const idea = h('textarea', { class: 'pn-in', rows: 4, placeholder: 'Describe the problem or idea. e.g. "A dog groomer with no website. Customers search Google, find the groomer down the street, and book there instead."' }); idea.value = seed || it.title || '';
+    const cv = h('canvas', { class: 'c3-map', width: 1080, height: 1920 }), ctx = cv.getContext('2d');
+    const nodesBox = h('div', { class: 'c3-nodes' }), out = h('div', { class: 'row c3-out' });
+    let L = null, anim = null;
+    const render = () => { if (!it.map || !it.map.nodes.length) { c3Bg(ctx, 1080, 1920); ctx.font = '700 44px ' + C3F; ctx.fillStyle = '#a2a8b8'; ctx.fillText('Your web map shows up here', 70, 960); return; } L = c3Layout(it.map); c3DrawMap(ctx, L, 0, { still: true, handle: '@reekonsystems' }); };
+    const drawNodes = () => {
+      if (!it.map) { nodesBox.replaceChildren(); return; }
+      nodesBox.replaceChildren(h('label', null, 'Title'), h('input', { type: 'text', value: it.map.title || '', oninput: (e) => { it.map.title = e.target.value; render(); } }),
+        ...it.map.nodes.map((n, i) => h('div', { class: 'c3-node' },
+          h('select', { onchange: (e) => { n.kind = e.target.value; render(); } }, Object.entries(C3K).map(([k, [, l]]) => { const o = h('option', { value: k }, l); if (k === n.kind) o.selected = true; return o; })),
+          h('input', { type: 'text', value: n.label, oninput: (e) => { n.label = e.target.value; render(); } }),
+          i ? h('button', { type: 'button', class: 'qi-skip', 'aria-label': 'Remove', onclick: () => { const gone = n.id; it.map.nodes.splice(i, 1); it.map.nodes.forEach((x) => { if (x.parent === gone) x.parent = n.parent; }); drawNodes(); render(); } }, '✕') : null)),
+        h('button', { type: 'button', class: 'btn small', onclick: () => { const root = it.map.nodes.find((x) => x.parent == null); it.map.nodes.push({ id: 'u' + Date.now().toString(36), label: 'New box', note: '', kind: 'step', parent: root ? root.id : null }); drawNodes(); render(); } }, '+ Add a box'));
     };
-    const platChips = () => h('div', { class: 'stagechips' }, CPLAT.filter(([k]) => appPlats(CS.app).includes(k)).map(([k, l]) => {
-      const n = r.today_posts.filter((p) => p.platform === k).length;
-      return h('button', { class: 'schip' + (CS.plat === k ? ' on' : ''), onclick: () => { CS.plat = k; CS.posted = {}; draw(); } }, l + (n ? ' ✓' : ''));
-    }));
-    const topicName = () => (CS.idea && CS.idea.byPlat ? (GEN_TOPICS[CS.topic] || {}).name : CS.business) || 'custom idea';
-    const captionFor = () => {
-      const I = CS.idea; if (!I) return '';
-      if (I.byPlat) return I.byPlat(CS.plat);
-      if (CS.plat === 'x') return I.short || '';
-      return (I.post || I.caption || '') + '\n\n' + (I.tags || tagsFor(CS.plat, true));
-    };
-    const markRow = (getText) => {
-      const id = CS.posted[CS.plat];
-      const b = h('button', { class: 'btn ok' + (id ? ' on' : ''), onclick: async () => {
-        b.disabled = true;
-        try {
-          if (CS.posted[CS.plat]) {
-            await api('DELETE', '/content/posted/' + CS.posted[CS.plat]);
-            r.today_posts = r.today_posts.filter((p) => p.id !== CS.posted[CS.plat]); delete CS.posted[CS.plat];
-            toast('Removed from your calendar and tracker');
-          } else {
-            const x = await api('POST', '/content/posted', { platform: CS.plat, format: CS.fmt, topic: topicName(), type: CS.fmt });
-            CS.posted[CS.plat] = x.id; r.today_posts.unshift({ id: x.id, platform: CS.plat, format: CS.fmt });
-            toast('Logged. It is on your calendar and your tracker.');
-          }
-          draw();
-        } catch (e) { fail(e); b.disabled = false; }
-      } }, id ? 'Posted ✓ (tap to undo)' : 'Mark as posted');
-      return h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(getText(), 'Copied. Paste it into ' + PN[CS.plat]) }, 'Copy'), b);
-    };
-    const doneBanner = () => (Object.keys(CS.posted).length ? h('div', { class: 'cs-done' }, h('b', null, '✓ Logged'), h('span', null, 'Added to your calendar as "Posted" and counted in your tracker.'),
-      h('div', { class: 'row wrap' }, h('a', { class: 'btn small', href: '#/calendar' }, 'See calendar'), h('button', { class: 'btn small primary', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Make another'))) : null);
-
-    const applyIdea = (res) => {
-      CS.ideaN += 1; CS.idea = Object.assign({ kind: CS.fmt }, res); CS.topic = res.tid || 'missed'; CS.edits = {}; CS.posted = {}; CS.cardLines = null;
-      if (CS.fmt === 'video') vmClear(true);
-    };
-    const quickIdea = () => {
-      const ids = Object.keys(FLOW), tid = ids[(r.day_n + CS.seed) % ids.length];
-      const res = { tid, byPlat: (pl) => genPost(tid, 'story', CS.seed, pl, true) };
-      if (CS.fmt === 'video') { res.title = FLOW[tid].title; res.beats = beatsFromTopic(tid, CS.seed, true, CS.secs); }
-      if (CS.fmt === 'face') { const f = genFace(tid, CS.secs, CS.seed, true); res.script = f.text; res.plainScript = f.plainText; }
-      if (CS.fmt === 'post') res.post = genPost(tid, 'story', CS.seed, 'ig', true);
-      applyIdea(res); go('edit');
-    };
-    const sendToBot = async (text) => {
-      if (CS.busy || !text.trim()) return;
-      CS.chat.push({ role: 'user', text: text.trim() }); CS.busy = true; draw();
-      try {
-        const cur = CS.idea && CS.idea.kind === CS.fmt && !CS.idea.byPlat ? Object.fromEntries(Object.entries(CS.idea).filter(([k]) => !['kind', 'byPlat'].includes(k))) : undefined;
-        const x = await api('POST', '/content/bot', { kind: CS.fmt, messages: CS.chat, current: cur, business: CS.business, secs: CS.secs, offers: CS.offers });
-        CS.chat.push({ role: 'bot', text: x.reply });
-        if (x.business) { CS.business = x.business; try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } }
-        if (x.result && CS.step === 'edit') toast('Rewritten. Tap Generate video again.');
-        if (x.result) { if (x.result.business) { CS.business = x.result.business; try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } } applyIdea(x.result); }
-      } catch (e) { CS.chat.pop(); fail(e); } finally { CS.busy = false; draw(); const lg = root.querySelector('.bot-log'); if (lg) lg.scrollTop = lg.scrollHeight; }
-    };
-    const ideaPreview = () => {
-      const I = CS.idea; if (!I || I.kind !== CS.fmt) return null;
-      const lines = CS.fmt === 'video' ? [(I.beats[0] || {}).say, (I.beats[1] || {}).say, I.beats.length + ' scenes · about ' + Math.round(I.beats.reduce((a, x) => a + wordCount(x.say), 0) / 2.4) + ' seconds'].filter(Boolean) : CS.fmt === 'face' ? [(I.script || '').slice(0, 220) + '…'] : [(I.post || '').slice(0, 220) + '…'];
-      return h('div', { class: 'cs-blk bot-idea' }, h('b', null, 'Your idea is ready'), lines.map((l) => h('p', { class: 'dim small' }, l)),
-        h('button', { class: 'btn primary big', onclick: () => go('edit') }, CS.fmt === 'video' ? 'Make the video' : CS.fmt === 'face' ? 'Get my script' : 'Get my post'),
-        h('p', { class: 'dim small' }, 'Want it different? Keep talking to the bot below.'));
-    };
-    const chatStep = () => {
-      if (!CS.chat.length) CS.chat.push({ role: 'bot', text: 'What do you want your ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' to be about? The business is set to ' + (CS.business || 'junk removal') + ' (change it above any time). Pick the offers you want in it, then give me a rough idea or tap Surprise me.' });
-      const biz = h('input', { class: 'ct-text', type: 'text', placeholder: 'Type of business, like backyard contractor', value: CS.business, style: 'min-height:0;padding:10px 12px' });
-      biz.oninput = () => { CS.business = biz.value.trim(); try { localStorage.setItem('rs_biz2', CS.business); } catch { /* ignore */ } };
-      const bizRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'Making content for which kind of business?'), biz);
-      const offerRow = h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'What should it sell? Tap every offer you want in it (or none and the bot picks).'),
-        h('div', { class: 'stagechips' }, [...OFFERS.map(([k, l]) => h('button', { class: 'schip' + (CS.offers.includes(k) ? ' on' : ''), disabled: CS.busy, onclick: () => { CS.offers = CS.offers.includes(k) ? CS.offers.filter((x) => x !== k) : CS.offers.concat(k); if (CS.offers.length >= 5 && CS.fmt === 'video') CS.secs = 90; draw(); } }, l)),
-          h('button', { class: 'schip', disabled: CS.busy, onclick: () => { CS.offers = CS.offers.length === OFFERS.length ? [] : OFFERS.map((o) => o[0]); if (CS.offers.length >= 5 && CS.fmt === 'video') CS.secs = 90; draw(); } }, CS.offers.length === OFFERS.length ? 'Clear all' : 'All offers')]),
-        CS.offers.length ? h('button', { class: 'btn primary', style: 'margin-top:8px', disabled: CS.busy, onclick: () => sendToBot('Make a ' + (CS.fmt === 'video' ? 'video' : CS.fmt === 'face' ? 'on-camera script' : 'post') + ' for ' + (CS.business || 'junk removal') + ' owners that covers: ' + CS.offers.map((k) => OFFERS.find((o) => o[0] === k)[1]).join(', ') + '.') }, 'Make it with ' + (CS.offers.length === 1 ? 'this offer' : 'these ' + CS.offers.length + ' offers')) : null,
-        CS.offers.length >= 5 && CS.fmt === 'video' ? h('p', { class: 'dim small' }, 'That is a lot of offers, so the video is set to 90 seconds to give each one a beat.') : null);
-      const input = h('textarea', { class: 'ct-text', rows: 2, placeholder: 'Tell the bot your idea…' });
-      input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; sendToBot(v); } };
-      const quick = ['Surprise me', 'A pain these owners hate', 'A call I had today'].map((t) => h('button', { class: 'schip', disabled: CS.busy, onclick: () => sendToBot(t === 'A call I had today' ? 'I want to talk about something that happened on a call today' : t === 'A pain these owners hate' ? 'Pick a pain that ' + (CS.business || 'small business') + ' owners hate the most' : t) }, t));
-      return h('div', null,
-        bizRow, offerRow, CS.fmt !== 'post' ? h('div', { class: 'cs-blk' }, h('small', { class: 'dim' }, 'How long?'), h('div', { class: 'stagechips' }, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']].map(([n, l]) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), onclick: () => { CS.secs = n; draw(); } }, l)))) : null, ideaPreview(),
-        h('div', { class: 'bot-log' }, CS.chat.map((m) => h('div', { class: 'bot-msg ' + m.role }, m.text)), CS.busy ? loaderEl('Writing it now', CS.offers.length ? ['Reading the offers you picked…', 'Finding the pain owners feel most…', 'Writing the hook…', 'Putting every offer in…', 'Almost there…'] : ['Reading your idea…', 'Finding the pain owners feel most…', 'Writing the hook…', 'Building the scenes…', 'Almost there…']).el : null),
-        h('div', { class: 'stagechips' }, quick), input,
-        h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', disabled: CS.busy, onclick: () => { const v = input.value; input.value = ''; sendToBot(v); } }, 'Send'), h('button', { class: 'btn small', disabled: CS.busy, onclick: () => sendToBot('Surprise me with a fresh idea for ' + (CS.business || 'junk removal') + ' owners') }, 'Surprise me now')));
-    };
-    const CARD_FMT = { ig: '4x5', fb: '4x5', x: '16x9', li: '1x1', tt: '9x16', yt: '9x16' };
-    const cardTextFor = (I) => {
-      if (CS.cardLines != null) return CS.cardLines;
-      if (I.card && I.card.length) return I.card.join('\n');
-      return String(I.post || '').replace(/#\S+/g, '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x && x.length < 90).slice(0, 4).join('\n');
-    };
-    const cardBlock = (I) => {
-      const fid = CS.cardFmt || CARD_FMT[CS.plat] || '4x5', F = VFMT[fid];
-      const cv = h('canvas', { class: 'card-prev', width: F.w, height: F.h, style: 'aspect-ratio:' + F.w + '/' + F.h + ';width:min(100%,' + (F.w > F.h ? 460 : 300) + 'px)' });
-      const ta = h('textarea', { class: 'ct-text', rows: 5 }); ta.value = cardTextFor(I);
-      const linesOf = () => ta.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 6);
-      const paint = () => { try { drawCard(cv.getContext('2d'), F.w, F.h, linesOf(), 1); } catch { /* preview only */ } };
-      ta.oninput = () => { CS.cardLines = ta.value; paint(); csSave(); };
-      paint(); try { document.fonts.load('700 40px Kalam').then(paint); document.fonts.load('800 50px "Inter Tight"').then(paint); } catch { /* ignore */ }
-      const save = h('button', { class: 'btn primary', onclick: async () => {
-        const big = document.createElement('canvas'); big.width = Math.round(F.w * 1.5); big.height = Math.round(F.h * 1.5); drawCard(big.getContext('2d'), F.w, F.h, linesOf(), 1.5);
-        const blob = await new Promise((res) => big.toBlob(res, 'image/png')); if (!blob) return toast('Could not make the picture', true);
-        const file = new File([blob], 'reekon-post-' + fid + '.png', { type: 'image/png' });
-        try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
-        const a = h('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.append(a); a.click(); a.remove(); toast('Saving the picture');
-      } }, 'Save or share picture');
-      return h('div', { class: 'cs-blk' }, h('b', null, 'Picture for this post'), h('p', { class: 'dim small' }, 'A card with the best lines, ready to post with the text. One line per row. The first line is the big hook.'),
-        h('div', { class: 'stagechips' }, Object.entries(VFMT).map(([k, f]) => h('button', { class: 'schip' + (fid === k ? ' on' : ''), onclick: () => { CS.cardFmt = k; draw(); } }, f.label))),
-        h('p', { class: 'dim small' }, VFMT[fid].note), cv, ta, save);
-    };
-    const editStep = () => {
-      const I = CS.idea, parts = [];
-      const again = h('button', { class: 'btn small', onclick: () => go('idea') }, 'Change the idea with the bot');
-      if (!I) { parts.push(h('p', { class: 'dim' }, 'Start with an idea first.'), again); }
-      else if (CS.fmt === 'video') {
-        parts.push(CS.busy ? h('p', { class: 'dim' }, 'Rewriting your video…') : null, videoMaker(draw, { onEdit: (txt) => sendToBot(txt), onLen: (n) => { CS.secs = n; sendToBot('Rewrite this same video to about ' + n + ' seconds. Keep the same idea and the same business.'); } }), h('h3', { class: 'trk-h' }, 'Caption'), h('p', { class: 'dim small' }, 'Pick the account you are posting to. Each one gets its own caption.'), platChips(), field(9, captionFor()), markRow(() => (CS.edits[ideaKey()] != null ? CS.edits[ideaKey()] : captionFor())), again);
-      } else if (CS.fmt === 'face') {
-        const plainScript = I.plainScript || (I.script || '').replace(/\[[^\]]*\]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-        const script = h('textarea', { class: 'ct-text', rows: 14 }); script.value = I.script || ''; script.readOnly = true;
-        parts.push(h('p', { class: 'dim small' }, 'Length'), h('div', { class: 'stagechips' }, [[30, '30 sec'], [60, '1 minute'], [90, '90 sec']].map(([n, l]) => h('button', { class: 'schip' + (CS.secs === n ? ' on' : ''), disabled: CS.busy, onclick: () => { if (CS.secs !== n) { CS.secs = n; sendToBot('Rewrite this same script to about ' + n + ' seconds. Keep the same idea and the same business.'); } } }, l))), CS.busy ? h('p', { class: 'dim' }, 'Rewriting…') : null, h('p', { class: 'dim small' }, 'Say this to the camera. The brackets are cues for you, not words to say.'), script,
-          h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => copyText(I.script, 'Script with cues copied') }, 'Copy with cues'), h('button', { class: 'btn', onclick: () => copyText(plainScript, 'Plain script copied') }, 'Copy plain script'), again),
-          h('h3', { class: 'trk-h' }, 'Caption'), h('p', { class: 'dim small' }, 'After you film it, pick the account you posted to.'), platChips(), field(8, captionFor()), markRow(() => (CS.edits[ideaKey()] != null ? CS.edits[ideaKey()] : captionFor())));
-      } else {
-        const ta = field(12, captionFor()), count = h('small', { class: 'dim' });
-        const upd = () => { count.textContent = CS.plat === 'x' ? ta.value.length + ' / 280' : ta.value.length + ' characters'; count.style.color = CS.plat === 'x' && ta.value.length > 280 ? 'var(--bad)' : ''; };
-        const oi = ta.oninput; ta.oninput = () => { oi(); upd(); }; upd();
-        parts.push(h('p', { class: 'dim small' }, 'Platform'), platChips(), ta, count, markRow(() => ta.value), cardBlock(I), again);
-      }
-      return h('div', { class: 'cs-edit' }, doneBanner(), parts);
-    };
-
-    function draw() {
-      const order = ['app', 'fmt', 'idea', 'edit'], idx = Math.max(0, order.indexOf(CS.step)), labels = { app: 'App', fmt: 'Type', idea: 'Idea', edit: 'Make' };
-      const bar = h('div', { class: 'cs-steps' }, order.map((k, i) => h('span', { class: 'cs-step' + (i === idx ? ' on' : i < idx ? ' past' : '') }, h('i', null, String(i + 1)), labels[k])));
-      let title, sub, body;
-      if (CS.step === 'app') {
-        title = 'Where are you posting?'; sub = 'Pick the app. The caption, length and hashtags are made for it.';
-        body = h('div', { class: 'hub-grid one' }, CS_APPS.map(([k, t, sb, ic, pl]) => tile(t, sb, ic, () => { CS.app = k; if (!pl.includes(CS.plat)) CS.plat = pl[0]; CS.posted = {}; go('fmt'); })));
-      } else if (CS.step === 'fmt') {
-        title = 'What are you making?'; sub = 'Pick one. You can make another right after.';
-        body = h('div', { class: 'hub-grid one' }, CS_FMT.map(([k, t, s, ic]) => tile(t, s, ic, () => { if (CS.fmt !== k) { CS.chat = []; CS.idea = null; } CS.fmt = k; CS.edits = {}; go('idea'); })));
-      } else if (CS.step === 'idea') {
-        title = 'Let’s come up with the idea'; sub = 'Talk to the bot. It writes the whole thing for you.';
-        body = chatStep();
-      } else { title = CS.fmt === 'face' ? 'Film myself' : FMT_LABEL[CS.fmt]; sub = CS.idea ? (CS.idea.byPlat ? (GEN_TOPICS[CS.topic] || {}).name : CS.business) || '' : ''; body = editStep(); }
-      const nav = h('div', { class: 'row wrap cs-nav' }, idx > 0 ? h('button', { class: 'btn small', onclick: () => go(order[idx - 1]) }, 'Back') : null, h('button', { class: 'btn small', onclick: () => { csReset(); draw(); window.scrollTo(0, 0); } }, 'Start over'));
-      csSave();
-      root.replaceChildren(bar, h('h2', { class: 'cs-h' }, title), sub ? h('p', { class: 'sub' }, sub) : null, body, nav);
-    }
-    draw();
-    if (VM.restore) VM.restore.then(() => { VM.restore = null; if (CS.step === 'edit' && CS.fmt === 'video') draw(); });
-    return root;
+    const play = () => { if (!L) return; cancelAnimationFrame(anim); const t0 = performance.now(), len = c3MapLen(L); const step = () => { const t = (performance.now() - t0) / 1000; c3DrawMap(ctx, L, Math.min(t, len), { handle: '@reekonsystems' }); if (t < len) anim = requestAnimationFrame(step); }; anim = requestAnimationFrame(step); };
+    const make = h('button', { class: 'btn primary', onclick: async () => {
+      const t = idea.value.trim(); if (!t) { toast('Describe it first', true); idea.focus(); return; }
+      make.disabled = true; make.textContent = 'Breaking it down…';
+      try { const r = await api('POST', '/content3/map', { idea: t }); it.map = { title: r.title, nodes: r.nodes }; it.title = r.title; drawNodes(); render(); play(); if (!r.ai) toast('The AI is busy, so I split your words into boxes. Edit them below.'); }
+      catch (e) { fail(e); }
+      make.disabled = false; make.textContent = it.map ? 'Redo it' : 'Break it down';
+    } }, it.map ? 'Redo it' : 'Break it down');
+    const vidBtn = h('button', { class: 'btn primary', onclick: async () => {
+      if (!L) { toast('Make the map first', true); return; }
+      vidBtn.disabled = true; cancelAnimationFrame(anim);
+      try { const v = await c3RecordMap(L, (p) => { vidBtn.textContent = 'Recording ' + Math.round(p * 100) + '%'; }); c3Save(v.blob, 'web-map.' + v.ext); toast('Video saved. Record yourself over it, or post it with your caption.'); }
+      catch (e) { fail(e); }
+      vidBtn.disabled = false; vidBtn.textContent = 'Download video';
+    } }, 'Download video');
+    out.append(h('button', { class: 'btn', onclick: play }, '▶ Play'), vidBtn, h('button', { class: 'btn', onclick: () => { if (!L) return; render(); cv.toBlob((b) => c3Save(b, 'web-map.png'), 'image/png'); } }, 'Download image'));
+    const cap = h('textarea', { class: 'pn-in', rows: 4, placeholder: 'Caption for the post (optional)' }); cap.value = it.body; cap.oninput = () => { it.body = cap.value; };
+    drawNodes(); render();
+    const keep = () => { it.title = (it.map && it.map.title) || idea.value.trim(); };
+    const acts = c3Actions(it); acts.querySelectorAll('button').forEach((b) => b.addEventListener('click', keep, true));
+    shell('content', [crumbTo('#/content', 'Content'),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Web map'), h('h1', null, 'Web map video'), h('p', { class: 'sub' }, 'Describe a problem or idea. It breaks it into a map that builds itself box by box. Record yourself over it, no voiceover needed.'))),
+      h('section', { class: 'sp-card' }, h('h3', null, '1. Describe it'), idea, h('div', { class: 'row', style: 'margin-top:8px' }, make)),
+      h('section', { class: 'sp-card c3-mapwrap' }, h('div', { class: 'c3-mapbox' }, cv), out),
+      h('section', { class: 'sp-card' }, h('h3', null, '2. Edit the boxes'), nodesBox),
+      h('section', { class: 'sp-card' }, h('h3', null, '3. Plan and post'), cap, c3Meta(it), acts)]);
   }
 
-  function postedLog(r) {
-    const byDay = {};
-    r.recent.forEach((p) => { (byDay[p.day] = byDay[p.day] || []).push(p); });
-    const days = Object.keys(byDay).sort().reverse();
-    const row = (p) => h('div', { class: 'log-row' },
-      h('div', { style: 'min-width:0;flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, (p.topic || '') + (p.topic ? ' · ' : '') + timeOf(p.created_at))),
-      h('button', { class: 'btn small', onclick: async () => { try { await api('DELETE', '/content/posted/' + p.id); toast('Removed'); viewContent('log'); } catch (e) { fail(e); } } }, 'Undo'));
-    return days.length ? days.map((d) => h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, new Date(d + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' · ' + byDay[d].length + ' posted'), byDay[d].map(row)))
-      : h('div', { class: 'card empty' }, h('b', null, 'Nothing logged yet'), 'Tap Start posting, make a post, and mark it as posted. It shows up here and on your calendar.');
-  }
-
-  function siteAlertsCard() {
-    const stats = h('div', { class: 'ct-stats an-top' }), msg = h('p', { class: 'dim small' }, 'Checking...');
-    const test = h('button', { class: 'btn primary', onclick: async () => { test.disabled = true; try { await api('POST', '/notify/test'); toast('Sent. Check your Discord.'); } catch (e) { fail(e); } finally { test.disabled = false; } } }, 'Send a test alert');
-    api('GET', '/notify/status').then((x) => {
-      [[x.visitors, 'visitors, 7 days'], [x.taps, 'tapped the audit button'], [x.requests, 'audit requests']].forEach(([v, l]) => stats.append(h('div', null, h('b', null, String(v)), h('small', null, l))));
-      msg.textContent = x.discord ? 'Discord alerts are on. You get a message the moment someone asks for an audit, and a summary every morning.'
-        : x.set ? 'The Discord link looks wrong. In Cloudflare, re-paste the DISCORD_WEBHOOK secret (it starts with https://discord.com/api/webhooks/).'
-        : 'Discord alerts are off. In Discord make a webhook for a private channel, then add its link in Cloudflare as a secret named DISCORD_WEBHOOK.';
-    }).catch(() => { msg.textContent = 'Could not load the alert status.'; });
-    return h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Website and alerts'), stats, msg, test);
-  }
-  function botRulesCard() {
-    const ta = h('textarea', { class: 'ct-text', rows: 6, placeholder: 'Example: Always write for backyard contractor owners. Never use the word "leverage". Keep hooks under 10 words.' });
-    api('GET', '/content/bot-rules').then((x) => { ta.value = x.rules || ''; }).catch(() => {});
-    const save = h('button', { class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('PUT', '/content/bot-rules', { rules: ta.value }); toast('Saved. The bot follows these now.'); } catch (e) { fail(e); } finally { save.disabled = false; } } }, 'Save');
-    return h('details', { class: 'card ct-det', style: 'margin-top:16px' }, h('summary', null, h('b', null, 'Bot instructions'), h('small', { class: 'dim' }, 'your own rules for the idea bot')),
-      h('p', { class: 'dim small' }, 'The bot already has a rulebook. Anything you type here wins over it. Write it like you would tell a person.'), ta, save);
-  }
-  function contentAnalytics(r) {
-    const A = r.analytics, mx = Math.max(1, ...A.daily.map((d) => d.n)), pmx = Math.max(1, ...A.by_platform.map((p) => p.n)), nm = (k) => PN[k] || k;
-    const bar = (n, m) => h('i', { class: 'an-bar' }, h('b', { style: 'width:' + Math.round((n / m) * 100) + '%' }));
-    return h('section', { class: 'an' },
-      h('h3', { class: 'trk-h' }, 'Analytics'),
-      h('div', { class: 'ct-stats an-top' }, [[A.total, 'total posts'], [A.per_day, 'avg per day'], [A.best, 'best day']].map(([v, l]) => h('div', null, h('b', null, String(v)), h('small', null, l)))),
-      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Last 14 days'),
-        h('div', { class: 'an-days' }, A.daily.map((d) => h('div', { class: 'an-day' }, h('span', { class: 'an-col' }, h('b', { style: 'height:' + Math.round((d.n / mx) * 100) + '%' })), h('small', null, d.n || A.daily.indexOf(d) % 4 === 0 || A.daily.indexOf(d) === 13 ? d.label : ''))))),
-      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'By platform'),
-        CPLAT.map(([k]) => { const n = (A.by_platform.find((p) => p.platform === k) || { n: 0 }).n; return h('div', { class: 'an-row' }, h('span', null, nm(k)), bar(n, pmx), h('b', null, String(n))); })),
-      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'By type'),
-        [['post', 'Text posts'], ['video', 'Voiceover videos'], ['face', 'Face videos'], ['news', 'AI news']].map(([k, l]) => { const n = (A.by_format.find((p) => p.format === k) || { n: 0 }).n; return h('div', { class: 'an-row' }, h('span', null, l), bar(n, Math.max(1, ...A.by_format.map((p) => p.n))), h('b', null, String(n))); })),
-      A.by_topic.length ? h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Top topics'), A.by_topic.slice(0, 5).map((t) => h('div', { class: 'an-row' }, h('span', null, (GEN_TOPICS[t.topic] && GEN_TOPICS[t.topic].name) || t.topic || 'Other'), bar(t.n, A.by_topic[0].n), h('b', null, String(t.n))))) : null,
-      h('section', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Views, likes and followers'), h('p', { class: 'dim small' }, 'These numbers live inside each app. When you want them here, connect that account and I will add it. For now this page tracks everything you post.'), h('div', { class: 'stagechips' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' }, l + ' · not connected')))),
-      h('a', { class: 'btn', href: '#/content/log', style: 'margin-top:12px;display:inline-block' }, 'See every post you logged'));
-  }
+  /* ---- content home: plan for the week, ideas from calls, drafts, posted ---- */
   async function viewContent(arg) {
-    const r = await api('GET', '/content');
-    const dayN = r.day_n;
-    const typeFor = (n) => CONTENT_TYPES[(((n - 1) % 4) + 4) % 4];
-    const sub = (title, p, nodes) => shell('content', [h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, title), p ? h('p', { class: 'sub' }, p) : null)), nodes], { href: '#/content', label: 'Content' });
-    if (arg === 'start') { return sub('Start posting', 'Make it, post it, log it. It lands on your calendar and your tracker.', contentStart(r)); }
-    if (arg === 'log') return sub('Posted log', 'Everything you actually posted. Undo removes it from the calendar and tracker too.', postedLog(r));
-    if (arg === 'news') { const d = newsSection(); d.open = true; return sub('AI news', 'What happened this week and what it means for a business.', d); }
-    if (arg === 'week1') { const d = weekOneSection(); d.open = true; return sub('Week one posts', 'Seven days of ready posts.', d); }
-    if (arg === 'videos') return sub('Demo videos', 'Rendered videos with sound effects. Add your voice in CapCut, then post.', [
-      h('div', { class: 'dv-grid' }, dvToday(dayN).map((id, i) => dvCard(dvOf(id), dayN, i === 0))),
-      h('h3', { class: 'trk-h' }, 'Video library'),
-      h('div', { class: 'ct-lib' }, DV_ORDER.map((id) => { const v = dvOf(id); return h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, v.t.name), h('small', { class: 'dim' }, v.styleName + ' style')), dvCard(v, 'lib', false)); }))]);
-    if (arg === 'library') {
-      const trk = await api('GET', '/tracker');
-      const week = trk.history.slice(-7).reduce((a, d) => a + d.dials, 0);
-      const fill = (txt) => txt.replace(/\{day\}/g, dayN).replace(/\{dials\}/g, trk.day.dials).replace(/\{talks\}/g, trk.day.talks).replace(/\{demos\}/g, trk.day.demos).replace(/\{week\}/g, week);
-      const lib = h('div', { class: 'ct-lib' }, CONTENT_TYPES.map((t) => h('details', { class: 'card ct-det' }, h('summary', null, h('b', null, t.name), h('small', { class: 'dim' }, t.job)),
-        h('p', { class: 'ct-vis' }, 'Visual: ' + t.visual),
-        CONTENT_LIB[t.id].map((p) => h('div', { class: 'ct-tpl' }, h('b', null, p.hook), h('pre', null, fill(p.ig)))))));
-      return sub('Post ideas', 'Ready-made posts from your four post types.', lib);
-    }
-    // home
-    const done = new Set(r.today_posts.map((p) => p.platform));
+    const [, sub, id] = location.hash.replace(/^#\/?/, '').split('?')[0].split('/');   // #/content/post/12
+    const seed = (() => { try { const q = new URLSearchParams(location.hash.split('?')[1] || ''); return q.get('idea') || ''; } catch { return ''; } })();
+    if (sub === 'post') return c3PostView(id && id !== 'new' ? id : null, seed);
+    if (sub === 'map') return c3MapView(id && id !== 'new' ? id : null, seed);
+    const r = await api('GET', '/content3');
+    const open = (it) => '#/content/' + (it.kind === 'map' ? 'map' : 'post') + '/' + it.id;
+    const tick = (it) => { const b = h('button', { type: 'button', class: 'btn small chk ok', title: 'Mark posted' }, h('span', { class: 'chk-box' }), 'Posted');
+      b.onclick = async (e) => { e.preventDefault(); if (!it.platforms.length) { location.hash = open(it); toast('Pick where you posted it, then tap I posted it'); return; } b.classList.add('picked'); try { await api('POST', '/content3/items/' + it.id + '/posted'); setTimeout(() => viewContent(), 400); } catch (x) { fail(x); b.classList.remove('picked'); } }; return b; };
+    const itemRow = (it) => h('div', { class: 'c3-row' + (it.status === 'posted' ? ' done' : '') },
+      h('a', { class: 'c3-rt', href: open(it) }, h('span', { class: 'c3-kind ' + it.kind }, it.kind === 'map' ? 'Web map' : 'Post'), h('b', null, it.title || 'Untitled'), h('small', null, it.platforms.map((p) => C3PN[p]).join(' · ') || 'No platform yet')),
+      it.status === 'posted' ? h('span', { class: 'c3-done' }, '✓') : tick(it));
+    const week = h('div', { class: 'c3-week' }, r.week.map((d, i) => {
+      const its = r.items.filter((x) => x.day === d && (x.status !== 'posted' || (x.posted_at || '').slice(0, 10) >= d));
+      return h('div', { class: 'c3-day' + (i === 0 ? ' today' : '') }, h('div', { class: 'c3-dh' }, h('b', null, i === 0 ? 'Today' : c3Day(d).split(',')[0]), h('small', null, c3Day(d).split(', ')[1] || '')),
+        its.length ? its.map(itemRow) : h('a', { class: 'c3-empty', href: '#/content/post/new' }, '+ Plan a post'));
+    }));
+    const ideas = h('div', { class: 'c3-ideas' }, r.ideas.map((x) => h('div', { class: 'c3-idea' }, h('b', null, x.title), h('p', null, x.body),
+      x.key === 'start' ? null : h('div', { class: 'row' }, h('a', { class: 'btn small', href: '#/content/post/new?idea=' + encodeURIComponent(x.title + ' ' + x.body) }, 'Make a post'), h('a', { class: 'btn small', href: '#/content/map/new?idea=' + encodeURIComponent(x.title + ' ' + x.body) }, 'Make a web map')))));
+    const drafts = r.items.filter((x) => !x.day && x.status !== 'posted');
+    const posted = r.items.filter((x) => x.status === 'posted').slice(0, 8);
     shell('content', [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Content'), h('p', { class: 'sub' }, 'Make a post or a video, post it, and it is logged for you.'))),
-      h('section', { class: 'ct-hero' },
-        h('div', { class: 'ct-stats' }, h('div', null, h('b', null, String(r.today_posts.length)), h('small', null, 'posted today')), h('div', null, h('b', null, String(r.streak)), h('small', null, 'day streak')), h('div', null, h('b', null, String(r.week_posts)), h('small', null, 'this week'))),
-        h('div', { class: 'stagechips plat-row' }, CPLAT.map(([k, l]) => h('span', { class: 'schip' + (done.has(k) ? ' on' : '') }, l + (done.has(k) ? ' ✓' : '')))),
-        h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
-        h('p', { class: 'dim small', style: 'text-align:center' }, 'Today is day ' + dayN + '. Every post you mark as posted goes on your calendar.')),
-      contentAnalytics(r), siteAlertsCard(), botRulesCard(),
-      r.today_posts.length ? h('section', { class: 'card', style: 'margin-top:16px' }, h('p', { class: 'eyebrow' }, 'Posted today'), r.today_posts.slice(0, 4).map((p) => h('div', { class: 'log-row' }, h('div', { style: 'flex:1' }, h('b', null, PN[p.platform] + ' · ' + (FMT_LABEL[p.format] || p.format)), h('small', { class: 'dim' }, timeOf(p.created_at))))) ) : null,
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Content'), h('h1', null, 'Content'), h('p', { class: 'sub' }, r.stats.posted_week + ' posted in the last 7 days. Plan it, make it, check it off.')),
+        h('div', { class: 'row' }, h('a', { class: 'btn', href: '#/content/map/new' }, 'Web map video'), h('a', { class: 'btn primary', href: '#/content/post/new' }, icon('spark'), 'Write a post'))),
+      h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'This week'), h('small', { class: 'dim' }, 'Tap Posted when it is up')), week),
+      h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Ideas from your calls'), h('small', { class: 'dim' }, r.stats.calls_14d + ' calls in 2 weeks')), ideas),
+      drafts.length ? h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Drafts'), h('small', { class: 'dim' }, 'Not on the plan yet')), drafts.map(itemRow)) : null,
+      posted.length ? h('section', { class: 'panel hm-card' }, h('div', { class: 'hm-head' }, h('h3', null, 'Recently posted')), posted.map(itemRow)) : null,
     ]);
   }
 
@@ -4603,7 +3431,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
         h('div', { class: 'sc-track' }, h('i', { style: 'width:' + Math.round(100 * x.pts / x.max) + '%' })),
         h('div', { class: 'sc-act' }, done ? h('small', { class: 'sc-ok' }, 'Done') : h('small', null, gapText[id]()), h('div', { class: 'row' }, ...actions)));
     };
-    const toPosting = h('a', { class: 'btn small primary', href: '#/content/start', onclick: () => csReset() }, 'Start posting');
+    const toPosting = h('a', { class: 'btn small primary', href: '#/content' }, 'Start posting');
     const dmLeads = h('a', { class: 'btn small primary', href: '#/leads', onclick: () => { Object.assign(S.leadFilters, { status: 'new', rep: '', batch: '', city: '', q: '', heat: '', contact: '', tag: '', due: '', source: '', site: 'none', lowrev: '' }); } }, 'DM a lead');
     const winBtns = [['pray', 'Prayer'], ['gym', 'Workout'], ['mind', 'Read']].map(([id, l]) => h('button', { class: 'btn small' + (sc.blocks.includes(id) ? ' ok' : ''), 'aria-pressed': sc.blocks.includes(id), onclick: toggleBlock(id) }, (sc.blocks.includes(id) ? '✓ ' : '') + l));
     const fixPick = FIX_QUEUE[(ov.day_n || 1) % FIX_QUEUE.length];
@@ -4630,7 +3458,7 @@ The goal is a clear picture of the leak and a ballpark of the fix, whether or no
   function catLauncher() {
     const tiles = [['sell', 'Sell', 'Leads, calls, deals', 'phone', true], ['create', 'Create', 'Posts, videos, demos', 'spark'], ['crew', 'Team', 'Reps, devs, lead lists', 'users'], ['more', 'System', 'Connections and settings', 'more']];
     return h('section', { class: 'cat-launch' },
-      h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting'),
+      h('a', { class: 'start-btn', href: '#/content' }, icon('spark'), 'Start posting'),
       h('div', { class: 'hub-grid' }, tiles.map(([k, t, sub, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + k }, h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, sub)))));
   }
 
@@ -5533,7 +4361,7 @@ function api(method, path, body) {
     const [title, sub, groups] = CATS[key];
     shell(key, [
       h('div', { class: 'page-head cat-head' }, h('div', null, h('p', { class: 'kicker' }, 'Category'), h('h1', null, title), h('p', { class: 'sub' }, sub))),
-      key === 'create' ? h('a', { class: 'start-btn', href: '#/content/start', onclick: () => csReset() }, icon('spark'), 'Start posting') : null,
+      key === 'create' ? h('a', { class: 'start-btn', href: '#/content' }, icon('spark'), 'Start posting') : null,
       groups.map(([label, items]) => { const grid = h('div', { class: 'hub-grid cat-grid' }, items.map(([href, t, s2, ic, badge]) => h('a', { class: 'hub-tile', href: '#/' + href },
           h('span', { class: 'hub-ic' }, icon(ic)), badge ? h('span', { class: 'count cb-count', hidden: true }) : null, h('b', null, t), h('small', null, s2))));
         return h('section', { class: 'hub-sec' }, dropHead(key + ':' + label, label, grid, 'hub-h'), grid); }),

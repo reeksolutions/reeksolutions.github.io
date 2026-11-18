@@ -165,6 +165,7 @@ async function ensureSchema(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS dial_user ON dial_calls(user_id, id)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS cards_log (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, qty INTEGER NOT NULL, price_cents INTEGER NOT NULL DEFAULT 0, business TEXT, note TEXT, created_at TEXT)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_log (day TEXT NOT NULL, platform TEXT NOT NULL, type TEXT, created_at TEXT, PRIMARY KEY (day, platform))'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS content_items (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'idea\', title TEXT, body TEXT, platforms TEXT, day TEXT, map TEXT, source TEXT, created_at TEXT, posted_at TEXT)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS content_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, day TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, topic TEXT, title TEXT, cal_id INTEGER, created_at TEXT)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS content_posts_day ON content_posts(day, id)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS social_days (day TEXT NOT NULL, platform TEXT NOT NULL, followers INTEGER, dms INTEGER NOT NULL DEFAULT 0, updated_at TEXT, PRIMARY KEY (day, platform))'),
@@ -3027,6 +3028,110 @@ async function api(request, env, url) {
     }
     if (result && business) result.business = business;
     return json({ reply: cl(obj.reply, 400) || (result ? 'Here it is. Tell me what to change.' : 'Tell me a bit more.'), result, business });
+  }
+  /* ================= Content v3: ideas from calls, text/photo posts, web maps, posting plan ================= */
+  const C3_PLAT = ['ig', 'fb', 'tt', 'x', 'li'];
+  const c3Row = (r) => ({ id: r.id, kind: r.kind, status: r.status, title: r.title || '', body: r.body || '', platforms: (() => { try { return JSON.parse(r.platforms || '[]'); } catch { return []; } })(), day: r.day, map: (() => { try { return r.map ? JSON.parse(r.map) : null; } catch { return null; } })(), source: r.source || '', created_at: r.created_at, posted_at: r.posted_at });
+  const c3Clean = (b) => ({
+    kind: ['idea', 'post', 'map'].includes(b.kind) ? b.kind : 'post',
+    title: str(b.title, 140), body: str(b.body, 2200),
+    platforms: JSON.stringify((Array.isArray(b.platforms) ? b.platforms : []).filter((x) => C3_PLAT.includes(x))),
+    day: /^\d{4}-\d{2}-\d{2}$/.test(String(b.day || '')) ? b.day : null,
+    map: b.map && Array.isArray(b.map.nodes) ? JSON.stringify({ title: str(b.map.title, 90), nodes: b.map.nodes.slice(0, 14).map((n, i) => ({ id: str(n.id, 12) || 'n' + i, label: str(n.label, 80), note: str(n.note, 120), kind: ['problem', 'cause', 'cost', 'fix', 'result', 'step'].includes(n.kind) ? n.kind : 'step', parent: n.parent == null ? null : str(n.parent, 12) })) }) : null,
+  });
+  async function c3AI(system, user, maxTok) {
+    if (!env.AI) return null;
+    try {
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: maxTok || 700, temperature: 0.6, response_format: { type: 'json_object' } });
+      return parseJsonLoose(typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
+    } catch (e) { console.error('content ai', e); return null; }
+  }
+  if (path === '/content3' && method === 'GET') {
+    need(user, 'admin');
+    const today = ptParts().date;
+    const items = (await env.DB.prepare("SELECT * FROM content_items WHERE status != 'posted' OR posted_at >= ? ORDER BY COALESCE(day, '9999'), id DESC LIMIT 200").bind(new Date(Date.now() - 21 * 864e5).toISOString()).all()).results.map(c3Row);
+    // ideas from real calls in the last 2 weeks
+    const calls = (await env.DB.prepare(`SELECT c.outcome, l.call_notes AS notes, c.created_at, l.business, l.category, l.reviews, l.website FROM calls c JOIN leads l ON l.id = c.lead_id
+      WHERE c.created_at >= ? AND c.outcome IN ('no_answer','voicemail','gatekeeper','not_interested','booked','callback','demo_sent') ORDER BY c.id DESC LIMIT 300`).bind(new Date(Date.now() - 14 * 864e5).toISOString()).all()).results;
+    const n = (k) => calls.filter((c) => c.outcome === k).length, kinds = (k) => [...new Set(calls.filter((c) => c.outcome === k).map((c) => String(c.category || '').toLowerCase()).filter(Boolean))].slice(0, 2).join(' and ') || 'local';
+    const noSite = calls.filter((c) => !c.website).length;
+    const ideas = [];
+    if (n('no_answer') + n('voicemail') >= 2) ideas.push({ key: 'missed', title: `I called ${n('no_answer') + n('voicemail')} ${kinds('no_answer')} businesses this week. Most never picked up.`, body: 'Every one of those could have been a customer calling. Here is what happens to the calls nobody answers, and the simple fix.' });
+    if (n('gatekeeper')) ideas.push({ key: 'gate', title: `${n('gatekeeper')} times this week I never got past the front desk.`, body: 'If a salesperson can not reach the owner, neither can a customer with a question. What a good first answer sounds like.' });
+    if (noSite >= 3) ideas.push({ key: 'nosite', title: `${noSite} of the businesses I called this week have no website.`, body: 'Here is what a customer sees when they search for you and nothing comes up, and what to do about it.' });
+    if (n('not_interested')) ideas.push({ key: 'no', title: `Heard "not interested" ${n('not_interested')} times this week. Here is what I learned.`, body: 'The real reasons owners say no to a new website, and the one question that changes the conversation.' });
+    if (n('booked') || n('demo_sent')) ideas.push({ key: 'win', title: `${n('booked') + n('demo_sent')} owners said yes to seeing a demo this week.`, body: 'What made them say yes: I built it before I called. Show, don\'t pitch.' });
+    calls.filter((c, i, all) => c.notes && String(c.notes).length > 25 && all.findIndex((x) => x.business === c.business) === i).slice(0, 4).forEach((c, i) => ideas.push({ key: 'note' + i, title: 'From a call with a ' + (String(c.category || 'local business').toLowerCase()) + ':', body: oneLine(c.notes, 220) }));
+    if (!ideas.length) ideas.push({ key: 'start', title: 'Make calls today and your post ideas show up here.', body: 'Every no answer, hang-up, no-website business and yes turns into a post idea automatically.' });
+    const week = []; for (let i = 0; i < 7; i++) week.push(trkShift(today, i));
+    const posted = (await env.DB.prepare('SELECT COUNT(*) AS n FROM content_posts WHERE day >= ?').bind(trkShift(today, -6)).first()).n;
+    return json({ today, week, items, ideas, stats: { posted_week: posted, calls_14d: calls.length } });
+  }
+  if (path === '/content3/items' && method === 'POST') {
+    need(user, 'admin');
+    const c = c3Clean(body);
+    const r = await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .bind(user.id, c.kind, c.day ? 'scheduled' : (c.kind === 'idea' ? 'idea' : 'draft'), c.title, c.body, c.platforms, c.day, c.map, str(body.source, 40) || null, now()).run();
+    return json(c3Row(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(r.meta.last_row_id).first()));
+  }
+  if ((m = path.match(/^\/content3\/items\/(\d+)$/)) && method === 'PATCH') {
+    need(user, 'admin');
+    const row = await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(+m[1]).first(); if (!row) throw new HttpError(404, 'Not found');
+    const c = c3Clean({ ...c3Row(row), ...body });
+    await env.DB.prepare('UPDATE content_items SET kind = ?, title = ?, body = ?, platforms = ?, day = ?, map = ?, status = ? WHERE id = ?')
+      .bind(c.kind, c.title, c.body, c.platforms, c.day, c.map, row.status === 'posted' ? 'posted' : c.day ? 'scheduled' : (c.kind === 'idea' ? 'idea' : 'draft'), row.id).run();
+    return json(c3Row(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(row.id).first()));
+  }
+  if ((m = path.match(/^\/content3\/items\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin');
+    await env.DB.prepare('DELETE FROM content_items WHERE id = ?').bind(+m[1]).run();
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/content3\/items\/(\d+)\/posted$/)) && method === 'POST') {
+    need(user, 'admin');
+    const row = await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(+m[1]).first(); if (!row) throw new HttpError(404, 'Not found');
+    const it = c3Row(row), plats = it.platforms.length ? it.platforms : ['ig'], day = ptParts().date;
+    const PN = { ig: 'Instagram', fb: 'Facebook', tt: 'TikTok', x: 'X', li: 'LinkedIn' };
+    for (const pl of plats) {
+      const title = 'Posted ' + (it.kind === 'map' ? 'web map' : 'post') + ' on ' + PN[pl];
+      const cal = await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, lead_id, link, created_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(user.id, title, 'posted', now(), null, it.title ? 'Topic: ' + it.title.slice(0, 80) : null, null, null, now()).run();
+      await env.DB.prepare('INSERT INTO content_posts (user_id, day, platform, format, topic, title, cal_id, created_at) VALUES (?,?,?,?,?,?,?,?)').bind(user.id, day, pl, it.kind === 'map' ? 'video' : 'post', it.title.slice(0, 40) || null, title, cal.meta.last_row_id, now()).run();
+      await env.DB.prepare('INSERT OR IGNORE INTO content_log (day, platform, type, created_at) VALUES (?,?,?,?)').bind(day, pl, it.kind, now()).run();
+    }
+    await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, posts, updated_at) VALUES (?,?,'[]',?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET posts = posts + ?, updated_at = excluded.updated_at`).bind(user.id, day, plats.length, now(), plats.length).run();
+    await env.DB.prepare("UPDATE content_items SET status = 'posted', posted_at = ? WHERE id = ?").bind(now(), row.id).run();
+    return json({ ok: true, platforms: plats });
+  }
+  if (path === '/content3/write' && method === 'POST') {
+    need(user, 'admin');
+    const idea = str(body.idea, 1200), style = ['text', 'photo', 'thread'].includes(body.style) ? body.style : 'text';
+    if (!idea) bad('Type the idea first');
+    const focus = String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT);
+    const j = await c3AI('You write social posts for Marquise, a young founder in Los Angeles who builds AI websites and AI receptionists for local businesses (' + focus + '). Voice: real, direct, a little street-smart, no corporate words, no emojis spam (max 2), never use em dashes, never say "game changer" or "leverage". Never invent fake numbers or fake clients. Reply ONLY with JSON {"hook": string under 70 chars, "caption": string, "slides": [3 to 5 short strings, each under 90 chars], "hashtags": [5 strings starting with #], "cta": string}. The caption is ' + (style === 'thread' ? '4 to 6 short lines, one idea per line' : '3 short paragraphs') + ' and ends with a soft call to action like commenting a word or DMing.', 'IDEA:\n' + idea, 800);
+    if (!j || !j.caption) {
+      const first = idea.split(/(?<=[.!?])\s+/)[0].slice(0, 70);
+      return json({ hook: first, caption: idea + '\n\nIf you run a local business and want to see what this looks like for you, DM me "SITE".', slides: [first, 'Here is what most owners miss.', 'The fix is simpler than you think.', 'DM me "SITE" and I\'ll show you.'], hashtags: ['#smallbusiness', '#losangeles', '#localbusiness', '#aiwebsite', '#entrepreneur'], cta: 'DM me "SITE"', ai: false });
+    }
+    const clean = (x, n) => str(String(x || '').replace(/[—–]/g, ','), n);
+    return json({ hook: clean(j.hook, 90), caption: clean(j.caption, 2000), slides: (Array.isArray(j.slides) ? j.slides : []).map((x) => clean(x, 120)).filter(Boolean).slice(0, 6), hashtags: (Array.isArray(j.hashtags) ? j.hashtags : []).map((x) => '#' + String(x).replace(/[^A-Za-z0-9_]/g, '')).filter((x) => x.length > 2).slice(0, 8), cta: clean(j.cta, 80), ai: true });
+  }
+  if (path === '/content3/map' && method === 'POST') {
+    need(user, 'admin');
+    const idea = str(body.idea, 1200); if (!idea) bad('Describe the problem or idea first');
+    const j = await c3AI('You turn a business problem or idea into a web map for a short explainer video. Reply ONLY with JSON {"title": string under 60 chars, "nodes": [...]}. Make 7 to 11 nodes. Each node: {"id": short id, "label": under 45 chars, "note": under 90 chars or empty, "kind": one of problem, cause, cost, fix, result, step, "parent": id of the node it branches from or null}. Exactly one root node (parent null) that names the core problem or idea. Branch into causes and costs, then the fix, then results. Plain words a business owner understands. No em dashes.', 'IDEA:\n' + idea, 900);
+    const ok = j && Array.isArray(j.nodes) && j.nodes.length >= 3;
+    if (!ok) {
+      const parts = idea.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean).slice(0, 8);
+      const nodes = [{ id: 'root', label: (parts[0] || idea).slice(0, 45), note: '', kind: 'problem', parent: null }].concat(parts.slice(1).map((x, i) => ({ id: 'n' + i, label: x.slice(0, 45), note: x.length > 45 ? x.slice(45, 135) : '', kind: i === parts.length - 2 ? 'fix' : 'step', parent: 'root' })));
+      return json({ title: (parts[0] || idea).slice(0, 60), nodes, ai: false });
+    }
+    const ids = new Set(j.nodes.map((n) => String(n.id)));
+    const nodes = j.nodes.slice(0, 12).map((n, i) => ({ id: str(String(n.id || 'n' + i), 12), label: str(String(n.label || '').replace(/[—–]/g, ','), 60), note: str(String(n.note || '').replace(/[—–]/g, ','), 120), kind: ['problem', 'cause', 'cost', 'fix', 'result', 'step'].includes(n.kind) ? n.kind : 'step', parent: n.parent != null && ids.has(String(n.parent)) && String(n.parent) !== String(n.id) ? str(String(n.parent), 12) : null }));
+    if (!nodes.some((n) => n.parent == null)) nodes[0].parent = null;
+    const root = nodes.find((n) => n.parent == null);
+    nodes.forEach((n) => { if (n !== root && n.parent == null) n.parent = root.id; });
+    return json({ title: str(j.title || root.label, 70), nodes, ai: true });
   }
   if (path === '/video/edit' && method === 'POST') {
     need(user, 'admin', 'rep', 'dev');
