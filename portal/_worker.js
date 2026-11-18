@@ -3261,8 +3261,8 @@ async function api(request, env, url) {
     // photos: make them on the first build, or when asked for new ones
     const wantPhotos = /\b(new|different|other|more|better|change|redo|swap)\b.{0,20}\b(photos?|pictures?|pics|images?)\b|\b(photos?|pictures?|pics|images?)\b.{0,20}\b(new|different|again|redo)\b/i.test(message);
     if ((wantPhotos || !((clean.images || []).length || (clean.stock || []).length)) && photosReady(env)) {
-      const ph = await getPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, wantPhotos ? message : '');
-      if (ph.ok) { Object.assign(clean, ph.set); if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
+      const ph = await getPhotos(env, user.id, clean, clean.design ? clean.design.mode : newTheme, wantPhotos ? message : '', lead && lead.place_id);
+      if (ph.ok) { delete clean.google_photos; Object.assign(clean, ph.set); if (wantPhotos) out.reply = (out.reply ? out.reply + ' ' : '') + 'Fresh photos are in.'; }
       else out.reply = (out.reply ? out.reply + ' ' : '') + "(Photos didn't work this time. Reason: " + (ph.error || 'unknown') + ')';
     }
     messages = messages.concat([{ role: 'user', text: message.slice(0, 2000) }, { role: 'ai', text: out.reply, engine: out.engine }]).slice(-30);
@@ -3304,7 +3304,7 @@ async function api(request, env, url) {
     const data = JSON.parse(d.data || '{}');
     const ph = await getPhotos(env, user.id, data, data.design ? data.design.mode : d.theme, str(body.hint, 200) || 'new photos');
     if (!ph.ok) bad("Couldn't get photos. Reason: " + (ph.error || 'unknown') + '. Send Claude a screenshot of this.');
-    Object.assign(data, ph.set);
+    delete data.google_photos; Object.assign(data, ph.set);
     await env.DB.prepare('UPDATE studio_drafts SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), d.id).run();
     return json({ ok: true, data });
   }
@@ -3427,6 +3427,8 @@ const CURATED = {
   fitness: [['#F97316', '#22C55E', '#1F2937', '#F8FAFC']],
   auto: [['#DC2626', '#DC2626', '#0F172A', '#F8FAFC'], ['#1E293B', '#DC2626', '#F8FAFC', '#0F172A']],
   home: [['#1E40AF', '#EA580C', '#EFF6FF', '#1E3A8A']],
+  landscape: [['#166534', '#CA8A04', '#F7F5EF', '#14532D'], ['#3F6212', '#B45309', '#FAFAF5', '#1A2E05']],
+  painter: [['#0F172A', '#F97316', '#FFFFFF', '#0F172A'], ['#1D4ED8', '#F59E0B', '#F8FAFC', '#0B1220']],
 };
 const NICHE_UI = {
   pets: { styles: ['clay', 'vibrant', 'soft', 'organic', 'flat'], pairs: ['playful', 'soft', 'clay', 'geometric', 'handwritten'] },
@@ -3439,6 +3441,8 @@ const NICHE_UI = {
   food: { styles: ['vibrant', 'clay', 'editorial', 'flat', 'organic'], pairs: ['menu', 'retro', 'music', 'indie', 'handwritten'] },
   fitness: { styles: ['vibrant', 'brutal', 'flat', 'luxury'], pairs: ['sports', 'bold', 'genz', 'startup'] },
   home: { styles: ['flat', 'swiss', 'soft', 'vibrant'], pairs: ['geometric', 'startup', 'techy', 'soft'] },
+  landscape: { styles: ['organic', 'editorial', 'soft', 'luxury'], pairs: ['wellness', 'classic', 'estate', 'luxmin'] },
+  painter: { styles: ['swiss', 'editorial', 'flat', 'vibrant'], pairs: ['fashion', 'geometric', 'startup', 'luxmin'] },
   general: { styles: DSTYLES, pairs: Object.keys(DPAIRS) },
 };
 const DOPTS = {
@@ -3464,6 +3468,8 @@ const NICHE_STYLE = {
   food: { dark: 0.5, hues: [10, 25, 40, 120, 0, 350], fonts: ['rubik', 'righteous', 'archivo', 'bebas', 'abril', 'bricolage'] },
   fitness: { dark: 0.8, hues: [0, 25, 80, 200, 270], fonts: ['archivo', 'bebas', 'unbounded', 'anton', 'chakra'] },
   home: { dark: 0.2, hues: [200, 150, 210, 30, 120, 180], fonts: ['outfit', 'sora', 'spacegrotesk', 'bricolage', 'rubik'] },
+  landscape: { dark: 0.25, hues: [120, 140, 95, 40, 160], fonts: ['fraunces', 'cormorant', 'dmserif', 'playfair', 'outfit'] },
+  painter: { dark: 0.15, hues: [210, 20, 45, 340, 190, 260], fonts: ['syne', 'outfit', 'archivo', 'spacegrotesk', 'bricolage'] },
   general: { dark: 0.5, hues: [210, 30, 160, 270, 0, 45], fonts: Object.keys(DFONTS) },
 };
 
@@ -3587,17 +3593,40 @@ const SITE_SCRIPT = String.raw`<script>
       +'nav{transition:background .35s,box-shadow .35s,backdrop-filter .35s}nav.mx-scrolled{box-shadow:0 10px 30px -18px rgba(0,0,0,.45);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}'
       +'.btn{will-change:transform}.btn:active{transform:scale(.97)!important}'
       +'.js .reveal{transition-timing-function:cubic-bezier(.16,1,.3,1)!important;transition-duration:.9s!important}'
-      +'.mx-tilt{transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .5s}.mx-tilt:hover{box-shadow:0 26px 50px -24px rgba(0,0,0,.45)}';
+      +'.mx-tilt{transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .5s}.mx-tilt:hover{box-shadow:0 26px 50px -24px rgba(0,0,0,.45)}'
+      // headlines rise word by word out of a mask
+      +'.mx-split .mx-w{display:inline-block;overflow:hidden;vertical-align:top;padding-bottom:.08em;margin-bottom:-.08em}.mx-split .mx-w>i{display:inline-block;font-style:inherit;transform:translateY(110%);transition:transform 1s cubic-bezier(.16,1,.3,1);transition-delay:calc(var(--k,0) * 55ms)}.mx-split.mx-on .mx-w>i{transform:none}'
+      // photos unveil from the bottom and settle from a slight zoom
+      +'.mx-img{overflow:hidden}.mx-img img{clip-path:inset(100% 0 0 0);transform:scale(1.18);transition:clip-path 1.2s cubic-bezier(.77,0,.18,1),transform 1.6s cubic-bezier(.16,1,.3,1)}.mx-img.mx-on img{clip-path:inset(0 0 0 0);transform:scale(1)}'
+      // soft light that follows the mouse over the hero
+      +'.mx-glow{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;transition:opacity .6s;background:radial-gradient(520px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--accent,#5b8cff) 22%,transparent),transparent 60%)}.hero:hover .mx-glow{opacity:1}'
+      +'.mx-heroc{will-change:transform,opacity}';
     document.head.appendChild(css);
     if(calm) return;
     var bar=document.createElement('div');bar.className='mx-bar';document.body.appendChild(bar);
     var nav=document.querySelector('nav'), heroImgs=[].slice.call(document.querySelectorAll('.hero img, .hero .bg'));
+    var seen=('IntersectionObserver' in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('mx-on');seen.unobserve(e.target);}});},{threshold:.2,rootMargin:'0px 0px -60px 0px'}):null;
+    // split section headlines into words
+    [].slice.call(document.querySelectorAll('section h2, .about blockquote')).forEach(function(el){
+      if(el.querySelector('img')||el.children.length>3) return;
+      var k=0; (function walk(node){ [].slice.call(node.childNodes).forEach(function(n){
+        if(n.nodeType===3){ var frag=document.createDocumentFragment(); n.textContent.split(/(\s+)/).forEach(function(w){ if(!w) return; if(/^\s+$/.test(w)){frag.appendChild(document.createTextNode(w));return;} var o=document.createElement('span'),i=document.createElement('i');o.className='mx-w';i.style.setProperty('--k',k++);i.textContent=w;o.appendChild(i);frag.appendChild(o);}); n.parentNode.replaceChild(frag,n);}
+        else if(n.nodeType===1&&n.tagName!=='BR') walk(n); }); })(el);
+      el.classList.add('mx-split'); seen?seen.observe(el):el.classList.add('mx-on'); });
+    // photos below the hero unveil on scroll
+    [].slice.call(document.querySelectorAll('figure, .g, .stack-photo')).forEach(function(f){ if(f.closest('.hero')||!f.querySelector('img')) return; f.classList.add('mx-img'); seen?seen.observe(f):f.classList.add('mx-on'); });
+    // hero: mouse light + content eases away as you scroll
+    var hero=document.querySelector('.hero'), heroC=hero&&hero.querySelector('.wrap');
+    if(hero){ if(getComputedStyle(hero).position==='static') hero.style.position='relative'; var gl=document.createElement('div'); gl.className='mx-glow'; hero.appendChild(gl);
+      hero.addEventListener('mousemove',function(e){var r=hero.getBoundingClientRect();hero.style.setProperty('--mx',(e.clientX-r.left)+'px');hero.style.setProperty('--my',(e.clientY-r.top)+'px');}); }
+    if(heroC) heroC.classList.add('mx-heroc');
     var ticking=false;
     function onScroll(){ if(ticking) return; ticking=true; requestAnimationFrame(function(){
       var y=scrollY, max=document.documentElement.scrollHeight-innerHeight;
       bar.style.transform='scaleX('+(max>0?Math.min(1,y/max):0)+')';
       if(nav) nav.classList.toggle('mx-scrolled', y>24);
       heroImgs.forEach(function(el,i){ if(y<innerHeight*1.2) el.style.transform='translate3d(0,'+(y*(i?0.12:0.22)).toFixed(1)+'px,0)'; });
+      if(heroC&&y<innerHeight*1.2){ var q=Math.min(1,y/(innerHeight*0.9)); heroC.style.transform='translate3d(0,'+(q*60).toFixed(1)+'px,0) scale('+(1-q*0.06).toFixed(3)+')'; heroC.style.opacity=(1-q*0.85).toFixed(3); }
       ticking=false; }); }
     addEventListener('scroll',onScroll,{passive:true}); onScroll();
     // count up any number that has data-count (ratings, review counts, years)
@@ -3732,7 +3761,8 @@ function renderSite(d, D) {
   const rating = d.rating ? `<span class="chip"><b>${esc(d.rating)}</b> ★ on Google${d.reviews ? ` · ${esc(d.reviews)} reviews` : ''}</span>` : '';
   const R = D.radius, BR = D.buttons === 'pill' ? 999 : D.buttons === 'rounded' ? 14 : 3;
   const sample = (d.images && d.images.length) || stock.length ? '<small class="sample">Sample photo</small>' : '';
-  const credits = stock.length ? `<p class="credit">Sample photos from <a href="https://www.pexels.com" target="_blank" rel="noopener">Pexels</a>: ${[...new Map(stock.filter((x) => x.by).map((x) => [x.by, x])).values()].map((x) => x.by_url ? `<a href="${esc(x.by_url)}" target="_blank" rel="noopener">${esc(x.by)}</a>` : esc(x.by)).join(', ')}</p>` : '';
+  const gcred = !stock.length && Array.isArray(d.google_photos) ? `<p class="credit">Photos from Google${d.google_photos.length ? ': ' + d.google_photos.map((x) => esc(x)).join(', ') : ''}</p>` : '';
+  const credits = gcred || (stock.length ? `<p class="credit">Sample photos from <a href="https://www.pexels.com" target="_blank" rel="noopener">Pexels</a>: ${[...new Map(stock.filter((x) => x.by).map((x) => [x.by, x])).values()].map((x) => x.by_url ? `<a href="${esc(x.by_url)}" target="_blank" rel="noopener">${esc(x.by)}</a>` : esc(x.by)).join(', ')}</p>` : '');
   const btnMain = (extra) => book ? `<a class="btn main${extra || ''}" href="${esc(book)}"${ext}>${esc(bookLabel)} <span aria-hidden="true">→</span></a>` : '';
   const head = (eyebrow, title, note) => `<div class="head reveal"><div><span class="eyebrow">${esc(eyebrow)}</span><h2 class="disp">${esc(title)}</h2></div>${note ? `<p>${esc(note)}</p>` : ''}</div>`;
   const disp = `font-family:${F.css};font-weight:${F.w};${F.upper ? 'text-transform:uppercase;letter-spacing:.01em;' : 'letter-spacing:-.02em;'}${F.italic ? 'font-style:italic;' : ''}`;
@@ -3788,7 +3818,7 @@ function renderSite(d, D) {
   const fontLinks = [F.q, B.q].map((q) => `<link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`).join('');
   const open = hours.length ? 'data-hours' : '';
   const cnt = (v) => (/^\d+(\.\d+)?$/.test(String(v).trim()) ? ` data-count="${esc(String(v).trim())}"` : '');
-  const trust = [d.rating ? `<div><b><span${cnt(d.rating)}>${esc(d.rating)}</span> ★</b><span>Google rating</span></div>` : '', d.reviews ? `<div><b${cnt(d.reviews)}>${esc(d.reviews)}</b><span>reviews</span></div>` : '',
+  const trust = [d.rating ? `<div><b><b${cnt(d.rating)}>${esc(d.rating)}</b> ★</b><span>Google rating</span></div>` : '', d.reviews ? `<div><b${cnt(d.reviews)}>${esc(d.reviews)}</b><span>reviews</span></div>` : '',
     services.length ? `<div><b>${services.length}</b><span>${esc(N.services.toLowerCase())}</span></div>` : '', hours.length ? `<div id="todayBox"><b id="todayHrs">—</b><span>today</span></div>` : '',
     d.city ? `<div><b>${esc(d.city)}</b><span>local</span></div>` : ''].filter(Boolean);
   const trustHtml = trust.length >= 2 ? `<div class="trust"><div class="wrap"><div class="trust-row">${trust.join('')}</div></div></div>` : '';
@@ -4048,10 +4078,41 @@ const PEXELS_QUERIES = {
   fitness: ['gym workout', 'personal trainer', 'weightlifting gym', 'boxing training'],
   junk: ['junk removal truck', 'furniture removal', 'garage cleanout', 'hauling trash'],
   home: ['house cleaning', 'landscaping garden', 'plumber working', 'handyman tools', 'clean kitchen'],
+  landscape: ['landscaping garden', 'green lawn house', 'backyard landscape design', 'gardener planting flowers', 'lawn mowing'],
+  painter: ['house painter', 'painting wall roller', 'freshly painted house exterior', 'interior painting room', 'paint brush wall'],
   general: ['small business owner', 'local shop interior', 'storefront', 'customer service smile'],
 };
 function photosReady(env) { return !!env.PEXELS_KEY || aiImagesReady(env); }
-async function getPhotos(env, userId, data, mode, hint) {
+// the business's own photos from its Google listing: fetched once, saved, so a site never re-bills or breaks
+async function googlePhotos(env, userId, placeId) {
+  if (!env.GOOGLE_PLACES_KEY || !placeId || env.FINDER_FAKE === '1') return { ok: false };
+  try {
+    const r = await fetch('https://places.googleapis.com/v1/places/' + encodeURIComponent(placeId), { headers: { 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY, 'X-Goog-FieldMask': 'photos' }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return { ok: false, error: 'Google photos said ' + r.status };
+    const j = await r.json();
+    const list = (j.photos || []).filter((p) => p && p.name && (p.widthPx || 0) >= 600).slice(0, 5);
+    if (list.length < 3) return { ok: false, error: 'not enough Google photos' };
+    const ids = [], by = new Set();
+    for (const p of list) {
+      try {
+        const m = await fetch('https://places.googleapis.com/v1/' + p.name + '/media?maxWidthPx=1600&key=' + encodeURIComponent(env.GOOGLE_PLACES_KEY), { signal: AbortSignal.timeout(12000) });
+        if (!m.ok) continue;
+        const buf = new Uint8Array(await m.arrayBuffer());
+        if (buf.byteLength < 8000 || buf.byteLength > 1_800_000) continue;
+        const id = hex(crypto.getRandomValues(new Uint8Array(10)));
+        await env.DB.prepare('INSERT INTO demo_images (id, user_id, mime, data, prompt, created_at) VALUES (?,?,?,?,?,?)').bind(id, userId, m.headers.get('content-type') || 'image/jpeg', buf, 'google:' + p.name.slice(0, 200), now()).run();
+        ids.push(id); (p.authorAttributions || []).forEach((a) => a && a.displayName && by.add(String(a.displayName).slice(0, 60)));
+      } catch (e) { console.error('google photo', e); }
+    }
+    return ids.length >= 3 ? { ok: true, set: { images: ids, stock: [], google_photos: [...by].slice(0, 6) } } : { ok: false, error: 'Google photos would not download' };
+  } catch (e) { console.error('google photos', e); return { ok: false, error: 'could not reach Google photos' }; }
+}
+async function getPhotos(env, userId, data, mode, hint, placeId) {
+  // 1. their real photos from Google  2. Pexels stock  3. free Cloudflare AI images
+  if (placeId && !/\b(stock|ai|generated?|new|different)\b/i.test(String(hint || ''))) {
+    const g = await googlePhotos(env, userId, placeId);
+    if (g.ok) return g;
+  }
   if (env.PEXELS_KEY) {
     const r = await pexelsPhotos(env, data, hint);
     if (r.ok || !aiImagesReady(env)) return r;
@@ -4376,6 +4437,10 @@ const NICHES = [
     photos: ['an athlete training hard with battle ropes in a modern gym, dramatic lighting', 'a personal trainer coaching a client lifting dumbbells', 'a clean modern gym interior with racks and weights', 'close-up of hands chalked up gripping a barbell'] },
   { key: 'junk', re: /(junk|haul|debris|clean\s?-?out|dumpster|trash|rubbish|garbage|waste removal)/, theme: 'drive', services: 'What we haul', book: 'Get a free estimate', eyebrow: 'Gone in a day',
     photos: ['two workers in matching work shirts carrying an old couch out of a house toward a white junk removal truck, bright daylight', 'a white junk removal truck parked in front of a suburban home with the back full of neatly loaded furniture', 'a clean empty garage after a professional cleanout, swept floor, daylight through the open door', 'a smiling junk removal crew member in gloves lifting a cardboard box into a truck'] },
+  { key: 'landscape', re: /(landscap|lawn|garden|yard|tree service|arborist|sod|irrigation|hardscape)/, theme: 'fresh', services: 'What we do', book: 'Get a free estimate', eyebrow: 'Yards worth coming home to',
+    photos: ['a lush manicured green lawn with fresh flower beds in front of a California home at golden hour', 'a landscaper in work gloves planting colorful flowers in a garden bed', 'a modern backyard with clean stone pathway, drought tolerant plants and warm evening light', 'close-up of freshly cut grass with mower stripes, shallow depth of field'] },
+  { key: 'painter', re: /(paint|painter|drywall|stucco|coating)/, theme: 'fresh', services: 'Services', book: 'Get a free quote', eyebrow: 'Clean lines. Zero mess.',
+    photos: ['a painter rolling a fresh coat of warm white paint on a living room wall, bright daylight', 'a freshly painted modern house exterior with crisp trim under blue sky', 'close-up of a paint brush cutting a perfectly straight line along white trim', 'paint cans, rollers and drop cloths neatly arranged in a bright empty room'] },
   { key: 'home', re: /(clean|maid|landscap|lawn|garden|plumb|electric|roof|handyman|paint|hvac|pest|moving|pressure|pool|construct|contractor)/, theme: 'fresh', services: 'Services', book: 'Get a free quote', eyebrow: 'Done right the first time',
     photos: ['a bright spotless modern living room after a professional cleaning, sunlight', 'a professional in uniform working carefully on a home project', 'a beautiful manicured green lawn and garden in front of a house', 'professional tools neatly arranged in a work van'] },
 ];
@@ -4413,6 +4478,7 @@ function cleanDemo(d, lead) {
     highlights: (Array.isArray(d.highlights) ? d.highlights : []).slice(0, 4).map((x) => ({ title: s(x && x.title, 60), text: s(x && x.text, 220) })).filter((x) => x.title),
     cta: s(d.cta, 60),
     images: (Array.isArray(d.images) ? d.images : []).filter((x) => /^[a-f0-9]{20}$/.test(String(x))).slice(0, 6),
+    google_photos: Array.isArray(d.google_photos) ? d.google_photos.map((x) => s(x, 60)).filter(Boolean).slice(0, 6) : undefined,
     design: cleanDesign(d.design),
     stock: (Array.isArray(d.stock) ? d.stock : []).slice(0, 6).map((x) => ({ src: String((x && x.src) || ''), alt: s(x && x.alt, 140), by: s(x && x.by, 80), by_url: url(x && x.by_url), page: url(x && x.page) }))
       .filter((x) => /^https:\/\/images\.pexels\.com\/[\w\/.\-?=&%]+$/.test(x.src)),
