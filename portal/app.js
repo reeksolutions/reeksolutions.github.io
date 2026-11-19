@@ -38,6 +38,10 @@
   }
   const icon = (name) => h('span', { html: ICONS[name] || '', style: 'display:contents' });
   const ICONS = {
+    social: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
+    sales: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     leads: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
     callbacks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
     demos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="13" rx="2.5"/><path d="M8 21h8M12 17.5V21" stroke-linecap="round"/></svg>',
@@ -63,7 +67,7 @@
     more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
     script: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7.5L19 8v12.5H7z"/><path d="M14 3.5V8h5M10 12h6M10 15.5h6"/></svg>',
     chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
-    logo: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="#5b8cff" stroke-opacity=".3" stroke-width="2.2"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="#5b8cff" stroke-opacity=".22" stroke-width="1.6"/><circle cx="16" cy="16" r="3.2" fill="#5b8cff"/><path d="M16 4a12 12 0 0 1 12 12" fill="none" stroke="#5b8cff" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    logo: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2.2"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="1.6"/><circle cx="16" cy="16" r="3.2" fill="currentColor"/><path d="M16 4a12 12 0 0 1 12 12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
   };
 
   async function api(method, path, body) {
@@ -158,7 +162,7 @@
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
-  const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
+  const home = () => (S.me.role === 'dev' ? 'studio' : S.me.role === 'admin' ? 'finder' : 'home');
   const TAB_ICON = { sell: 'phone', create: 'spark', crew: 'users', calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
   const CATS = {
@@ -280,7 +284,48 @@
     orbTimer = setTimeout(wanderOrb, 6000);
   }
 
+  /* ===== new CRM (Nov 2026): side menu only. Lead Finder works; the Leads sections are empty for now ===== */
+  const LEAD_SECTIONS = [['email', 'Email', 'mail'], ['sms', 'SMS', 'sms'], ['social', 'Social media', 'social'], ['calls', 'Cold calls', 'phone'], ['sales', 'Sales', 'sales'], ['script', 'Script', 'script']];
+  function crmShell(active, content) {
+    document.documentElement.classList.remove('nonav');
+    document.querySelectorAll('.orb').forEach((o) => o.remove());
+    const [page, sub] = String(active).split(':');
+    const leadsOpen = (() => { try { return localStorage.getItem('crm-leads-open') !== '0'; } catch { return true; } })();
+    const subList = h('div', { class: 'cm-sub', id: 'cm-leads', hidden: !leadsOpen }, LEAD_SECTIONS.map(([k, label, ic]) =>
+      h('a', { href: '#/leads/' + k, class: 'cm-link cm-sublink' + (page === 'leads' && sub === k ? ' on' : ''), 'aria-current': page === 'leads' && sub === k ? 'page' : null }, icon(ic), h('span', null, label))));
+    const leadsBtn = h('button', { type: 'button', class: 'cm-link cm-group' + (page === 'leads' ? ' in' : ''), 'aria-expanded': String(leadsOpen), 'aria-controls': 'cm-leads', onclick: (e) => {
+      const open = subList.hidden; subList.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem('crm-leads-open', open ? '1' : '0'); } catch { /* ok */ }
+    } }, icon('leads'), h('span', null, 'Leads'), h('i', { class: 'cm-caret' }, icon('chev')));
+    const closeMenu = () => document.documentElement.classList.remove('cm-open');
+    const menu = h('aside', { class: 'cm-side', 'aria-label': 'Menu' },
+      h('div', { class: 'cm-brand' }, h('a', { href: '#/finder', class: 'cm-logo', onclick: closeMenu }, icon('logo'), h('span', null, 'Reekon')),
+        h('button', { type: 'button', class: 'cm-x', 'aria-label': 'Close menu', onclick: closeMenu }, icon('close'))),
+      h('nav', { class: 'cm-nav', onclick: (e) => { if (e.target.closest('a')) closeMenu(); } },
+        h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder')),
+        leadsBtn, subList),
+      h('a', { href: '#/account', class: 'cm-me' + (page === 'account' ? ' on' : ''), onclick: closeMenu }, h('span', { class: 'cm-av' }, initials(S.me.name)),
+        h('span', { class: 'cm-who' }, h('b', null, S.me.name), h('small', null, 'Account'))));
+    const bar = h('header', { class: 'cm-bar' },
+      h('button', { type: 'button', class: 'cm-burger', 'aria-label': 'Open menu', onclick: () => document.documentElement.classList.add('cm-open') }, icon('menu')),
+      h('a', { href: '#/finder', class: 'cm-logo' }, icon('logo'), h('span', null, 'Reekon')));
+    const main = h('main', { id: 'view', class: 'cm-main enter' }, content);
+    closeMenu();
+    $app.replaceChildren(menu, h('div', { class: 'cm-scrim', onclick: closeMenu }), h('div', { class: 'cm-frame' }, bar, main));
+    document.documentElement.classList.add('crm2');
+    window.scrollTo(0, 0);
+    return main;
+  }
+  function viewLeadSection(k) {
+    const sec = LEAD_SECTIONS.find((x) => x[0] === k);
+    if (!sec) { location.hash = '#/leads/email'; return; }
+    crmShell('leads:' + k, [
+      h('div', { class: 'cm-head' }, h('span', { class: 'eyebrow' }, 'Leads'), h('h1', null, sec[1])),
+      h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon(sec[2])), h('b', null, 'Nothing here yet'), h('p', null, 'We’ll build the ' + sec[1] + ' section next.')),
+    ]);
+  }
   function shell(active, content, crumbOver) {
+    if (S.me && S.me.role === 'admin') return crmShell(active, content);
     const tabs = tabsFor(S.me.role);
     let tabActive = active;
     if (S.me.role === 'admin') tabActive = CAT_OF[active] || (SLOT_CATS.includes(active) ? active : 'more');
@@ -337,6 +382,14 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
+    if (S.me.role === 'admin') {
+      try {
+        if (route === 'finder') return await viewFinder();
+        if (route === 'leads') return viewLeadSection(arg || 'email');
+        if (route === 'account') return viewAccount();
+      } catch (e) { return crmShell(route, h('div', { class: 'empty' }, h('b', null, 'Could not load this page'), e.message)); }
+      location.hash = '#/finder'; return;
+    }
     const extra = { admin: ['overview', 'allleads', 'lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
