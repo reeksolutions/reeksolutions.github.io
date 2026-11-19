@@ -2110,3 +2110,27 @@ html.crm2 #toast{left:calc(50% + 128px)}
 .pc-stats em.ok{background:rgba(52,211,153,.12);color:#34d399}
 .pc-stats.dim,.pc-stats .dim{color:var(--dim)}
 @media (max-width:520px){.pc-list.tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pc-list.tiles .pc-row{min-height:150px;padding:13px;gap:10px}.pc-list.tiles .pc-row-t small{font-size:12px}.pc-list.tiles .pc-badge{width:38px;height:38px}}
+
+/* ---- video composer ---- */
+.pc-vtypes{margin:2px 0 6px}
+.pc-vhook{font-size:1.15rem;font-weight:700;line-height:1.35;margin:4px 0 0;color:var(--fg)}
+.pc-vtitle{font-size:1rem}
+.pc-vgrid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.pc-vgrid{grid-template-columns:minmax(0,1fr)}}
+.pc-vgrid>.pc-card{min-width:0}
+.pc-vframe{border-radius:14px;overflow:hidden;background:#06070a;border:1px solid var(--line);max-width:360px;margin:8px auto}
+.pc-vcanvas{display:block;width:100%;height:auto;aspect-ratio:9/16}
+.pc-vsteps{list-style:none;counter-reset:vs;margin:8px 0 0;padding:0;display:grid;gap:10px}
+.pc-vsteps li{counter-increment:vs;position:relative;padding:10px 12px 10px 44px;border:1px solid var(--line);border-radius:12px;background:var(--bg2, rgba(255,255,255,.02))}
+.pc-vsteps li::before{content:counter(vs);position:absolute;left:12px;top:11px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:.75rem;font-weight:700;background:var(--accent);color:#141318}
+.pc-vsteps li.cta::before{content:"✓"}
+.pc-vstep-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.pc-vstep-h em{font-style:normal;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.pc-vsteps p{margin:4px 0 0;line-height:1.5;color:var(--fg2, var(--fg))}
+.pc-vprice{margin-top:14px}
+.pc-vprice .lt-wrap{overflow-x:auto}
+.pc-vprice tr.tot td{border-top:1px solid var(--line)}
+.pc-vtag{font-style:normal;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent);margin-left:6px}
+.pc-item-b.clip{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.pc-vout{max-width:1000px;display:flex;flex-direction:column;gap:14px}
+.pc-vout .pc-card{max-width:none}

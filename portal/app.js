@@ -483,7 +483,7 @@
   const pcHead = (kicker, title, sub, back) => h('div', { class: 'cm-head pc-head' }, back ? h('a', { class: 'pc-back', href: back }, icon('chev'), 'Back') : null, h('span', { class: 'eyebrow' }, kicker), h('h1', null, title), sub ? h('p', { class: 'pc-sub' }, sub) : null);
   async function viewPostContent() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');   // content / post|scheduled / platform / type
-    const where = parts[1] || 'post', plat = parts[2], type = parts[3];
+    const where = parts[1] || 'post', plat = parts[2], type = (parts[3] || '').split('?')[0];
     if (where === 'scheduled') return viewPostScheduled(plat);
     if (!plat) {
       const r = await api('GET', '/posts').catch(() => ({ posts: [], counts: {} }));
@@ -493,7 +493,7 @@
       const tile = (k, t, d, href, extra) => h('a', { class: 'pc-row', href }, h('div', { class: 'pc-tile-top' }, k, h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), extra || null);
       return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick where you want to post.'),
         h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(pcBadge(k), t, d, '#/content/post/' + k, stats(k))),
-          tile(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Text posts you’ve scheduled, for every platform', '#/content/scheduled',
+          tile(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Posts and videos you’ve scheduled, for every platform', '#/content/scheduled',
             h('span', { class: 'pc-stats' }, (r.counts.scheduled ? h('em', null, r.counts.scheduled + ' scheduled') : h('span', { class: 'dim' }, 'Nothing scheduled'))), 'sch'))]);
     }
     if (!PC_MAX[plat]) { location.hash = '#/content/post'; return; }
@@ -501,9 +501,10 @@
       const kind = (k, t, d, on, ic) => on ? h('a', { class: 'pc-row', href: '#/content/post/' + plat + '/' + k }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)))
         : h('div', { class: 'pc-row off', 'aria-disabled': 'true' }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('em', { class: 'pc-soon' }, 'Soon')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)));
       return crmShell('content:post', [pcHead(pcName(plat), 'What kind of content?', null, '#/content/post'),
-        h('div', { class: 'pc-list tiles' }, kind('text', 'Text post', 'Written post, ready to copy and post', true, 'script'), h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled posts'), h('small', null, 'Your ' + pcName(plat) + ' posts waiting to go out'))),
-          kind('photo', 'Photo post', 'Image with a caption', false, 'spark'), kind('carousel', 'Carousel', 'Swipeable slides', false, 'spark'), kind('video', 'Video script', 'Short-form video', false, 'spark'))]);
+        h('div', { class: 'pc-list tiles' }, kind('text', 'Text post', 'Written post, ready to copy and post', true, 'script'), kind('video', 'Video', 'Web map videos, pricing breakdowns, pain points', true, 'spark'), h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled posts'), h('small', null, 'Your ' + pcName(plat) + ' posts waiting to go out'))),
+          kind('photo', 'Photo post', 'Image with a caption', false, 'spark'), kind('carousel', 'Carousel', 'Swipeable slides', false, 'spark'))]);
     }
+    if (type === 'video') return viewVideoComposer(plat);
     if (type !== 'text') { location.hash = '#/content/post/' + plat; return; }
     return viewTextComposer(plat);
   }
@@ -560,8 +561,123 @@
       mine.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Drafts and scheduled'), h('div', { class: 'pc-items' }, mine.map((p) => pcItem(p, () => viewTextComposer(plat))))) : null,
       done.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Recently posted'), h('div', { class: 'pc-items' }, done.map((p) => pcItem(p, () => viewTextComposer(plat))))) : null]);
   }
+  const VT = [['', 'Surprise me'], ['webmap', 'System web map'], ['pricing', 'Pricing comparison'], ['painpoint', 'Pain point'], ['automation', 'Tedious task']];
+  const VTN = Object.fromEntries(VT.filter((x) => x[0]));
+  const vidScript = (k) => [k.hook ? 'HOOK: ' + k.hook : '', ...(k.breakdown || []).map((b, i) => { const n = (k.map.nodes || []).find((x) => x.id === b.node); return (i + 1) + '. ' + (n ? n.label.toUpperCase() + '\n' : '') + b.say; }), k.cta ? 'CLOSE: ' + k.cta : ''].filter(Boolean).join('\n\n');
+  const vidImg = (url) => new Promise((res) => { if (!url) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = url; });
+  async function viewVideoComposer(plat) {
+    const editId = +(((location.hash.split('?')[1] || '').match(/id=(\d+)/) || [])[1] || 0);
+    let pkg = null, bgImg = null, savedId = 0, vtype = '', view = 'map';
+    const typeBox = h('div', { class: 'cx-filters pc-vtypes' });
+    const drawTypes = () => typeBox.replaceChildren(...VT.map(([k, t]) => h('button', { type: 'button', class: 'cx-chip' + (vtype === k ? ' on' : ''), onclick: () => { vtype = k; drawTypes(); } }, t)));
+    drawTypes();
+    const ask = h('textarea', { rows: 3, maxlength: 800, placeholder: 'Optional: what should it be about? e.g. "what a shop pays for an answering service vs an AI receptionist" or "the system that books ceramic jobs while you’re in the bay"' });
+    const out = h('div', { class: 'pc-out pc-vout', hidden: true });
+    const canvas = h('canvas', { class: 'pc-vcanvas', width: 1080, height: 1920, 'aria-label': 'Video preview' });
+    const ctx = canvas.getContext('2d');
+    const draw = () => {
+      if (!pkg) return;
+      if (view === 'pricing' && pkg.pricing) { ctx.clearRect(0, 0, 1080, 1920); ctx.drawImage(c3Pricing(pkg.pricing, pkg.title, bgImg), 0, 0); }
+      else c3DrawMap(ctx, c3Layout(pkg.map), 0, { still: true, bg: bgImg, handle: '@reekonsystems' });
+    };
+    const viewTabs = h('div', { class: 'cx-filters' });
+    const drawTabs = () => viewTabs.replaceChildren(...(pkg && pkg.pricing ? [['map', 'Web map'], ['pricing', 'Price breakdown']] : [['map', 'Web map']]).map(([k, t]) => h('button', { type: 'button', class: 'cx-chip' + (view === k ? ' on' : ''), onclick: () => { view = k; drawTabs(); draw(); } }, t)));
+    const bgNote = h('small', { class: 'dim' });
+    let bgBusy = false;
+    const makeBg = async (btn) => {
+      if (!pkg || bgBusy) return; bgBusy = true; btn.disabled = true; const t0 = btn.innerHTML; btn.textContent = 'Making photo… (about 10s)';
+      try { const r = await api('POST', '/videos/bg', { prompt: pkg.background }); pkg.bg = r.url; bgImg = await vidImg(r.url); bgNote.textContent = bgImg ? '' : 'The photo did not load. Try again.'; draw(); }
+      catch (e) { fail(e); }
+      bgBusy = false; btn.disabled = false; btn.innerHTML = t0;
+    };
+    const bgBtn = h('button', { class: 'btn', onclick: (e) => makeBg(e.currentTarget) }, icon('spark'), 'New background photo');
+    const hookEl = h('p', { class: 'pc-vhook' });
+    const titleEl = h('b', { class: 'pc-vtitle' });
+    const typeEl = h('span', { class: 'pc-st' });
+    const steps = h('ol', { class: 'pc-vsteps' });
+    const priceTbl = h('div', { class: 'pc-vprice', hidden: true });
+    const caption = h('textarea', { class: 'pc-editor', rows: 7, maxlength: PC_MAX[plat], 'aria-label': 'Caption' });
+    const recBtn = h('button', { class: 'btn primary', onclick: async (e) => {
+      const b = e.currentTarget; b.disabled = true; const t0 = b.innerHTML;
+      try { const { blob, ext } = await c3RecordMap(c3Layout(pkg.map), (p) => { b.textContent = 'Recording ' + Math.round(p * 100) + '%'; }, { bg: bgImg }); c3Save(blob, 'web-map-' + Date.now() + '.' + ext); toast('Video saved ✓ Talk over it with the breakdown.'); }
+      catch (x) { fail(x); }
+      b.disabled = false; b.innerHTML = t0;
+    } }, icon('spark'), 'Record map video');
+    const imgBtn = h('button', { class: 'btn', onclick: () => canvas.toBlob((b) => b && c3Save(b, (view === 'pricing' ? 'price-breakdown-' : 'web-map-') + Date.now() + '.png'), 'image/png') }, 'Download image');
+    const fill = async () => {
+      titleEl.textContent = pkg.title; hookEl.textContent = '“' + pkg.hook + '”'; typeEl.textContent = VTN[pkg.type] || 'Video';
+      steps.replaceChildren(...(pkg.breakdown || []).map((b) => { const n = pkg.map.nodes.find((x) => x.id === b.node); const k = n ? (C3K[n.kind] || C3K.step) : C3K.step;
+        return h('li', null, h('div', { class: 'pc-vstep-h' }, h('em', { style: 'color:' + k[0] }, k[1]), n ? h('b', null, n.label) : null), h('p', null, b.say)); }),
+        ...(pkg.cta ? [h('li', { class: 'cta' }, h('div', { class: 'pc-vstep-h' }, h('em', null, 'Close')), h('p', null, pkg.cta))] : []));
+      priceTbl.hidden = !pkg.pricing;
+      if (pkg.pricing) { let a = 0, z = 0; const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
+        const rows = pkg.pricing.rows.map((r) => { a += r.now; z += r.with_ai; return h('tr', null, h('td', null, r.item), h('td', null, $(r.now)), h('td', null, $(r.with_ai))); });
+        priceTbl.replaceChildren(h('div', { class: 'pc-sep' }, 'Price breakdown'), h('div', { class: 'lt-wrap' }, h('table', { class: 'lt' }, h('thead', null, h('tr', null, h('th', null, 'Per month'), h('th', null, 'Now'), h('th', null, 'With AI'))),
+          h('tbody', null, rows, h('tr', { class: 'tot' }, h('td', null, h('b', null, 'Total')), h('td', null, h('b', null, $(a))), h('td', null, h('b', null, $(z))))))),
+          h('p', { class: 'dim small' }, pkg.pricing.note || 'Example numbers. Every shop is different.')); }
+      caption.value = pkg.caption_edit || ((pkg.caption || '') + (pkg.hashtags && pkg.hashtags.length ? '\n\n' + pkg.hashtags.map((x) => '#' + x).join(' ') : ''));
+      view = 'map'; drawTabs(); bgImg = await vidImg(pkg.bg); draw();
+      out.hidden = false;
+    };
+    const gen = async (btn, useAsk) => {
+      btn.disabled = true; const t0 = btn.innerHTML; btn.textContent = 'Coming up with an idea…';
+      try {
+        pkg = await api('POST', '/videos/idea', { platform: plat, type: vtype, ask: useAsk ? ask.value.trim() : '' }); savedId = 0;
+        await fill(); out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!pkg.ai) toast('The AI is busy, so here’s a starter idea. Try again in a minute.', true);
+        makeBg(bgBtn);
+      } catch (e) { fail(e); }
+      btn.disabled = false; btn.innerHTML = t0;
+    };
+    const genAuto = h('button', { class: 'btn primary pc-big', onclick: (e) => gen(e.currentTarget, false) }, icon('spark'), 'Give me a video idea');
+    const genAsk = h('button', { class: 'btn', onclick: (e) => { if (!ask.value.trim()) { toast('Type what you want first, or tap Give me a video idea', true); ask.focus(); return; } gen(e.currentTarget, true); } }, 'Make this video');
+    const when = h('input', { type: 'datetime-local', class: 'pc-when', 'aria-label': 'Post date and time' });
+    const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(11, 30, 0, 0); when.value = toLocalInput(d);
+    const save = async (status, btn) => {
+      if (!pkg) return; btn.disabled = true;
+      pkg.caption_edit = caption.value;
+      const text = 'VIDEO: ' + pkg.title + '\n\n' + vidScript(pkg) + '\n\nCAPTION:\n' + caption.value;
+      const at = status === 'scheduled' ? new Date(when.value).toISOString() : null;
+      try {
+        if (savedId) await api('PATCH', '/posts/' + savedId, { body: text, status, scheduled_at: at, pkg });
+        else savedId = (await api('POST', '/posts', { kind: 'video', pkg, platform: plat, body: text, status, scheduled_at: at, source: pkg.ai ? 'ai' : 'manual' })).id;
+        toast(status === 'scheduled' ? 'Scheduled ✓ It’s on your calendar too.' : status === 'posted' ? 'Marked as posted ✓' : 'Saved to drafts ✓');
+        if (status !== 'draft') { location.hash = '#/content/post/' + plat + '/video'; return; }
+      } catch (e) { fail(e); }
+      btn.disabled = false;
+    };
+    const schedBox = h('div', { class: 'pc-sched', hidden: true }, h('label', { class: 'lbl' }, 'When do you want to post it?'), when,
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: (e) => save('scheduled', e.currentTarget) }, icon('calendar'), 'Schedule it'), h('button', { class: 'btn ghost', onclick: () => { schedBox.hidden = true; } }, 'Cancel')));
+    out.append(
+      h('div', { class: 'pc-card' }, h('div', { class: 'pc-card-h' }, h('span', { class: 'pc-card-t' }, pcBadge(plat), titleEl), typeEl),
+        h('label', { class: 'lbl' }, 'Say this first'), hookEl),
+      h('div', { class: 'pc-vgrid' },
+        h('div', { class: 'pc-card pc-vprev' }, viewTabs, h('div', { class: 'pc-vframe' }, canvas),
+          h('div', { class: 'pc-acts' }, recBtn, imgBtn, bgBtn), bgNote,
+          h('p', { class: 'dim small' }, 'Record map video saves a vertical clip of the map building box by box over your photo. Talk over it with the breakdown.')),
+        h('div', { class: 'pc-card' }, h('div', { class: 'pc-card-h' }, h('b', null, 'Detailed breakdown'), h('button', { class: 'btn small', onclick: () => pcCopy(vidScript(pkg)) }, icon('copy'), 'Copy script')),
+          h('p', { class: 'dim small' }, 'What to say as each box shows up.'), steps, priceTbl)),
+      h('div', { class: 'pc-card' }, h('div', { class: 'pc-card-h' }, h('b', null, 'Caption'), h('button', { class: 'btn small', onclick: () => pcCopy(caption.value) }, icon('copy'), 'Copy caption')), caption,
+        h('div', { class: 'pc-acts' },
+          h('a', { class: 'btn', href: PC_OPEN[plat], target: '_blank', rel: 'noopener' }, 'Open ' + pcName(plat)),
+          h('button', { class: 'btn', onclick: () => { schedBox.hidden = false; when.focus(); } }, icon('calendar'), 'Schedule'),
+          h('button', { class: 'btn', onclick: (e) => save('draft', e.currentTarget) }, 'Save draft'),
+          h('button', { class: 'btn ok', onclick: (e) => save('posted', e.currentTarget) }, '✓ I posted it'),
+          h('button', { class: 'btn ghost', onclick: (e) => gen(e.currentTarget, !!ask.value.trim()) }, '↻ Different idea')),
+        schedBox));
+    const r = await api('GET', '/posts?platform=' + plat).catch(() => ({ posts: [] }));
+    const vids = r.posts.filter((p) => p.kind === 'video');
+    const mine = vids.filter((p) => p.status !== 'posted').slice(0, 10), done = vids.filter((p) => p.status === 'posted').slice(0, 5);
+    const redraw = () => viewVideoComposer(plat);
+    crmShell('content:post', [pcHead(pcName(plat) + ' · Video', 'Make a ' + pcName(plat) + ' video', 'Get a fresh idea with a web map, a background photo and a full breakdown of what to say.', '#/content/post/' + plat),
+      h('div', { class: 'pc-card pc-start' }, h('label', { class: 'lbl' }, 'What kind of video?'), typeBox, genAuto, h('div', { class: 'pc-or' }, h('span', null, 'or ask for something specific')), ask, h('div', { class: 'row' }, genAsk)),
+      out,
+      mine.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Video drafts and scheduled'), h('div', { class: 'pc-items' }, mine.map((p) => pcItem(p, redraw)))) : null,
+      done.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Recently posted videos'), h('div', { class: 'pc-items' }, done.map((p) => pcItem(p, redraw)))) : null]);
+    if (editId) { const it = vids.find((p) => p.id === editId); if (it && it.pkg) { pkg = it.pkg; savedId = it.id; await fill(); out.scrollIntoView({ block: 'start' }); } }
+  }
   function pcItem(p, redraw) {
-    const body = h('p', { class: 'pc-item-b' }, p.body);
+    const body = h('p', { class: 'pc-item-b' + (p.kind === 'video' ? ' clip' : '') }, p.body);
     const edit = h('textarea', { class: 'pc-editor', rows: 8, hidden: true, maxlength: PC_MAX[p.platform] || 3000 }); edit.value = p.body;
     const when = h('input', { type: 'datetime-local', class: 'pc-when', hidden: true }); when.value = p.scheduled_at ? toLocalInput(new Date(p.scheduled_at)) : toLocalInput(new Date(Date.now() + 864e5));
     const patch = async (data, msg) => { try { await api('PATCH', '/posts/' + p.id, data); toast(msg); redraw(); } catch (e) { fail(e); } };
@@ -569,10 +685,11 @@
     const saveEdit = h('button', { class: 'btn small primary', hidden: true, onclick: () => patch({ body: edit.value }, 'Saved ✓') }, 'Save');
     const saveWhen = h('button', { class: 'btn small primary', hidden: true, onclick: () => patch({ status: 'scheduled', scheduled_at: new Date(when.value).toISOString() }, 'Scheduled ✓') }, 'Set time');
     return h('article', { class: 'pc-item' },
-      h('div', { class: 'pc-item-h' }, h('span', { class: 'pc-card-t' }, pcBadge(p.platform), pcName(p.platform)), st),
+      h('div', { class: 'pc-item-h' }, h('span', { class: 'pc-card-t' }, pcBadge(p.platform), pcName(p.platform), p.kind === 'video' ? h('em', { class: 'pc-vtag' }, 'Video') : null), st),
       body, edit, when,
       h('div', { class: 'pc-acts' },
-        h('button', { class: 'btn small primary', onclick: () => pcCopy(p.body) }, icon('copy'), 'Copy'),
+        p.kind === 'video' && p.pkg ? h('a', { class: 'btn small primary', href: '#/content/post/' + p.platform + '/video?id=' + p.id }, 'Open video') : null,
+        h('button', { class: 'btn small' + (p.kind === 'video' ? '' : ' primary'), onclick: () => pcCopy(p.body) }, icon('copy'), 'Copy'),
         p.status !== 'posted' ? h('button', { class: 'btn small ok', onclick: () => patch({ status: 'posted' }, 'Marked as posted ✓') }, '✓ Posted') : null,
         h('button', { class: 'btn small', onclick: () => { const on = edit.hidden; edit.hidden = !on; body.hidden = on; saveEdit.hidden = !on; } }, 'Edit'), saveEdit,
         p.status !== 'posted' ? h('button', { class: 'btn small', onclick: () => { when.hidden = !when.hidden; saveWhen.hidden = when.hidden; } }, p.status === 'scheduled' ? 'Change time' : 'Schedule') : null, saveWhen,
@@ -586,7 +703,7 @@
     const byDay = {}; posts.forEach((p) => { const k = new Date(p.scheduled_at).toDateString(); (byDay[k] = byDay[k] || []).push(p); });
     const chip = (k, t) => h('a', { class: 'cx-chip' + ((plat || '') === k ? ' on' : ''), href: '#/content/scheduled' + (k ? '/' + k : '') }, k ? pcBadge(k) : null, t);
     const redraw = () => viewPostScheduled(plat);
-    crmShell('content:post', [pcHead('Content', 'Scheduled content', 'Your scheduled text posts. Each one is also on your calendar. When it’s time, copy it, post it, and tap Posted.', plat ? '#/content/post/' + plat : '#/content/post'),
+    crmShell('content:post', [pcHead('Content', 'Scheduled content', 'Your scheduled posts and videos. Each one is also on your calendar. When it’s time, copy it, post it, and tap Posted.', plat ? '#/content/post/' + plat : '#/content/post'),
       h('div', { class: 'cx-filters pc-filters' }, chip('', 'All'), PC_PLAT.map(([k, t]) => chip(k, t))),
       posts.length ? Object.entries(byDay).map(([d, list]) => h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, new Date(d).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), h('div', { class: 'pc-items' }, list.map((p) => pcItem(p, redraw)))))
         : h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon('calendar')), h('b', null, 'Nothing scheduled' + (plat ? ' for ' + pcName(plat) : '')), h('p', null, 'Write a text post and tap Schedule.'), h('a', { class: 'btn primary', href: '#/content/post' + (plat ? '/' + plat + '/text' : ''), style: 'margin-top:10px' }, 'Write a post'))]);
@@ -3377,6 +3494,13 @@
     let g = ctx.createRadialGradient(0, 0, 0, 0, 0, W * 1.1); g.addColorStop(0, 'rgba(91,140,255,.28)'); g.addColorStop(1, 'rgba(91,140,255,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     g = ctx.createRadialGradient(W, H, 0, W, H, W * 0.9); g.addColorStop(0, 'rgba(215,255,63,.12)'); g.addColorStop(1, 'rgba(215,255,63,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  function c3BgImg(ctx, W, H, img) {
+    if (!img || !img.naturalWidth) return c3Bg(ctx, W, H);
+    const sc = Math.max(W / img.naturalWidth, H / img.naturalHeight), iw = img.naturalWidth * sc, ih = img.naturalHeight * sc;
+    ctx.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih);
+    ctx.fillStyle = 'rgba(6,7,10,.66)'; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(6,7,10,.55)'); g.addColorStop(0.5, 'rgba(6,7,10,0)'); g.addColorStop(1, 'rgba(6,7,10,.7)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
   const c3Mix = (ctx, x0, x1) => { const g = ctx.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, '#5b8cff'); g.addColorStop(0.52, '#46c8d8'); g.addColorStop(1, '#d7ff3f'); return g; };
 
   /* ---- photo post slides (1080x1350) ---- */
@@ -3429,10 +3553,10 @@
       zoom = 1.25 + (fit - 1.25) * ease(pull); cx = tgtX + (W / 2 - tgtX) * ease(pull); cy = tgtY + (L.H / 2 - tgtY) * ease(pull);
       if (t < start) { zoom = 1.25; cx = W / 2; cy = 260; }
     } else if (L.H > 1920) { zoom = 1920 / L.H; cy = L.H / 2; }
-    c3Bg(ctx, W, H);
+    c3BgImg(ctx, W, H, opts.bg);
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy);
     // grid dots
-    ctx.fillStyle = 'rgba(255,255,255,.05)'; for (let gx = 0; gx < W; gx += 54) for (let gy = 0; gy < L.H; gy += 54) ctx.fillRect(gx, gy, 3, 3);
+    ctx.fillStyle = opts.bg ? 'rgba(255,255,255,.035)' : 'rgba(255,255,255,.05)'; for (let gx = 0; gx < W; gx += 54) for (let gy = 0; gy < L.H; gy += 54) ctx.fillRect(gx, gy, 3, 3);
     // title
     const ta = opts.still ? 1 : Math.min(1, t / 0.6);
     ctx.globalAlpha = ta; ctx.font = '800 64px ' + C3F; const tl = c3Wrap(ctx, L.title, W - 140).slice(0, 2);
@@ -3453,7 +3577,7 @@
       const col = (C3K[n.kind] || C3K.step)[0], s = 0.9 + 0.1 * a;
       ctx.save(); ctx.globalAlpha = a; ctx.translate(n.x + n.w / 2, n.y + n.h / 2); ctx.scale(s, s); ctx.translate(-(n.x + n.w / 2), -(n.y + n.h / 2));
       ctx.shadowColor = col; ctx.shadowBlur = i === idx && !opts.still ? 36 : 14;
-      c3Round(ctx, n.x, n.y, n.w, n.h, 28); ctx.fillStyle = '#10141e'; ctx.fill(); ctx.shadowBlur = 0;
+      c3Round(ctx, n.x, n.y, n.w, n.h, 28); ctx.fillStyle = opts.bg ? 'rgba(12,15,24,.9)' : '#10141e'; ctx.fill(); ctx.shadowBlur = 0;
       ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
       ctx.font = '700 22px ' + C3F; ctx.fillStyle = col; ctx.fillText((C3K[n.kind] || C3K.step)[1].toUpperCase(), n.x + 26, n.y + 40);
       ctx.font = '800 ' + n.fs + 'px ' + C3F; ctx.fillStyle = '#f4f6fb';
@@ -3464,8 +3588,34 @@
     ctx.restore();
     if (opts.handle) { ctx.font = '600 30px ' + C3F; ctx.fillStyle = 'rgba(244,246,251,.7)'; ctx.fillText(opts.handle, 70, H - 70); }
   }
+  function c3Pricing(pr, title, img) {
+    const W = 1080, H = 1920, c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+    c3BgImg(ctx, W, H, img);
+    const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    ctx.font = '800 66px ' + C3F; const tl = c3Wrap(ctx, title || 'What you pay now vs with AI', W - 140).slice(0, 3);
+    tl.forEach((l, k) => { ctx.fillStyle = c3Mix(ctx, 70, W - 70); ctx.fillText(l, 70, 190 + k * 76); });
+    let y = 190 + tl.length * 76 + 60;
+    ctx.font = '700 26px ' + C3F; ctx.fillStyle = '#a2a8b8'; ctx.fillText('PER MONTH', 70, y); ctx.textAlign = 'right'; ctx.fillStyle = '#ff7a7a'; ctx.fillText('NOW', 760, y); ctx.fillStyle = '#3ddc97'; ctx.fillText('WITH AI', W - 70, y); ctx.textAlign = 'left';
+    y += 30; let a = 0, b = 0;
+    pr.rows.forEach((r) => {
+      ctx.font = '700 38px ' + C3F; const lines = c3Wrap(ctx, r.item, 470).slice(0, 2); const rh = 60 + lines.length * 46;
+      c3Round(ctx, 50, y, W - 100, rh, 24); ctx.fillStyle = 'rgba(12,15,24,.88)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#f4f6fb'; lines.forEach((l, k) => ctx.fillText(l, 84, y + 66 + k * 46));
+      ctx.font = '800 44px ' + C3F; ctx.textAlign = 'right'; const my = y + rh / 2 + 16;
+      ctx.fillStyle = '#ff9a9a'; ctx.fillText($(r.now), 760, my); ctx.fillStyle = '#5ff0ad'; ctx.fillText($(r.with_ai), W - 84, my); ctx.textAlign = 'left';
+      a += r.now; b += r.with_ai; y += rh + 18;
+    });
+    y += 20; c3Round(ctx, 50, y, W - 100, 190, 28); ctx.fillStyle = 'rgba(16,20,34,.95)'; ctx.fill(); ctx.strokeStyle = c3Mix(ctx, 50, W - 50); ctx.lineWidth = 4; ctx.stroke();
+    ctx.font = '700 30px ' + C3F; ctx.fillStyle = '#a2a8b8'; ctx.fillText('TOTAL A MONTH', 84, y + 60);
+    ctx.font = '800 60px ' + C3F; ctx.textAlign = 'right'; ctx.fillStyle = '#ff9a9a'; ctx.fillText($(a), 760, y + 140); ctx.fillStyle = '#5ff0ad'; ctx.fillText($(b), W - 84, y + 140); ctx.textAlign = 'left';
+    y += 190;
+    if (a > b) { y += 90; ctx.font = '800 54px ' + C3F; ctx.fillStyle = '#d7ff3f'; ctx.fillText($((a - b) * 12) + ' a year difference', 70, y); }
+    ctx.font = '500 28px ' + C3F; ctx.fillStyle = 'rgba(244,246,251,.65)'; c3Wrap(ctx, pr.note || 'Example numbers. Every shop is different.', W - 140).slice(0, 3).forEach((l, k) => ctx.fillText(l, 70, Math.max(y + 80, H - 220) + k * 38));
+    ctx.font = '600 30px ' + C3F; ctx.fillStyle = 'rgba(244,246,251,.7)'; ctx.fillText('@reekonsystems', 70, H - 70);
+    return c;
+  }
   const c3MapLen = (L) => 1.1 + L.nodes.length * 1.25 + 2.6;
-  async function c3RecordMap(L, onP) {
+  async function c3RecordMap(L, onP, ropts) {
     const c = document.createElement('canvas'); c.width = 1080; c.height = 1920; const ctx = c.getContext('2d');
     const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
     const type = types.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
@@ -3473,9 +3623,10 @@
     const stream = c.captureStream(30), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6e6 }), chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((res) => { rec.onstop = res; });
-    const len = c3MapLen(L); c3DrawMap(ctx, L, 0, {}); rec.start(250);
+    const bg = ropts && ropts.bg, handle = (ropts && ropts.handle) || '@reekonsystems';
+    const len = c3MapLen(L); c3DrawMap(ctx, L, 0, { bg }); rec.start(250);
     const t0 = performance.now();
-    await new Promise((res) => { const step = () => { const t = (performance.now() - t0) / 1000; c3DrawMap(ctx, L, Math.min(t, len), { handle: '@reekonsystems' }); onP && onP(Math.min(1, t / len)); if (t < len) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+    await new Promise((res) => { const step = () => { const t = (performance.now() - t0) / 1000; c3DrawMap(ctx, L, Math.min(t, len), { handle, bg }); onP && onP(Math.min(1, t / len)); if (t < len) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
     rec.stop(); await done;
     return { blob: new Blob(chunks, { type: type.split(';')[0] }), ext: type.includes('mp4') ? 'mp4' : 'webm' };
   }

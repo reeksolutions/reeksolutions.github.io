@@ -3239,16 +3239,18 @@ async function api(request, env, url) {
     'a common mistake ("Most shops do X. Here is why it costs them.")', 'myth vs fact', '"If I owned a tint shop tomorrow, the first thing I would do is..."', 'a bold one-sentence truth'];
   const POST_FORMATS = ['3 to 4 numbered tips', 'a short checklist with checkmarks', 'before vs after', 'a mini story with a clear lesson', 'myth vs fact pairs', 'an exact script or text message they can copy', 'a simple math breakdown labeled as an example', 'do this / not that'];
   const pickOne = (arr, avoid) => { const pool = arr.filter((x) => !(avoid || []).includes(x)); const list = pool.length ? pool : arr; return list[Math.floor(Math.random() * list.length)]; };
-  const postRow = (r) => ({ id: r.id, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
-  async function postCal(row, platform, when, body) {
+  const postRow = (r) => ({ id: r.id, kind: r.kind === 'video' ? 'video' : 'text', pkg: r.kind === 'video' ? (() => { try { return JSON.parse(r.map || '{}').pkg || null; } catch { return null; } })() : null, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
+  const vidPkg = (x) => { const t = JSON.stringify(x); if (t.length > 60000) bad('That video is too big to save'); return JSON.parse(t); };
+  async function postCal(row, platform, when, body, extra) {
     // keep one calendar reminder per scheduled post
     let meta = {}; try { meta = JSON.parse(row && row.map || '{}') || {}; } catch { meta = {}; }
+    if (extra) Object.assign(meta, extra);
     if (meta.cal) await env.DB.prepare('DELETE FROM cal_events WHERE id = ?').bind(meta.cal).run();
     meta.cal = null;
     if (when) {
       const first = String(body || '').split('\n').find((x) => x.trim()) || 'post';
       const r = await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, created_at) VALUES (?,?,?,?,?,?,?)')
-        .bind(user.id, str('Post on ' + POST_PLAT[platform].name + ': ' + first, 120), 'event', when, null, str('Scheduled post. Open Content > Scheduled to copy it.', 200), now()).run();
+        .bind(user.id, str((meta.pkg ? 'Video on ' : 'Post on ') + POST_PLAT[platform].name + ': ' + first, 120), 'event', when, null, str('Scheduled ' + (meta.pkg ? 'video' : 'post') + '. Open Content > Scheduled.', 200), now()).run();
       meta.cal = r.meta.last_row_id;
     }
     return JSON.stringify(meta);
@@ -3257,40 +3259,106 @@ async function api(request, env, url) {
     need(user, 'admin');
     const st = ['draft', 'scheduled', 'posted'].includes(url.searchParams.get('status')) ? url.searchParams.get('status') : '';
     const pl = POST_PLAT[url.searchParams.get('platform')] ? url.searchParams.get('platform') : '';
-    const rows = (await env.DB.prepare(`SELECT * FROM content_items WHERE kind = 'textpost' ${st ? 'AND status = ?' : ''} ${pl ? 'AND platforms = ?' : ''} ORDER BY CASE WHEN status = 'scheduled' THEN COALESCE(day,'') END ASC, id DESC LIMIT 200`)
+    const rows = (await env.DB.prepare(`SELECT * FROM content_items WHERE kind IN ('textpost','video') ${st ? 'AND status = ?' : ''} ${pl ? 'AND platforms = ?' : ''} ORDER BY CASE WHEN status = 'scheduled' THEN COALESCE(day,'') END ASC, id DESC LIMIT 200`)
       .bind(...[st, pl ? JSON.stringify([pl]) : ''].filter(Boolean)).all()).results.map(postRow);
-    const counts = Object.fromEntries((await env.DB.prepare("SELECT status, COUNT(*) AS n FROM content_items WHERE kind = 'textpost' GROUP BY status").all()).results.map((r) => [r.status, r.n]));
+    const counts = Object.fromEntries((await env.DB.prepare("SELECT status, COUNT(*) AS n FROM content_items WHERE kind IN ('textpost','video') GROUP BY status").all()).results.map((r) => [r.status, r.n]));
     return json({ posts: rows, counts });
   }
   if (path === '/posts' && method === 'POST') {
     need(user, 'admin');
     const platform = POST_PLAT[body.platform] ? body.platform : bad('Pick a platform');
-    const text = str(body.body, 3000).trim(); if (!text) bad('The post is empty');
+    const text = str(body.body, body.kind === 'video' ? 8000 : 3000).trim(); if (!text) bad('The post is empty');
     const status = ['draft', 'scheduled', 'posted'].includes(body.status) ? body.status : 'draft';
     const when = status === 'scheduled' ? validIso(body.scheduled_at) : null;
     if (status === 'scheduled' && !when) bad('Pick a date and time');
-    const meta = await postCal(null, platform, when, text);
+    const isVid = body.kind === 'video' && body.pkg && typeof body.pkg === 'object';
+    const pkg = isVid ? vidPkg(body.pkg) : null;
+    const meta = await postCal(null, platform, when, text, pkg ? { pkg } : null);
     const r = await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at, posted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(user.id, 'textpost', status, str(text.split('\n')[0], 120), text, JSON.stringify([platform]), when, meta, body.source === 'ai' ? 'ai' : 'manual', now(), status === 'posted' ? now() : null).run();
+      .bind(user.id, isVid ? 'video' : 'textpost', status, str(text.split('\n')[0], 120), text, JSON.stringify([platform]), when, meta, body.source === 'ai' ? 'ai' : 'manual', now(), status === 'posted' ? now() : null).run();
     if (status === 'posted') await trkBump(env, user.id, { posts: 1 }).catch(() => {});
     return json(postRow(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(r.meta.last_row_id).first()));
   }
   if ((m = path.match(/^\/posts\/(\d+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
     need(user, 'admin');
-    const row = await env.DB.prepare("SELECT * FROM content_items WHERE id = ? AND kind = 'textpost'").bind(+m[1]).first();
+    const row = await env.DB.prepare("SELECT * FROM content_items WHERE id = ? AND kind IN ('textpost','video')").bind(+m[1]).first();
     if (!row) throw new HttpError(404, 'Post not found');
     const platform = postRow(row).platform;
     if (method === 'DELETE') { await postCal(row, platform, null, ''); await env.DB.prepare('DELETE FROM content_items WHERE id = ?').bind(row.id).run(); return json({ ok: true }); }
-    const text = body.body !== undefined ? str(body.body, 3000).trim() || bad('The post is empty') : row.body;
+    const text = body.body !== undefined ? str(body.body, row.kind === 'video' ? 8000 : 3000).trim() || bad('The post is empty') : row.body;
     const status = ['draft', 'scheduled', 'posted'].includes(body.status) ? body.status : row.status;
     let when = row.day;
     if (body.scheduled_at !== undefined) when = body.scheduled_at ? validIso(body.scheduled_at) || bad('Pick a date and time') : null;
     if (status === 'scheduled' && !when) bad('Pick a date and time');
-    const meta = await postCal(row, platform, status === 'scheduled' ? when : null, text);
+    const newPkg = row.kind === 'video' && body.pkg && typeof body.pkg === 'object' ? { pkg: vidPkg(body.pkg) } : null;
+    const meta = await postCal(row, platform, status === 'scheduled' ? when : null, text, newPkg);
     await env.DB.prepare('UPDATE content_items SET body = ?, title = ?, status = ?, day = ?, map = ?, posted_at = ? WHERE id = ?')
       .bind(text, str(text.split('\n')[0], 120), status, status === 'draft' ? null : when, meta, status === 'posted' ? (row.posted_at || now()) : null, row.id).run();
     if (status === 'posted' && row.status !== 'posted') await trkBump(env, user.id, { posts: 1 }).catch(() => {});
     return json(postRow(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(row.id).first()));
+  }
+  const VIDEO_TYPES = { webmap: 'a web map that explains a system he can build for the shop, node by node (problem, why, cost, fix, result)', pricing: 'a pricing comparison: what shops pay now (software, answering service, front desk, lost jobs) vs a custom AI system, with clearly labeled example numbers',
+    painpoint: 'a pain point breakdown: one daily frustration tint, PPF or detail shop owners deal with, why it happens, what it costs, and the fix', automation: 'a tedious task breakdown: one repetitive task shops do by hand and exactly how an AI system automates it step by step' };
+  if (path === '/videos/idea' && method === 'POST') {
+    need(user, 'admin');
+    const platform = POST_PLAT[body.platform] ? body.platform : 'instagram';
+    const type = VIDEO_TYPES[body.type] ? body.type : pickOne(Object.keys(VIDEO_TYPES));
+    const ask = str(body.ask, 800).trim();
+    let used = {}; try { used = JSON.parse((await getSetting(env, 'video_recent_mix')) || '{}') || {}; } catch { used = {}; }
+    const angle = pickOne(POST_ANGLES, used.angles);
+    await setSetting(env, 'video_recent_mix', JSON.stringify({ angles: [angle].concat(used.angles || []).slice(0, 12) }));
+    const recent = (await env.DB.prepare("SELECT title FROM content_items WHERE kind = 'video' ORDER BY id DESC LIMIT 15").all()).results.map((r) => r.title).filter(Boolean);
+    const sys = 'You plan short vertical videos (30 to 75 seconds) for Marquise, founder of Reekon Systems in LA. He used to work in a window tint shop and now builds AI systems for window tint, PPF, ceramic coating and auto detailing shops: AI receptionists that answer every call and book jobs, missed-call text-back, speed-to-lead follow-up, booking and reminders, review requests, custom CRMs. ' +
+      'His videos are mostly animated WEB MAPS on screen while he talks, explaining systems, pain points, pricing comparisons and tedious tasks that can be automated. Audience: tint, PPF and detail shop owners. ' +
+      'Make it VALUE PACKED and very detailed, teaching first, never salesy. Never invent clients, results or stats; label any numbers as examples. No em dashes or en dashes. ' +
+      'Reply ONLY with JSON: {"title": under 60 chars, "hook": the first line he says, under 15 words, "map": {"title": under 60 chars, "nodes": [7 to 10 nodes, each {"id": short id, "label": under 45 chars, "note": under 90 chars, "kind": one of problem, cause, cost, fix, result, step, "parent": id of parent or null for exactly one root}]}, ' +
+      '"breakdown": [one item per node in order, each {"node": node id, "say": 2 to 4 sentences of exactly what he says while that box appears, specific and detailed}], ' +
+      '"pricing": only for pricing videos, else null: {"rows": [4 to 6 items {"item": what they pay for, "now": monthly cost now as a number, "with_ai": monthly cost with the system as a number}], "note": "Example numbers..."}, ' +
+      '"cta": one soft closing line, "caption": a value-packed caption for the post, "hashtags": [5 to 8 strings without #], "background": a photo description for the background image, a realistic photo related to the topic like a tint shop bay at night or a car with tinted windows, no people facing camera, no text}.';
+    const usr = 'Video type: ' + VIDEO_TYPES[type] + '.\n' + (ask ? 'He wants it about: ' + ask : 'Topic: ' + angle + '. Make it a fresh, unique idea.') +
+      (recent.length ? '\nDo not repeat these recent video titles: ' + recent.join(' | ') : '') + '\nPlatform: ' + POST_PLAT[platform].name + '. (variation ' + Math.random().toString(36).slice(2, 8) + ')';
+    const j = await c3AI(sys, usr, 2600, 0.9);
+    const clean = (x, n) => str(String(x == null ? '' : x).replace(/[—–]/g, ','), n);
+    let pkg = null;
+    if (j && j.map && Array.isArray(j.map.nodes) && j.map.nodes.length >= 3) {
+      const nodes = j.map.nodes.slice(0, 12).map((n, i) => ({ id: clean(n.id || 'n' + i, 12) || 'n' + i, label: clean(n.label, 60), note: clean(n.note, 120), kind: ['problem', 'cause', 'cost', 'fix', 'result', 'step'].includes(n.kind) ? n.kind : 'step', parent: n.parent == null ? null : clean(n.parent, 12) }));
+      const ids = new Set(nodes.map((n) => n.id)); nodes.forEach((n) => { if (n.parent && !ids.has(n.parent)) n.parent = null; });
+      const roots = nodes.filter((n) => n.parent == null); roots.slice(1).forEach((n) => { n.parent = roots[0].id; });
+      const pr = j.pricing && Array.isArray(j.pricing.rows) && j.pricing.rows.length ? { rows: j.pricing.rows.slice(0, 7).map((r) => ({ item: clean(r.item, 60), now: Math.max(0, Math.round(+r.now || 0)), with_ai: Math.max(0, Math.round(+r.with_ai || 0)) })), note: clean(j.pricing.note || 'Example numbers. Every shop is different.', 140) } : null;
+      pkg = { type, title: clean(j.title || j.map.title, 70), hook: clean(j.hook, 140), map: { title: clean(j.map.title || j.title, 70), nodes },
+        breakdown: (Array.isArray(j.breakdown) ? j.breakdown : []).slice(0, 12).map((b) => ({ node: clean(b.node, 12), say: clean(b.say, 600) })).filter((b) => b.say),
+        pricing: pr, cta: clean(j.cta, 160), caption: clean(j.caption, 2000), hashtags: (Array.isArray(j.hashtags) ? j.hashtags : []).map((x) => String(x).replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8),
+        background: clean(j.background, 300), ai: true };
+    }
+    if (!pkg) {
+      pkg = { type: 'webmap', ai: false, title: 'The call you never knew you lost', hook: 'Your best customer called today. Nobody picked up.', map: { title: 'The missed call problem', nodes: [
+        { id: 'p', label: 'Phone rings mid-install', note: 'Film on the glass, gloves wet', kind: 'problem', parent: null },
+        { id: 'c1', label: 'Price shoppers call 3 to 4 shops', note: 'Whoever answers first gets the car', kind: 'cause', parent: 'p' },
+        { id: 'c2', label: 'No voicemail left', note: 'They just call the next shop', kind: 'cause', parent: 'p' },
+        { id: 'k', label: 'Lost $400 ceramic job', note: 'Example number. PPF jobs cost more.', kind: 'cost', parent: 'c1' },
+        { id: 'f1', label: 'AI picks up every call', note: 'Quotes your prices, books the slot', kind: 'fix', parent: 'k' },
+        { id: 'f2', label: 'Missed-call text in seconds', note: '"What car are you looking to tint?"', kind: 'fix', parent: 'k' },
+        { id: 'r', label: 'More cars booked, less phone time', note: 'You stay in the bay', kind: 'result', parent: 'f1' }] },
+        breakdown: [{ node: 'p', say: 'Picture this. You are halfway through a windshield and the phone rings. You can not grab it.' }, { node: 'c1', say: 'That caller is price shopping. They are calling three or four shops off Google.' }, { node: 'c2', say: 'And they do not leave a voicemail. They just call the next shop.' }, { node: 'k', say: 'That is a ceramic job, maybe four hundred dollars, gone. Example number, but you get the idea.' }, { node: 'f1', say: 'An AI receptionist picks up when you can not, quotes from your price sheet and books the car.' }, { node: 'f2', say: 'And anyone who hangs up gets a text back in seconds.' }, { node: 'r', say: 'You keep working, and the job still lands on your calendar.' }],
+        pricing: null, cta: 'Follow for more ways to stop losing jobs.', caption: 'Tint customers price shop. If nobody picks up, they call the next shop. Here is how to stop losing those calls.', hashtags: ['windowtint', 'ppf', 'ceramictint', 'smallbusiness', 'autodetailing'], background: 'a modern window tint shop bay at night with a car under soft lights' };
+    }
+    return json(pkg);
+  }
+  if (path === '/videos/bg' && method === 'POST') {
+    need(user, 'admin');
+    const desc = str(body.prompt, 300) || 'a modern window tint shop bay at night with a sleek car under soft lights';
+    if (!aiImagesReady(env)) bad('Image generation is not switched on');
+    const prompt = desc + '. Vertical background photo, cinematic, moody dark tones, shallow depth of field, realistic, high detail. No text, no words, no letters, no logos, no watermark.';
+    let bytes, mime;
+    if (env.STUDIO_FAKE_AI === '1') { mime = 'image/svg+xml'; bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2550"/><stop offset="1" stop-color="#0a0b14"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/><circle cx="700" cy="700" r="420" fill="#2a3a80" opacity=".6"/></svg>'); }
+    else {
+      let r; try { r = await env.AI.run(IMAGE_MODEL, { prompt, steps: 6, seed: Math.floor(Math.random() * 1e9) }); } catch (e) { console.error('video bg', e); bad('The image AI is busy. Try again in a minute.'); }
+      if (!r || !r.image) bad('No picture came back. Try again.');
+      const bin = atob(r.image); bytes = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k); mime = 'image/jpeg';
+    }
+    const id = hex(crypto.getRandomValues(new Uint8Array(10)));
+    await env.DB.prepare('INSERT INTO demo_images (id, user_id, mime, data, prompt, created_at) VALUES (?,?,?,?,?,?)').bind(id, user.id, mime, bytes, prompt.slice(0, 600), now()).run();
+    return json({ url: '/img/' + id + '.jpg' });
   }
   if (path === '/posts/write' && method === 'POST') {
     need(user, 'admin');
