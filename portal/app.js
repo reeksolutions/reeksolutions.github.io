@@ -320,6 +320,114 @@
     window.scrollTo(0, 0);
     return main;
   }
+  /* ===== Home dashboard (new CRM) ===== */
+  const hxMoney = (n) => '$' + Math.round(+n || 0).toLocaleString();
+  function hxChart(series, labels) {
+    // simple multi-line chart: series = [[name, values, colorVar]]
+    const W = 640, H = 200, P = { l: 30, r: 10, t: 12, b: 24 };
+    const max = Math.max(1, ...series.flatMap(([, v]) => v));
+    const n = labels.length, x = (i) => P.l + (i * (W - P.l - P.r)) / Math.max(1, n - 1), y = (v) => H - P.b - (v / max) * (H - P.t - P.b);
+    const ns = 'http://www.w3.org/2000/svg', el = (t, a) => { const e = document.createElementNS(ns, t); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, v)); return e; };
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'hx-chart', role: 'img', 'aria-label': 'Outreach over the last ' + n + ' days' });
+    const ticks = [0, Math.ceil(max / 2), max];
+    ticks.forEach((t) => { svg.append(el('line', { x1: P.l, x2: W - P.r, y1: y(t), y2: y(t), class: 'hx-grid' })); const tx = el('text', { x: P.l - 8, y: y(t) + 4, class: 'hx-tick', 'text-anchor': 'end' }); tx.textContent = t; svg.append(tx); });
+    labels.forEach((d, i) => { if (i % Math.ceil(n / 7) && i !== n - 1) return; const tx = el('text', { x: x(i), y: H - 6, class: 'hx-tick', 'text-anchor': i === n - 1 ? 'end' : 'middle' }); tx.textContent = new Date(d + 'T12:00').toLocaleDateString([], { month: 'numeric', day: 'numeric' }); svg.append(tx); });
+    series.forEach(([name, vals, c]) => {
+      const pts = vals.map((v, i) => x(i) + ',' + y(v)).join(' ');
+      svg.append(el('polyline', { points: pts, fill: 'none', stroke: c, 'stroke-width': 2.4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      const li = vals.length - 1; svg.append(el('circle', { cx: x(li), cy: y(vals[li]), r: 3.5, fill: c }));
+    });
+    return svg;
+  }
+  async function viewHome2() {
+    const now = new Date();
+    const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()), d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+    const [hm0, ov, lanes, cal] = await Promise.all([
+      api('GET', '/home?range=7').catch(() => null), api('GET', '/home/overview').catch(() => null), api('GET', '/leads/lanes').catch(() => ({})),
+      api('GET', '/calendar?from=' + encodeURIComponent(d0.toISOString()) + '&until=' + encodeURIComponent(d1.toISOString())).catch(() => ({ events: [], callbacks: [], booked: [] }))]);
+    const H0 = hm0 || { score: {}, revenue: {}, totals: {}, outreach: { calls: [], sms: [], email: [], social: [] }, labels: [], platforms: {}, goal: 0 };
+    const O = ov || { stages: {}, outcomes_week: {}, leads: {}, recent: [], signups: [], site: {}, finder: {}, deals30: {} };
+    const hr = now.getHours(), hi = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+    const card = (cls, kids) => h('section', { class: 'hx-card ' + (cls || '') }, kids);
+    const cardHead = (t, link) => h('div', { class: 'hx-ch' }, h('h3', null, t), link || null);
+    const kpi = (label, value, sub, ic, tone) => h('div', { class: 'hx-kpi' + (tone ? ' ' + tone : '') },
+      h('div', { class: 'hx-kpi-h' }, h('span', null, label), h('i', { class: 'hx-kpi-ic' }, icon(ic))), h('b', null, value), h('small', null, sub));
+
+    // today: schedule + to-dos
+    const items = [];
+    (cal.events || []).forEach((e) => items.push({ at: e.starts_at, type: e.kind, title: e.title, ev: e }));
+    (cal.callbacks || []).forEach((l) => items.push({ at: l.at, type: 'callback', title: 'Call back ' + l.business, lead: l }));
+    (cal.booked || []).forEach((l) => items.push({ at: l.at, type: 'booked', title: 'Booked: ' + l.business, lead: l }));
+    items.sort((a, b) => new Date(a.at) - new Date(b.at));
+    const sched = items.filter((it) => !['todo', 'note'].includes(it.type)), todos = items.filter((it) => it.type === 'todo');
+    const openTodos = todos.filter((t) => !t.ev.done).length;
+    const toggle = async (it, box) => { try { await api('PATCH', '/calendar/' + it.ev.id, { done: box.checked }); it.ev.done = box.checked ? 1 : 0; box.closest('.hx-todo').classList.toggle('done', box.checked); } catch (x) { fail(x); box.checked = !box.checked; } };
+    const todayCard = card('hx-today', [cardHead('Today', h('a', { class: 'hx-more', href: '#/calendar' }, 'Calendar ›')),
+      sched.length ? h('div', { class: 'hx-sched' }, sched.slice(0, 5).map((it) => h('div', { class: 'hx-si' + (new Date(it.at) < now ? ' past' : '') },
+        h('time', null, new Date(it.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })), h('span', { class: 'cx-bar ' + it.type }), h('span', { class: 'hx-si-t' }, it.title),
+        it.lead && it.lead.phone ? h('a', { class: 'btn small primary', href: telHref(it.lead.phone) }, 'Call') : it.ev && it.ev.link ? h('a', { class: 'btn small', href: it.ev.link, target: '_blank', rel: 'noopener' }, 'Join') : null)))
+        : h('p', { class: 'hx-empty' }, 'Nothing scheduled today.'),
+      h('div', { class: 'hx-sub' }, 'To-dos', h('em', null, openTodos + ' open')),
+      todos.length ? h('div', null, todos.map((it) => { const box = h('input', { type: 'checkbox', checked: !!it.ev.done }); box.onchange = () => toggle(it, box); return h('label', { class: 'hx-todo' + (it.ev.done ? ' done' : '') }, box, h('span', null, it.title)); }))
+        : h('p', { class: 'hx-empty' }, 'No to-dos. Add them from the Calendar.')]);
+
+    // outreach chart
+    const OR = H0.outreach || {};
+    const chartCard = card('hx-chartc', [cardHead('Outreach · last 14 days', h('div', { class: 'hx-legend' }, [['Calls', 'var(--accent)'], ['SMS', '#34d399'], ['Email', '#60a5fa'], ['DMs', '#f472b6']].map(([t, c]) => h('span', null, h('i', { style: 'background:' + c }), t)))),
+      (H0.labels || []).length ? hxChart([['Calls', OR.calls || [], 'var(--accent)'], ['SMS', OR.sms || [], '#34d399'], ['Email', OR.email || [], '#60a5fa'], ['DMs', OR.social || [], '#f472b6']], H0.labels) : h('p', { class: 'hx-empty' }, 'No outreach logged yet.'),
+      h('div', { class: 'hx-tots' }, [['Calls', H0.totals.dials], ['Conversations', H0.totals.talks], ['Texts', H0.totals.texts], ['DMs', H0.totals.dms], ['Demos', H0.totals.demos]].map(([t, v]) => h('div', null, h('b', null, String(v || 0)), h('small', null, t + ' · 7d'))))]);
+
+    // pipeline
+    const st = O.stages || {}, sOf = {}; Object.entries(st).forEach(([k, n]) => { const g = STAGE_OF(k); sOf[g] = (sOf[g] || 0) + n; });
+    const pmax = Math.max(1, ...STAGES.map(([k]) => sOf[k] || 0));
+    const pipeCard = card('hx-pipe', [cardHead('Pipeline', h('small', { class: 'hx-dim' }, (O.leads.total || 0) + ' leads · +' + (O.leads.week || 0) + ' this week')),
+      h('div', { class: 'hx-bars' }, STAGES.map(([k, l]) => h('div', { class: 'hx-bar-row' }, h('span', null, l), h('div', { class: 'hx-bar' }, h('i', { style: 'width:' + Math.round(100 * (sOf[k] || 0) / pmax) + '%', class: 's-' + k })), h('b', null, String(sOf[k] || 0)))))]);
+
+    // calls this week by outcome
+    const ow = O.outcomes_week || {}, owTotal = Object.values(ow).reduce((a, b) => a + b, 0);
+    const callsCard = card('hx-calls', [cardHead('Calls this week', h('small', { class: 'hx-dim' }, owTotal + ' logged')),
+      owTotal ? h('div', { class: 'hx-oc' }, OUTCOMES.filter(([k]) => ow[k]).map(([k, l]) => h('div', null, h('b', null, String(ow[k])), h('small', null, l)))) : h('p', { class: 'hx-empty' }, 'No calls logged this week yet.')]);
+
+    // lead finder
+    const F = O.finder || {};
+    const finderCard = card('hx-finder', [cardHead('Lead Finder', h('a', { class: 'hx-more', href: '#/finder' }, 'Open ›')),
+      h('div', { class: 'hx-fin' }, h('div', null, h('b', null, String(F.ready || 0)), h('small', null, 'fresh leads ready')), h('div', null, h('b', null, String(lanes.new || 0)), h('small', null, 'in New')), h('div', null, h('b', null, String(lanes.callback || 0)), h('small', null, 'callbacks'))),
+      h('div', { class: 'hx-prog' }, h('i', { style: 'width:' + Math.min(100, Math.round(100 * (F.ready || 0) / Math.max(1, F.goal || 200))) + '%' })),
+      h('p', { class: 'hx-dim small' }, 'Goal ' + (F.goal || 200) + ' ready · bot ' + (F.on ? 'on' : 'off') + ' · ' + (F.month || 0) + ' of ' + (F.cap_month || 0) + ' searches this month')]);
+
+    // socials + landing page
+    const PL = [['ig', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['facebook', 'Facebook']];
+    const socCard = card('hx-soc', [cardHead('Audience'),
+      h('div', { class: 'hx-socs' }, PL.map(([k, l]) => { const p = (H0.platforms || {})[k] || {}; return h('div', null, h('small', null, l), h('b', null, p.followers != null ? p.followers.toLocaleString() : '—'),
+        p.change ? h('em', { class: p.change > 0 ? 'up' : 'down' }, (p.change > 0 ? '+' : '') + p.change + ' 7d') : h('em', null, p.followers != null ? 'no change' : 'not tracked')); })),
+      h('div', { class: 'hx-sub' }, 'Landing page · 7 days'),
+      h('div', { class: 'hx-site' }, h('div', null, h('b', null, String(O.site.views || 0)), h('small', null, 'visits')), h('div', null, h('b', null, String(O.site.clicks || 0)), h('small', null, 'button taps')), h('div', null, h('b', null, String(O.site.leads || 0)), h('small', null, 'demo requests')))]);
+
+    // recent activity
+    const OL = Object.fromEntries(OUTCOMES);
+    const feed = [].concat((O.recent || []).map((c) => ({ at: c.created_at, t: OL[c.outcome] || c.outcome.replace(/_/g, ' '), who: c.business, k: 'call' })),
+      (O.signups || []).map((l) => ({ at: l.created_at, t: 'Demo request from your site', who: l.business, k: 'site' }))).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8);
+    const ago = (iso) => { const m = Math.round((now - new Date(iso)) / 6e4); return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };
+    const feedCard = card('hx-feed', [cardHead('Recent activity'),
+      feed.length ? h('div', null, feed.map((f) => h('div', { class: 'hx-fi' }, h('span', { class: 'hx-fdot ' + f.k }), h('div', null, h('b', null, f.who), h('small', null, f.t)), h('time', null, ago(f.at)))))
+        : h('p', { class: 'hx-empty' }, 'Calls you log and demo requests show up here.')]);
+
+    const R = H0.revenue || {}, sc = H0.score || {};
+    crmShell('home', [
+      h('div', { class: 'hx-hello' }, h('div', null, h('span', { class: 'eyebrow' }, now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), h('h1', null, hi + ', ' + first(S.me.name))),
+        h('div', { class: 'hx-hello-r' }, H0.streak ? h('span', { class: 'hx-pill' }, H0.streak + '-day streak') : null, H0.day_n ? h('span', { class: 'hx-pill' }, 'Day ' + H0.day_n + ' of the push') : null)),
+      h('div', { class: 'hx-kpis' },
+        kpi('Revenue', hxMoney(R.total), (R.mrr ? hxMoney(R.mrr) + '/mo recurring · ' : '') + (R.deals || 0) + ' deals', 'sales'),
+        kpi('Calls today', String(sc.dials || 0), H0.goal ? 'goal ' + H0.goal + ' · ' + Math.min(100, Math.round(100 * (sc.dials || 0) / H0.goal)) + '%' : 'dials logged', 'phone', (sc.dials || 0) >= (H0.goal || 1e9) ? 'good' : ''),
+        kpi('Ready to call', String(lanes.new || 0), 'leads in New', 'leads'),
+        kpi('Callbacks', String(lanes.callback || 0), 'waiting on you', 'calendar', lanes.callback ? 'warn' : ''),
+        kpi('Booked', String(sOf.booked || 0), (O.deals30.n || 0) + ' closed in 30d', 'deals'),
+        kpi('Site visits', String(O.site.views || 0), (O.site.leads || 0) + ' demo requests · 7d', 'link')),
+      h('div', { class: 'hx-row hx-r1' }, chartCard, todayCard),
+      h('div', { class: 'hx-row hx-r3' }, pipeCard, callsCard, finderCard),
+      h('div', { class: 'hx-row hx-r2' }, socCard, feedCard),
+    ]);
+  }
   function viewLeadSection(k) {
     const sec = LEAD_SECTIONS.find((x) => x[0] === k);
     if (!sec) { location.hash = '#/leads/email'; return; }
@@ -388,8 +496,7 @@
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
     if (S.me.role === 'admin') {
       try {
-        if (route === 'home') return crmShell('home', [h('div', { class: 'cm-head' }, h('span', { class: 'eyebrow' }, 'Reekon'), h('h1', null, 'Home')),
-          h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon('home')), h('b', null, 'Nothing here yet'), h('p', null, 'Your Home dashboard comes next.'))]);
+        if (route === 'home') return await viewHome2();
         if (route === 'finder') return await viewFinder();
         if (route === 'calendar') return await viewCalendar();
         if (route === 'leads') return viewLeadSection(arg || 'email');

@@ -2984,6 +2984,32 @@ async function api(request, env, url) {
       revenue: { values: rev, total: rev[rev.length - 1], mrr: Math.round(mrr / 100), deals: deals.length },
       outreach: { calls: col('dials'), sms: col('texts'), email: em, social: col('dms') } });
   }
+  if (path === '/home/overview' && method === 'GET') {
+    // everything the Home dashboard needs that /home doesn't already give
+    need(user, 'admin');
+    const wk = new Date(Date.now() - 7 * 864e5).toISOString(), mo = new Date(Date.now() - 30 * 864e5).toISOString();
+    const today = ptParts().date, wkDay = trkShift(today, -6);
+    const [stages, outcomes, added, recent, signups, site, cfg, usage, caps, stock] = await Promise.all([
+      env.DB.prepare("SELECT status, COUNT(*) AS n FROM leads WHERE status != 'dnc' GROUP BY status").all(),
+      env.DB.prepare('SELECT outcome, COUNT(*) AS n FROM calls WHERE created_at >= ? GROUP BY outcome').bind(wk).all(),
+      env.DB.prepare('SELECT SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS week, COUNT(*) AS total FROM leads').bind(wk).first(),
+      env.DB.prepare('SELECT c.outcome, c.created_at, l.id, l.business FROM calls c JOIN leads l ON l.id = c.lead_id ORDER BY c.id DESC LIMIT 8').all(),
+      env.DB.prepare("SELECT id, business, phone, created_at FROM leads WHERE source = 'website' AND created_at >= ? ORDER BY id DESC LIMIT 5").bind(mo).all(),
+      env.DB.prepare("SELECT kind, COUNT(*) AS n FROM site_events WHERE day >= ? GROUP BY kind").bind(wkDay).all().catch(() => ({ results: [] })),
+      autoConfig(env), finderUsage(env), finderCaps(env), readyStock(env),
+    ]);
+    const deals30 = await env.DB.prepare('SELECT COUNT(*) AS n, SUM(COALESCE(amount_cents,0)) AS c FROM deals WHERE created_at >= ?').bind(mo).first();
+    const siteBy = Object.fromEntries(site.results.map((r) => [r.kind, r.n]));
+    return json({
+      stages: Object.fromEntries(stages.results.map((r) => [r.status, r.n])),
+      outcomes_week: Object.fromEntries(outcomes.results.map((r) => [r.outcome, r.n])),
+      leads: { week: added.week || 0, total: added.total || 0 },
+      recent: recent.results, signups: signups.results,
+      site: { views: siteBy.view || 0, clicks: siteBy.cta || 0, leads: siteBy.lead || 0 },
+      finder: { on: !!cfg.enabled, ready: stock, goal: cfg.target_ready, today: usage.today, month: usage.month, cap_month: caps.month },
+      deals30: { n: deals30.n || 0, total: Math.round((deals30.c || 0) / 100) },
+    });
+  }
   if (path === '/social' && method === 'PUT') {
     need(user, 'admin');
     const today = ptParts().date, pl = String(body.platform || '');
