@@ -486,22 +486,23 @@
     const where = parts[1] || 'post', plat = parts[2], type = parts[3];
     if (where === 'scheduled') return viewPostScheduled(plat);
     if (!plat) {
-      const r = await api('GET', '/posts?status=scheduled').catch(() => ({ posts: [], counts: {} }));
-      const row = (k, t, d, href, extra) => h('a', { class: 'pc-row', href }, k, h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), extra || null, h('i', { class: 'pc-go' }, icon('chev')));
+      const r = await api('GET', '/posts').catch(() => ({ posts: [], counts: {} }));
+      const per = {}; r.posts.forEach((x) => { const c = per[x.platform] = per[x.platform] || { draft: 0, scheduled: 0, posted: 0 }; c[x.status]++; });
+      const stats = (k) => { const c = per[k]; if (!c || !(c.draft || c.scheduled || c.posted)) return h('span', { class: 'pc-stats dim' }, 'No posts yet');
+        return h('span', { class: 'pc-stats' }, c.scheduled ? h('em', null, c.scheduled + ' scheduled') : null, c.draft ? h('em', null, c.draft + ' draft' + (c.draft > 1 ? 's' : '')) : null, c.posted ? h('em', { class: 'ok' }, c.posted + ' posted') : null); };
+      const tile = (k, t, d, href, extra) => h('a', { class: 'pc-row', href }, h('div', { class: 'pc-tile-top' }, k, h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), extra || null);
       return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick where you want to post.'),
-        h('div', { class: 'pc-list' }, PC_PLAT.map(([k, t, d]) => row(pcBadge(k), t, d, '#/content/post/' + k))),
-        h('div', { class: 'pc-sep' }, 'Planned'),
-        h('div', { class: 'pc-list' }, row(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Text posts you’ve scheduled, for every platform', '#/content/scheduled',
-          (r.counts.scheduled ? h('em', { class: 'pc-count' }, String(r.counts.scheduled)) : null)))]);
+        h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(pcBadge(k), t, d, '#/content/post/' + k, stats(k))),
+          tile(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Text posts you’ve scheduled, for every platform', '#/content/scheduled',
+            h('span', { class: 'pc-stats' }, (r.counts.scheduled ? h('em', null, r.counts.scheduled + ' scheduled') : h('span', { class: 'dim' }, 'Nothing scheduled'))), 'sch'))]);
     }
     if (!PC_MAX[plat]) { location.hash = '#/content/post'; return; }
     if (!type) {
-      const kind = (k, t, d, on) => on ? h('a', { class: 'pc-row', href: '#/content/post/' + plat + '/' + k }, h('span', { class: 'pc-badge sch' }, icon(k === 'text' ? 'script' : 'spark')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), h('i', { class: 'pc-go' }, icon('chev')))
-        : h('div', { class: 'pc-row off', 'aria-disabled': 'true' }, h('span', { class: 'pc-badge sch' }, icon('spark')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), h('em', { class: 'pc-soon' }, 'Soon'));
+      const kind = (k, t, d, on, ic) => on ? h('a', { class: 'pc-row', href: '#/content/post/' + plat + '/' + k }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)))
+        : h('div', { class: 'pc-row off', 'aria-disabled': 'true' }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('em', { class: 'pc-soon' }, 'Soon')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)));
       return crmShell('content:post', [pcHead(pcName(plat), 'What kind of content?', null, '#/content/post'),
-        h('div', { class: 'pc-list' }, kind('text', 'Text post', 'Written post, ready to copy and post', true), kind('photo', 'Photo post', 'Image with a caption'), kind('carousel', 'Carousel', 'Swipeable slides'), kind('video', 'Video script', 'Short-form video')),
-        h('div', { class: 'pc-sep' }, 'Planned'),
-        h('div', { class: 'pc-list' }, h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled ' + pcName(plat) + ' posts'), h('small', null, 'Text posts waiting to go out')), h('i', { class: 'pc-go' }, icon('chev'))))]);
+        h('div', { class: 'pc-list tiles' }, kind('text', 'Text post', 'Written post, ready to copy and post', true, 'script'), h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled posts'), h('small', null, 'Your ' + pcName(plat) + ' posts waiting to go out'))),
+          kind('photo', 'Photo post', 'Image with a caption', false, 'spark'), kind('carousel', 'Carousel', 'Swipeable slides', false, 'spark'), kind('video', 'Video script', 'Short-form video', false, 'spark'))]);
     }
     if (type !== 'text') { location.hash = '#/content/post/' + plat; return; }
     return viewTextComposer(plat);
