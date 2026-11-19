@@ -6145,6 +6145,27 @@ async function seedTintLeads(env) {
   }
   await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('tint_seed_v1', ?)").bind(JSON.stringify({ at: now(), added, searched, errors })).run();
 }
+const TODO_SEED = { checked: false };
+// one-time to-do list for Thu Nov 19, 2026 (times are LA, UTC-8)
+const TODO_1119 = [
+  ['18:00', 'Record the VSL (45 min)', 'Use the teleprompter script. One clean take is enough, do not chase perfect. Upload to YouTube as unlisted and send me the link so it goes on the landing page.'],
+  ['19:00', 'Power hour: 40 calls to tint & PPF shops', 'Leads > Cold calls. Ask for the owner. One goal: book 1 demo. Log every outcome so your tracker counts the dials.'],
+  ['20:30', 'Text every shop that did not pick up', 'Leads > SMS. Keep it short: "Hey, this is Marquise. Called about the calls your shop misses while you are on an install. Worth a 10 min look?"'],
+  ['21:30', 'Make 1 video and post it', 'Content > Post content > Instagram > Video. Pick Pricing comparison, record the map, talk over it with the breakdown. Post to Instagram and TikTok, then tap I posted it.'],
+  ['22:30', 'LinkedIn post + 10 connection requests', 'Content > Post content > LinkedIn > Text post. Then send 10 connection requests to tint, PPF and detail shop owners.'],
+  ['23:30', 'Load tomorrow: 30 new shops in Lead Finder', 'Find leads > Lead Finder. Window tint and PPF shops, low reviews, outdated or no website. Tomorrow starts with a full call list.'],
+];
+async function seedTodos1119(env) {
+  await ensureSchema(env);
+  if (await getSetting(env, 'todo_seed_1119')) return;
+  const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
+  if (!admin) { TODO_SEED.checked = false; return; }
+  await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('todo_seed_1119', ?)").bind(now()).run();
+  for (const [t, title, notes] of TODO_1119) {
+    await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, created_at) VALUES (?,?,?,?,?,?,?)')
+      .bind(admin.id, title, 'todo', '2026-11-19T' + t + ':00.000Z', null, notes, now()).run();
+  }
+}
 const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Frame-Options': 'DENY',
@@ -6182,6 +6203,7 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (env.DB && ctx && ctx.waitUntil && !TODO_SEED.checked) { TODO_SEED.checked = true; ctx.waitUntil(seedTodos1119(env).catch((e) => console.error('todo seed', e))); }
     if (env.DB && ctx && ctx.waitUntil && !TINT_SEED.checked) { TINT_SEED.checked = true; ctx.waitUntil(seedTintLeads(env).catch((e) => console.error('tint seed', e))); }
     const dm = url.pathname.match(/^\/d\/([a-z0-9-]{3,60})\/?$/);
     if (dm && request.method === 'GET') {
