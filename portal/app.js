@@ -487,22 +487,45 @@
     if (where === 'scheduled') return viewPostScheduled(plat);
     if (!plat) {
       const r = await api('GET', '/posts').catch(() => ({ posts: [], counts: {} }));
-      const per = {}; r.posts.forEach((x) => { const c = per[x.platform] = per[x.platform] || { draft: 0, scheduled: 0, posted: 0 }; c[x.status]++; });
+      const per = {}; r.posts.forEach((x) => { const c = per[x.platform] = per[x.platform] || { draft: 0, scheduled: 0, posted: 0, video: 0 }; c[x.status]++; if (x.kind === 'video') c.video++; });
+      const wk = Date.now() - 7 * 864e5;
+      const postedWk = r.posts.filter((x) => x.status === 'posted' && x.posted_at && new Date(x.posted_at) > wk).length;
+      const sched = r.posts.filter((x) => x.status === 'scheduled' && x.scheduled_at).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+      const drafts = r.posts.filter((x) => x.status === 'draft').length;
+      const next = sched.find((x) => new Date(x.scheduled_at) > Date.now() - 36e5) || sched[0];
+      const stat = (n, l, cls) => h('div', { class: 'pc-kpi' + (cls ? ' ' + cls : '') }, h('b', null, String(n)), h('span', null, l));
+      const strip = h('div', { class: 'pc-strip' },
+        stat(postedWk, 'Posted this week', 'ok'), stat(sched.length, 'Scheduled'), stat(drafts, 'Drafts'),
+        next ? h('a', { class: 'pc-next', href: '#/content/scheduled' }, h('span', { class: 'pc-next-l' }, 'Up next'), h('span', { class: 'pc-next-b' }, pcBadge(next.platform), h('span', { class: 'pc-next-t' }, h('b', null, (next.kind === 'video' ? 'Video: ' : '') + (next.body || '').replace(/^VIDEO:\s*/, '').split('\n')[0].slice(0, 70)), h('small', null, pcWhen(next.scheduled_at)))))
+          : h('a', { class: 'pc-next empty', href: '#/content/post/facebook/text' }, h('span', { class: 'pc-next-l' }, 'Up next'), h('span', { class: 'pc-next-b' }, h('span', { class: 'pc-next-t' }, h('b', null, 'Nothing scheduled yet'), h('small', null, 'Write a post and tap Schedule')))));
       const stats = (k) => { const c = per[k]; if (!c || !(c.draft || c.scheduled || c.posted)) return h('span', { class: 'pc-stats dim' }, 'No posts yet');
-        return h('span', { class: 'pc-stats' }, c.scheduled ? h('em', null, c.scheduled + ' scheduled') : null, c.draft ? h('em', null, c.draft + ' draft' + (c.draft > 1 ? 's' : '')) : null, c.posted ? h('em', { class: 'ok' }, c.posted + ' posted') : null); };
-      const tile = (k, t, d, href, extra) => h('a', { class: 'pc-row', href }, h('div', { class: 'pc-tile-top' }, k, h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), extra || null);
-      return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick where you want to post.'),
-        h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(pcBadge(k), t, d, '#/content/post/' + k, stats(k))),
-          tile(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Posts and videos you’ve scheduled, for every platform', '#/content/scheduled',
-            h('span', { class: 'pc-stats' }, (r.counts.scheduled ? h('em', null, r.counts.scheduled + ' scheduled') : h('span', { class: 'dim' }, 'Nothing scheduled'))), 'sch'))]);
+        return h('span', { class: 'pc-stats' }, c.scheduled ? h('em', null, c.scheduled + ' scheduled') : null, c.draft ? h('em', { class: 'mute' }, c.draft + ' draft' + (c.draft > 1 ? 's' : '')) : null, c.posted ? h('em', { class: 'ok' }, c.posted + ' posted') : null); };
+      const tile = (k, t, d) => h('a', { class: 'pc-row pc-plat p-' + k, href: '#/content/post/' + k },
+        h('div', { class: 'pc-tile-top' }, pcBadge(k), h('i', { class: 'pc-go' }, icon('chev'))),
+        h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)),
+        h('div', { class: 'pc-foot' }, stats(k)));
+      return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick a platform, then write a text post or make a video.'),
+        strip,
+        h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(k, t, d))),
+        h('a', { class: 'pc-banner', href: '#/content/scheduled' }, h('span', { class: 'pc-badge sch' }, icon('calendar')),
+          h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled content'), h('small', null, 'Everything waiting to go out, for every platform. Each one is on your calendar too.')),
+          h('span', { class: 'pc-banner-n' }, sched.length ? sched.length + ' scheduled' : 'Nothing yet'), h('i', { class: 'pc-go' }, icon('chev')))]);
     }
     if (!PC_MAX[plat]) { location.hash = '#/content/post'; return; }
     if (!type) {
-      const kind = (k, t, d, on, ic) => on ? h('a', { class: 'pc-row', href: '#/content/post/' + plat + '/' + k }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)))
-        : h('div', { class: 'pc-row off', 'aria-disabled': 'true' }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon(ic)), h('em', { class: 'pc-soon' }, 'Soon')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)));
-      return crmShell('content:post', [pcHead(pcName(plat), 'What kind of content?', null, '#/content/post'),
-        h('div', { class: 'pc-list tiles' }, kind('text', 'Text post', 'Written post, ready to copy and post', true, 'script'), kind('video', 'Video', 'Web map videos, pricing breakdowns, pain points', true, 'spark'), h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('div', { class: 'pc-tile-top' }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('i', { class: 'pc-go' }, icon('chev'))), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled posts'), h('small', null, 'Your ' + pcName(plat) + ' posts waiting to go out'))),
-          kind('photo', 'Photo post', 'Image with a caption', false, 'spark'), kind('carousel', 'Carousel', 'Swipeable slides', false, 'spark'))]);
+      const r = await api('GET', '/posts?platform=' + plat).catch(() => ({ posts: [] }));
+      const nText = r.posts.filter((x) => x.kind !== 'video').length, nVid = r.posts.filter((x) => x.kind === 'video').length, nSch = r.posts.filter((x) => x.status === 'scheduled').length;
+      const textArt = h('div', { class: 'pc-art pc-art-text' }, h('div', { class: 'pc-art-card' }, h('span', { class: 'pc-art-who' }, pcBadge(plat), h('i'), h('i', { class: 's' })), h('i', { class: 'l1' }), h('i', { class: 'l2' }), h('i', { class: 'l3' }), h('i', { class: 'l4' })));
+      const vidArt = h('div', { class: 'pc-art pc-art-vid' }, h('div', { class: 'pc-art-phone' }, h('i', { class: 'n0' }), h('i', { class: 'n1' }), h('i', { class: 'n2' }), h('i', { class: 'n3' }), h('i', { class: 'n4' }), h('b', { class: 'e1' }), h('b', { class: 'e2' }), h('b', { class: 'e3' })));
+      const big = (k, t, d, art, n) => h('a', { class: 'pc-type', href: '#/content/post/' + plat + '/' + k }, art,
+        h('div', { class: 'pc-type-b' }, h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), h('span', { class: 'pc-type-go' }, n ? n + ' made' : 'Start', icon('chev'))));
+      return crmShell('content:post', [h('div', { class: 'cm-head pc-head pc-head-plat p-' + plat }, h('a', { class: 'pc-back', href: '#/content/post' }, icon('chev'), 'All platforms'), h('div', { class: 'pc-head-row' }, pcBadge(plat), h('div', null, h('span', { class: 'eyebrow' }, pcName(plat)), h('h1', null, 'What are we making?')))),
+        h('div', { class: 'pc-types' },
+          big('text', 'Text post', 'A value-packed post written from what it knows about your business. Copy it and post.', textArt, nText),
+          big('video', 'Video', 'A fresh idea with a web map, a background photo and a full breakdown of what to say.', vidArt, nVid)),
+        h('a', { class: 'pc-banner', href: '#/content/scheduled/' + plat }, h('span', { class: 'pc-badge sch' }, icon('calendar')),
+          h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled for ' + pcName(plat)), h('small', null, 'Posts and videos waiting to go out')), h('span', { class: 'pc-banner-n' }, nSch ? nSch + ' scheduled' : 'Nothing yet'), h('i', { class: 'pc-go' }, icon('chev'))),
+        h('div', { class: 'pc-soonrow' }, h('span', null, 'Coming soon'), h('em', null, 'Photo post'), h('em', null, 'Carousel'))]);
     }
     if (type === 'video') return viewVideoComposer(plat);
     if (type !== 'text') { location.hash = '#/content/post/' + plat; return; }
