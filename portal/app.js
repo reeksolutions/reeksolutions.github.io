@@ -416,6 +416,44 @@
       feed.length ? h('div', null, feed.map((f) => h('div', { class: 'hx-fi' }, h('span', { class: 'hx-fdot ' + f.k }), h('div', null, h('b', null, f.who), h('small', null, f.t)), h('time', null, ago(f.at)))))
         : h('p', { class: 'hx-empty' }, 'Calls you log and demo requests show up here.')]);
 
+
+    // ---- progress tracker: today / this week vs goals ----
+    const PG = H0.progress || { today: {}, week: {}, days: [] }, GL = H0.goals || {};
+    const PM = [['dials', 'Dials', 'phone'], ['talks', 'Conversations', 'callbacks'], ['demos', 'Demos booked', 'calendar'], ['texts', 'Texts', 'sms'], ['emails', 'Emails', 'mail'], ['dms', 'DMs', 'social'], ['posts', 'Posts', 'spark']];
+    let pgView = (() => { try { return localStorage.getItem('rs_pg') || 'today'; } catch { return 'today'; } })();
+    const pgBody = h('div', { class: 'pg-body' });
+    const pgRing = h('div', { class: 'pg-ring' });
+    const pgSeg = h('div', { class: 'cx-seg pg-seg', role: 'group', 'aria-label': 'Period' });
+    const drawPg = () => {
+      const mult = pgView === 'week' ? 7 : 1, src = pgView === 'week' ? PG.week : PG.today;
+      const rows = PM.map(([k, l, ic]) => { const v = src[k] || 0, g = (GL[k] || 0) * mult; return { k, l, ic, v, g, pct: g ? Math.min(1, v / g) : null }; });
+      const scored = rows.filter((r) => r.pct != null), avg = scored.length ? Math.round(100 * scored.reduce((a, r) => a + r.pct, 0) / scored.length) : 0;
+      const hit = rows.filter((r) => r.g && r.v >= r.g).length;
+      pgRing.replaceChildren(h('div', { class: 'pg-ring-c', style: '--p:' + avg }, h('b', null, avg + '%'), h('small', null, pgView === 'week' ? 'this week' : 'today')),
+        h('div', { class: 'pg-ring-t' }, h('b', null, hit + ' of ' + scored.length + ' goals hit'), h('small', null, avg >= 100 ? 'Every goal hit. Huge day.' : avg >= 70 ? 'Strong. Keep pushing.' : avg >= 35 ? 'Halfway there.' : 'Time to get moving.')));
+      pgBody.replaceChildren(...rows.map((r) => {
+        const spark = (PG.days || []).map((d) => d[r.k] || 0), smax = Math.max(1, ...spark, GL[r.k] || 0);
+        return h('div', { class: 'pg-row' + (r.g && r.v >= r.g ? ' done' : '') },
+          h('span', { class: 'pg-ic' }, icon(r.ic)),
+          h('div', { class: 'pg-main' },
+            h('div', { class: 'pg-top' }, h('span', null, r.l), h('b', null, String(r.v), h('small', null, r.g ? ' / ' + r.g : ''))),
+            h('div', { class: 'pg-bar' }, h('i', { style: 'width:' + Math.round(100 * (r.pct || 0)) + '%' }))),
+          h('div', { class: 'pg-spark', title: 'Last 7 days', 'aria-hidden': 'true' }, spark.map((v) => h('i', { style: 'height:' + Math.max(8, Math.round(100 * v / smax)) + '%' + (v ? '' : ';opacity:.35') }))));
+      }));
+      pgSeg.replaceChildren(...[['today', 'Today'], ['week', 'This week']].map(([v, t]) => h('button', { class: pgView === v ? 'on' : null, 'aria-pressed': String(pgView === v), onclick: () => { pgView = v; try { localStorage.setItem('rs_pg', v); } catch { /* ok */ } drawPg(); } }, t)));
+    };
+    drawPg();
+    const editGoals = () => sheet((box, close) => {
+      const inputs = {};
+      box.append(h('h2', null, 'Daily goals'), h('p', { class: 'sub' }, 'What a good day looks like. Weekly goals are these times 7.'),
+        h('div', { class: 'pg-goals' }, PM.map(([k, l]) => { inputs[k] = h('input', { type: 'number', min: 0, max: 2000, inputmode: 'numeric', value: GL[k] || 0 }); return h('label', { class: 'field' }, h('span', null, l), inputs[k]); })),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: async (e) => {
+          e.currentTarget.disabled = true; const b = {}; PM.forEach(([k]) => { b[k] = inputs[k].value; });
+          try { await api('PUT', '/tracker/goals', b); toast('Goals saved ✓'); close(true); viewHome2(); } catch (x) { fail(x); e.currentTarget.disabled = false; }
+        } }, 'Save goals')));
+    });
+    const trackerCard = card('hx-pg', [cardHead('Progress tracker', h('div', { class: 'pg-tools' }, pgSeg, h('button', { class: 'hx-more pg-edit', onclick: editGoals }, 'Edit goals'))),
+      h('div', { class: 'pg-wrap' }, pgRing, pgBody)]);
     const R = H0.revenue || {}, sc = H0.score || {};
     crmShell('home', [
       h('div', { class: 'hx-hello' }, h('div', null, h('span', { class: 'eyebrow' }, now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), h('h1', null, hi + ', ' + first(S.me.name))),
@@ -427,6 +465,7 @@
         kpi('Callbacks', String(lanes.callback || 0), 'waiting on you', 'calendar', lanes.callback ? 'warn' : ''),
         kpi('Booked', String(sOf.booked || 0), (O.deals30.n || 0) + ' closed in 30d', 'deals'),
         kpi('Site visits', String(O.site.views || 0), (O.site.leads || 0) + ' demo requests · 7d', 'link')),
+      trackerCard,
       h('div', { class: 'hx-row hx-r1' }, chartCard, todayCard),
       h('div', { class: 'hx-row hx-r3' }, pipeCard, callsCard, finderCard),
       h('div', { class: 'hx-row hx-r2' }, socCard, feedCard),

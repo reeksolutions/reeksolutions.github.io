@@ -90,7 +90,7 @@ const SCHEMA = [
 
 // Stage 2 columns added to the existing deals table. Only added if missing — never drops data.
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
-const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
+const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0', emails: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
 const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT', lane: 'TEXT', facebook: 'TEXT', xhandle: 'TEXT', lat: 'REAL', lng: 'REAL' };
 
@@ -327,7 +327,7 @@ function trkDow(date) {
 function trkRow(r, day) {
   let blocks = [];
   try { blocks = JSON.parse(r && r.blocks || '[]').filter((b) => TRK_BLOCKS.includes(b)); } catch { /* keep empty */ }
-  return { day, blocks, dials: r ? r.dials : 0, talks: r ? r.talks : 0, demos: r ? r.demos : 0, texts: r && r.texts || 0, dms: r && r.dms || 0, posts: r && r.posts || 0, refs: r && r.refs || 0, note: r && r.note || '' };
+  return { day, blocks, dials: r ? r.dials : 0, talks: r ? r.talks : 0, demos: r ? r.demos : 0, texts: r && r.texts || 0, dms: r && r.dms || 0, posts: r && r.posts || 0, refs: r && r.refs || 0, emails: r && r.emails || 0, note: r && r.note || '' };
 }
 const trkKept = (r, goal) => !!r && r.dials >= goal && TRK_WINS.every((w) => r.blocks.includes(w));
 // Sundays are the day off, so they never break a streak
@@ -339,6 +339,14 @@ function trkStreak(byDay, goal, today) {
     else if (d !== today) break;
   }
   return streak;
+}
+const GOAL_KEYS = ['dials', 'talks', 'demos', 'texts', 'emails', 'dms', 'posts'];
+const GOAL_DEFAULTS = { dials: 60, talks: 10, demos: 1, texts: 15, emails: 10, dms: 15, posts: 2 };
+async function trkGoals(env) {
+  let g = {}; try { g = JSON.parse((await getSetting(env, 'daily_goals')) || '{}') || {}; } catch { g = {}; }
+  const out = {}; for (const k of GOAL_KEYS) out[k] = Number.isInteger(g[k]) && g[k] >= 0 ? g[k] : GOAL_DEFAULTS[k];
+  out.dials = await trkGoal(env);
+  return out;
 }
 async function trkGoal(env) {
   const v = parseInt(await getSetting(env, 'tracker_goal'), 10);
@@ -352,9 +360,10 @@ async function trkLoad(env, userId, today) {
 // add to today's tracker counters (used when a call outcome is logged in the CRM)
 async function trkBump(env, userId, add) {
   const day = ptParts().date;
-  await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, texts, dms, updated_at) VALUES (?,?,'[]',?,?,?,?,?,?)
-    ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, texts = COALESCE(texts,0) + excluded.texts, dms = COALESCE(dms,0) + excluded.dms, updated_at = excluded.updated_at`)
-    .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, add.texts || 0, add.dms || 0, now()).run();
+  await env.DB.prepare(`INSERT INTO tracker_days (user_id, day, blocks, dials, talks, demos, texts, dms, posts, emails, updated_at) VALUES (?,?,'[]',?,?,?,?,?,?,?,?)
+    ON CONFLICT(user_id, day) DO UPDATE SET dials = dials + excluded.dials, talks = talks + excluded.talks, demos = demos + excluded.demos, texts = COALESCE(texts,0) + excluded.texts, dms = COALESCE(dms,0) + excluded.dms,
+      posts = COALESCE(posts,0) + excluded.posts, emails = COALESCE(emails,0) + excluded.emails, updated_at = excluded.updated_at`)
+    .bind(userId, day, add.dials || 0, add.talks || 0, add.demos || 0, add.texts || 0, add.dms || 0, add.posts || 0, add.emails || 0, now()).run();
 }
 // One score for the whole day (out of 100). Dials are only 30 of it, so a day of DMs, content and a fix still counts.
 function trkScore(t, goal, postedPlatforms) {
@@ -1980,6 +1989,7 @@ async function api(request, env, url) {
         env.DB.prepare('UPDATE leads SET emailed_at = ?, updated_at = ? WHERE id = ?').bind(t, t, lead.id),
         env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, 'emailed', lead.status, lead.status, t),
       ]);
+      if (user.role === 'admin') await trkBump(env, user.id, { emails: 1 });
       return json({ ok: true, status: lead.status });
     }
     if (outcome === 'texted' || outcome === 'dmed') {
@@ -1988,7 +1998,7 @@ async function api(request, env, url) {
         env.DB.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').bind(toS, t, lead.id),
         env.DB.prepare('INSERT INTO calls (lead_id,user_id,outcome,from_status,to_status,created_at) VALUES (?,?,?,?,?,?)').bind(lead.id, user.id, outcome, lead.status, toS, t),
       ]);
-      if (user.role === 'admin') await trkBump(env, user.id, { texts: outcome === 'texted' ? 1 : 0, dms: outcome === 'dmed' ? 1 : 0 });
+      if (user.role === 'admin') await trkBump(env, user.id, { texts: outcome === 'texted' ? 1 : 0, dms: outcome === 'dmed' ? 1 : 0, emails: outcome === 'emailed' ? 1 : 0 });
       return json({ ok: true, status: toS });
     }
     const to = nextStatus(lead.status, outcome);
@@ -2985,6 +2995,10 @@ async function api(request, env, url) {
       score: { total: Math.round((base.score + blocksPct) / 2), todos_done: tdy.blocks.length, todos_total: TRK_BLOCKS.length, dials: tdy.dials, texts: tdy.texts, dms: tdy.dms, posts: tdy.posts },
       blocks: tdy.blocks, platforms, labels: days, totals,
       revenue: { values: rev, total: rev[rev.length - 1], mrr: Math.round(mrr / 100), deals: deals.length },
+      progress: (() => { const pick = (r) => Object.fromEntries(GOAL_KEYS.map((k) => [k, (r || {})[k] || 0]));
+        const wk = days.filter((x) => x >= trkShift(today, -6)), sum = Object.fromEntries(GOAL_KEYS.map((k) => [k, wk.reduce((t, x) => t + (((byDay.get(x) || {})[k]) || 0), 0)]));
+        return { today: pick(tdy), week: sum, days: days.slice(-7).map((x) => ({ day: x, ...pick(byDay.get(x)) })) }; })(),
+      goals: await trkGoals(env),
       outreach: { calls: col('dials'), sms: col('texts'), email: em, social: col('dms') } });
   }
   if (path === '/home/overview' && method === 'GET') {
@@ -3026,6 +3040,14 @@ async function api(request, env, url) {
       .bind(today, pl, f !== null ? f : (cur ? cur.followers : null), (cur ? cur.dms : 0) + add, now()).run();
     if (add) await trkBump(env, user.id, { dms: add });
     return json({ ok: true });
+  }
+  if (path === '/tracker/goals' && method === 'PUT') {
+    need(user, 'admin');
+    const cur = await trkGoals(env), out = {};
+    for (const k of GOAL_KEYS) { const v = body[k] === undefined ? cur[k] : parseInt(body[k], 10); out[k] = Number.isFinite(v) ? Math.max(0, Math.min(2000, v)) : cur[k]; }
+    await setSetting(env, 'daily_goals', JSON.stringify(out));
+    if (out.dials >= 1) await setSetting(env, 'tracker_goal', String(out.dials));
+    return json({ ok: true, goals: await trkGoals(env) });
   }
   if (path === '/tracker/goal' && method === 'PUT') {
     need(user, 'admin');
