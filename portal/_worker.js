@@ -3208,10 +3208,10 @@ async function api(request, env, url) {
     day: /^\d{4}-\d{2}-\d{2}$/.test(String(b.day || '')) ? b.day : null,
     map: b.map && Array.isArray(b.map.nodes) ? JSON.stringify({ title: str(b.map.title, 90), nodes: b.map.nodes.slice(0, 14).map((n, i) => ({ id: str(n.id, 12) || 'n' + i, label: str(n.label, 80), note: str(n.note, 120), kind: ['problem', 'cause', 'cost', 'fix', 'result', 'step'].includes(n.kind) ? n.kind : 'step', parent: n.parent == null ? null : str(n.parent, 12) })) }) : null,
   });
-  async function c3AI(system, user, maxTok) {
+  async function c3AI(system, user, maxTok, temp) {
     if (!env.AI) return null;
     try {
-      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: maxTok || 700, temperature: 0.6, response_format: { type: 'json_object' } });
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: maxTok || 700, temperature: temp == null ? 0.6 : temp, response_format: { type: 'json_object' } });
       return parseJsonLoose(typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
     } catch (e) { console.error('content ai', e); return null; }
   }
@@ -3228,6 +3228,17 @@ async function api(request, env, url) {
     "When do most people call a tint shop?\n\nNot at 10 AM on a Tuesday.\n\nThey call on lunch breaks, after work, Saturday morning and Sunday night. Exactly when your shop is slammed or closed.\n\nAnd price shoppers don't leave voicemails. They call the next shop.\n\nA few things that help:\n\u2705 Put your hours and booking link on your Google profile\n\u2705 Turn on missed-call auto-texts so nobody gets silence\n\u2705 Answer the top questions (price, ceramic vs regular, how long it takes) right on your page\n\nOr let an AI receptionist cover it 24/7.\n\nShop owners, what time of day do you miss the most calls?",
     "Most tint shops lose the ceramic upsell before the car ever pulls in.\n\nYou're busy, someone asks \"how much to tint my car?\" and you give the cheapest price to get them in. Now that's the number in their head.\n\nAsk one question instead: \"Is heat the main thing for you, or privacy?\"\nHeat? Ceramic sells itself. New car? Mention PPF.\n\nAsking that every single time is the hard part when you're slammed. That's what AI receptionists are for. DM me \"DEMO\" to hear one.",
   ];
+  const POST_ANGLES = ['missed calls while the crew is mid-install', 'after-hours and weekend calls nobody answers', 'price shoppers who call 3 or 4 shops', 'losing the ceramic upsell on the first phone call',
+    'no-shows and how reminders fix them', 'slow follow-up on quote requests', 'getting more Google reviews without being awkward', 'Google Business Profile mistakes that cost calls',
+    'answering the same 5 questions 20 times a day', 'PPF quotes: what customers actually want to know', 'detail shops and maintenance reminders that bring customers back', 'surviving the slow season with follow-up',
+    'taking deposits to stop flaky bookings', 'the owner stuck on the phone instead of growing the shop', 'what a front desk hire really costs vs a system', 'speed to lead: why the first reply wins',
+    'a missed-call text-back script to copy', 'winning back old customers', 'asking happy customers for referrals', 'the Saturday rush and how to not drop calls',
+    'Spanish-speaking callers and answering in their language', 'warranty questions that make or break trust', 'quoting by car size so callers get a fast clear price', 'dealership and fleet accounts most shops ignore',
+    'Instagram DMs that never get answered', 'tracking where your leads come from', 'texting customers legally (registration and STOP)', 'one simple daily routine to never lose a lead'];
+  const POST_HOOKS = ['a one-line personal story from working in a tint shop', 'a surprising question', 'a contrarian statement that challenges what owners believe', 'a quick math setup',
+    'a common mistake ("Most shops do X. Here is why it costs them.")', 'myth vs fact', '"If I owned a tint shop tomorrow, the first thing I would do is..."', 'a bold one-sentence truth'];
+  const POST_FORMATS = ['3 to 4 numbered tips', 'a short checklist with checkmarks', 'before vs after', 'a mini story with a clear lesson', 'myth vs fact pairs', 'an exact script or text message they can copy', 'a simple math breakdown labeled as an example', 'do this / not that'];
+  const pickOne = (arr, avoid) => { const pool = arr.filter((x) => !(avoid || []).includes(x)); const list = pool.length ? pool : arr; return list[Math.floor(Math.random() * list.length)]; };
   const postRow = (r) => ({ id: r.id, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
   async function postCal(row, platform, when, body) {
     // keep one calendar reminder per scheduled post
@@ -3285,7 +3296,10 @@ async function api(request, env, url) {
     need(user, 'admin');
     const platform = POST_PLAT[body.platform] ? body.platform : bad('Pick a platform');
     const P = POST_PLAT[platform], ask = str(body.ask, 800).trim();
-    const recent = (await env.DB.prepare("SELECT title FROM content_items WHERE kind = 'textpost' ORDER BY id DESC LIMIT 8").all()).results.map((r) => r.title).filter(Boolean);
+    const recent = (await env.DB.prepare("SELECT title FROM content_items WHERE kind = 'textpost' ORDER BY id DESC LIMIT 20").all()).results.map((r) => r.title).filter(Boolean);
+    let used = {}; try { used = JSON.parse((await getSetting(env, 'post_recent_mix')) || '{}') || {}; } catch { used = {}; }
+    const angle = pickOne(POST_ANGLES, used.angles), hook = pickOne(POST_HOOKS, used.hooks), format = pickOne(POST_FORMATS, used.formats);
+    await setSetting(env, 'post_recent_mix', JSON.stringify({ angles: [angle].concat(used.angles || []).slice(0, 12), hooks: [hook].concat(used.hooks || []).slice(0, 4), formats: [format].concat(used.formats || []).slice(0, 4) }));
     const sys = 'You write social media text posts for Marquise, founder of Reekon Systems in Los Angeles. He used to work in a window tint shop and saw the phone ring out while the crew had film on the glass. ' +
       'Now he builds AI systems for window tint, PPF (paint protection film), ceramic coating and auto detailing shops: AI receptionists that answer every call 24/7, quote from the shop\'s price sheet and book the appointment, missed-call text-back, speed-to-lead follow-up, booking and reminders, and custom CRMs. ' +
       'Audience: tint, PPF and detail shop owners. Pain points: missed calls mid-install, price shoppers calling 3 or 4 shops, after-hours calls, rushed quotes that lose the ceramic upsell, no-shows, slow follow-up, owner stuck on the phone. ' +
@@ -3300,12 +3314,15 @@ async function api(request, env, url) {
       'Platform: ' + P.how + ' ' + (P.max <= 500 ? 'This platform is short, so compress the structure to: hook, one sharp insight, one tip they can use today. ' : 'Keep it tight: informative, not long-winded. ') +
       'Here are examples of the quality and style to match (do not copy them, write something new):\n---\n' + POST_FALLBACK.slice(0, 3).join('\n---\n') + '\n---\n' +
       'Reply ONLY with JSON {"post": string, "hashtags": [strings without #]}.';
-    const usr = (ask ? 'Write this post: ' + ask : 'Write a fresh post based on his business. Pick a new angle.') + (recent.length ? '\nDo not repeat these recent openings: ' + recent.join(' | ') : '');
-    const j = await c3AI(sys, usr, 1100);
+    const usr = (ask ? 'Write this post: ' + ask + '\nUnless the request says otherwise, open with ' + hook + ' and use this format: ' + format + '.'
+      : 'Write a brand new post. Topic: ' + angle + '. Open with ' + hook + '. Format: ' + format + '.') +
+      '\nMake it unique: a different first line, different examples and different wording than anything recent. Do not start with "I used to work in a tint shop" unless the hook calls for a personal story.' +
+      (recent.length ? '\nRecent posts started like this, so do NOT reuse these openings or topics: ' + recent.join(' | ') : '') + '\n(variation id ' + Math.random().toString(36).slice(2, 8) + ')';
+    const j = await c3AI(sys, usr, 1100, 0.95);
     let text = j && typeof j.post === 'string' ? j.post.replace(/[—–]/g, ',').trim() : '';
     const tags = j && Array.isArray(j.hashtags) ? j.hashtags.map((x) => String(x).replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8) : [];
     let ai = true;
-    if (!text) { ai = false; text = POST_FALLBACK[Math.floor(Math.random() * POST_FALLBACK.length)]; }
+    if (!text) { ai = false; const fresh = POST_FALLBACK.filter((x) => !recent.includes(x.split('\n')[0])); text = pickOne(fresh.length ? fresh : POST_FALLBACK); }
     if (text.length > P.max) text = text.slice(0, P.max - 1).replace(/\s+\S*$/, '') + '…';
     return json({ post: text, hashtags: tags, ai, max: P.max });
   }
