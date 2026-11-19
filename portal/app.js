@@ -163,7 +163,7 @@
   // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
   const CATS = {
     sell: ['Sell', 'Leads, calls and money', [
-      ['Leads', [['leads', 'Leads', 'Every lead in one board', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'], ['finder', 'Lead Finder', 'Find local businesses with no website', 'search']]],
+      ['Leads', [['leads', 'Leads', 'Every lead in one board', 'leads'], ['callbacks', 'Callbacks', 'Who to call back', 'callbacks', 'cb'], ['finder', 'Lead Finder', 'Find locksmiths and phone repair shops', 'search']]],
       ['Close', [['script', 'Call script', 'What to say', 'script'], ['calendar', 'Calendar', 'Demos and callbacks', 'calendar'], ['deals', 'Deals', 'Clients and money', 'deals']]]]],
     create: ['Create', 'Demos and posts', [
       ['Demos', [['studio', 'Demo Studio', 'Voice AI demo for any lead', 'spark']]],
@@ -1982,7 +1982,7 @@
     const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
     const pickBox = h('div', { class: 'sp-leads' });
     const resultBox = h('div');
-    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. dog groomer, painter', maxlength: 60, class: 'sp-type' });
+    const bizType = h('input', { type: 'text', placeholder: 'What kind of business? e.g. locksmith, phone repair', maxlength: 60, class: 'sp-type' });
     const dayWord = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'long' }) + ' at ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const tag = (st) => ({ booked: 'Audit booked', call2: 'Call 2', callback: 'Callback', demo_needed: 'Wants a demo', demo_ready: 'Demo ready', new: 'New', called: 'Called' }[st] || st);
     const linkFor = (slug) => (r.origin || location.origin) + '/k/' + slug + '#' + oid;
@@ -2394,7 +2394,7 @@
     const capIn = h('input', { id: 'auto-cap', type: 'number', min: 0, max: 50000, inputmode: 'numeric', value: d.caps.month, oninput: (e) => { cfg.month_cap = +e.target.value || 0; dirty(); } });
     const expandBox = h('input', { id: 'auto-expand', type: 'checkbox', checked: cfg.expand !== false, onchange: (e) => { cfg.expand = e.target.checked; dirty(); } });
     const purgeBox = h('input', { id: 'auto-purge', type: 'checkbox', checked: !!cfg.purge_nonfocus, onchange: (e) => { cfg.purge_nonfocus = e.target.checked; dirty(); } });
-    const focusName = String(d.focus || 'local services').toLowerCase(), focusPl = /local service/.test(focusName) ? 'groomers, landscapers, painters, detailers and body shops' : /auto ?body|collision/.test(focusName) ? 'auto body and collision shops' : /home service/.test(focusName) ? 'roofers, landscapers and remodelers' : focusName + 's';
+    const focusName = String(d.focus || 'local services').toLowerCase(), focusPl = /locksmith|phone repair/.test(focusName) ? 'locksmiths and phone repair shops' : /local service/.test(focusName) ? 'groomers, landscapers, painters, detailers and body shops' : /auto ?body|collision/.test(focusName) ? 'auto body and collision shops' : /home service/.test(focusName) ? 'roofers, landscapers and remodelers' : focusName + 's';
     const pct = Math.min(100, Math.round(100 * d.stock / Math.max(1, cfg.target_ready)));
     const stockBar = h('div', { class: 'stockbar' },
       h('div', { class: 'stk-top' }, h('b', null, d.stock.toLocaleString()), h('span', null, ' fresh ' + focusName + ' leads ready to dial · goal ' + cfg.target_ready.toLocaleString())),
@@ -2414,6 +2414,7 @@
     const runs = (d.runs || []).slice(0, 8);
     const LA = ['Los Angeles, CA', 'Torrance, CA', 'Long Beach, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Santa Monica, CA', 'Culver City, CA', 'Inglewood, CA', 'Beverly Hills, CA', 'West Hollywood, CA', 'Irvine, CA'];
     const PRESETS = [
+      { key: 'locksmith and phone repair', label: 'Locksmiths and phone repair', focus: 'locksmith and phone repair', niches: ['locksmith', 'mobile locksmith', 'emergency locksmith', 'car locksmith', 'cell phone repair', 'iphone repair', 'phone screen repair', 'mobile phone repair'], max: 50, low: true },
       { key: 'local services', label: 'Local businesses with no website', focus: 'local services', niches: ['dog groomer', 'mobile dog grooming', 'pet groomer', 'landscaper', 'lawn care service', 'house painter', 'painting contractor', 'mobile detailing', 'auto detailing', 'auto body shop'], max: 50, low: true },
       { key: 'auto body', label: 'Auto body and collision shops', focus: 'auto body', niches: ['auto body shop', 'collision repair', 'collision center', 'auto body and paint', 'body shop', 'auto repair shop', 'auto mechanic', 'car repair'], max: 5000, low: false },
       { key: 'home services', label: 'Roofers, landscapers and remodelers', focus: 'home services', niches: ['roofing contractor', 'roof repair', 'roofer', 'landscaper', 'landscaping company', 'landscape contractor', 'remodeling contractor', 'kitchen remodeler', 'bathroom remodeler', 'home remodeling', 'general contractor'], max: 5000, low: false }];
@@ -3340,7 +3341,7 @@
   const HM_PLAT = [['ig', 'Instagram', 'IG'], ['x', 'X', 'X'], ['tiktok', 'TikTok', 'TikTok'], ['facebook', 'Facebook', 'Facebook']];
   async function viewAdminHome() {
     const d = await api('GET', '/home?range=' + HM.range);
-    const niche = /local service/.test(d.focus || '') || !d.focus ? 'local businesses with no website' : /auto ?body|collision/.test(d.focus || '') ? 'auto body and collision shops' : /home service/.test(d.focus || '') ? 'roofers, landscapers and remodelers' : d.focus;
+    const niche = /locksmith|phone repair/.test(d.focus || '') || !d.focus ? 'locksmiths and phone repair shops' : /local service/.test(d.focus || '') ? 'local businesses with no website' : /auto ?body|collision/.test(d.focus || '') ? 'auto body and collision shops' : /home service/.test(d.focus || '') ? 'roofers, landscapers and remodelers' : d.focus;
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     const sc = d.score, tier = sc.total >= 80 ? ['A', 'great'] : sc.total >= 60 ? ['B', 'good'] : sc.total >= 40 ? ['C', 'meh'] : ['D', 'bad'];
     const R = 38, C = 2 * Math.PI * R;
@@ -3412,7 +3413,7 @@
   async function viewAdminOverview() {
     const ov = await api('GET', '/overview');
     const trk = ov;
-    const niche = /local service/.test(ov.focus_niche || '') || !ov.focus_niche ? 'local business' : /auto ?body|collision/.test(ov.focus_niche || '') ? 'body shop' : /home service/.test(ov.focus_niche || '') ? 'contractor' : ov.focus_niche;
+    const niche = /locksmith|phone repair/.test(ov.focus_niche || '') || !ov.focus_niche ? 'locksmith or phone shop' : /local service/.test(ov.focus_niche || '') ? 'local business' : /auto ?body|collision/.test(ov.focus_niche || '') ? 'body shop' : /home service/.test(ov.focus_niche || '') ? 'contractor' : ov.focus_niche;
     const C = ov.calls, F = ov.funnel, R = ov.revenue, E = ov.email, O = ov.outreach, T = ov.content, SU = ov.supply;
     const labels = C.days.map(shortDay);
     const dateLine = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -3514,7 +3515,7 @@
   /* ---- Today's score (Home): one number for the day, every row has a button that moves it ---- */
   const FIX_QUEUE = [
     ['Connect Google so Meet links make themselves', '#/integrations'],
-    ['Clear the leads outside your local niches out of the list', '#/finder'],
+    ['Clear the leads outside locksmiths and phone repair', '#/finder'],
     ['Set a dial goal you can actually hit', '#/tracker'],
     ['Build a voice demo for a lead in Demo Studio', '#/studio'],
     ['Write tomorrow\'s post before you quit for the day', '#/content'],
@@ -4103,7 +4104,7 @@
   }
 
   /* ---- personal tracker (admin) ---- */
-  const planTitle = (title, focus) => { const f = String(focus || 'lead').toLowerCase(), loc = /local service/.test(f), auto = /auto ?body|collision/.test(f), home = /roof|tile|home service|landscap|remodel/.test(f); return title.replace(/\{niche\}s/g, loc ? 'local businesses' : auto ? 'body shops' : home ? 'roofers, landscapers, remodelers' : f + 's').replace(/\{niche\}/g, loc ? 'local business' : auto ? 'body shop' : home ? 'contractor' : f); };
+  const planTitle = (title, focus) => { const f = String(focus || 'lead').toLowerCase(), lp = /locksmith|phone repair/.test(f), loc = /local service/.test(f), auto = /auto ?body|collision/.test(f), home = /roof|tile|home service|landscap|remodel/.test(f); return title.replace(/\{niche\}s/g, lp ? 'locksmiths and phone shops' : loc ? 'local businesses' : auto ? 'body shops' : home ? 'roofers, landscapers, remodelers' : f + 's').replace(/\{niche\}/g, lp ? 'locksmith or phone shop' : loc ? 'local business' : auto ? 'body shop' : home ? 'contractor' : f); };
   const TRK_PLAN = [
     { id: 'pray', from: '06:00', to: '06:30', title: 'Prayer', tag: 'Spiritual win', win: true },
     { id: 'gym', from: '06:30', to: '07:15', title: 'Workout', tag: 'Physical win', win: true },

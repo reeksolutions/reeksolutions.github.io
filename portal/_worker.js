@@ -199,6 +199,15 @@ async function ensureSchema(env) {
   // niche v3: roofers, landscapers, remodelers. Resets the lead finder (types, review caps, progress); your cities and on/off switch stay.
   // niche v4: auto body and collision shops (+ auto repair as overflow). Resets the finder's search types and progress.
   // niche v5: local businesses with no website or few reviews (groomers, landscapers, painters, detailers, body shops); the offer is AI websites
+  // niche v6: locksmiths + mobile phone repair (no website / few reviews)
+  if ((await getSetting(env, 'niche_v6')) !== '1') {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'locksmith and phone repair')"),
+      env.DB.prepare("UPDATE settings SET value = json_remove(value, '$.niches', '$.max_reviews', '$.low_review_only', '$.any_site') WHERE key = 'auto_finder' AND json_valid(value)"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'auto_finder_state'"),
+      ...['niche_v3', 'niche_v4', 'niche_v5', 'niche_v6'].map((k) => env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").bind(k)),
+    ]);
+  }
   if ((await getSetting(env, 'niche_v5')) !== '1') {
     await env.DB.batch([
       env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'local services')"),
@@ -258,6 +267,8 @@ const DEFAULT_SCRIPT = [
 [If gatekeeper] Hey! Quick one: who owns {business}? … Is {owner_first} around?` },
   { kind: 'step', title: 'The hook', body:
 `I was looking up {business} on Google and noticed you don't have a website. [or: only a few reviews]
+
+[Locksmiths: When you're out on a lockout and the phone rings, who picks up? Somebody locked out calls the next locksmith in about ten seconds.]
 
 So when somebody searches for a {category} near them, they find your competitors first and call them.
 
@@ -352,14 +363,15 @@ function trkScore(t, goal, postedPlatforms) {
   ];
   return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
 }
-const FOCUS_DEFAULT = 'local services';
+const FOCUS_DEFAULT = 'locksmith and phone repair';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
   if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
-  if (/local service/.test(base)) { terms.clear(); ['groom', 'pet salon', 'dog wash', 'landscap', 'lawn', 'gardener', 'painting', 'painter', 'detailing', 'detailer', 'car wash', 'auto body', 'collision', 'body shop'].forEach((t) => terms.add(t)); }
+  if (/locksmith|phone repair/.test(base)) { terms.clear(); ['locksmith', 'lock & key', 'lock and key', 'lockout', 'locks', 'car key', 'key duplicat', 'phone repair', 'phone fix', 'fix my phone', 'phones', 'cell phone', 'cellphone', 'iphone', 'screen repair', 'device repair', 'electronics repair'].forEach((t) => terms.add(t)); }
+  else if (/local service/.test(base)) { terms.clear(); ['groom', 'pet salon', 'dog wash', 'landscap', 'lawn', 'gardener', 'painting', 'painter', 'detailing', 'detailer', 'car wash', 'auto body', 'collision', 'body shop'].forEach((t) => terms.add(t)); }
   else if (/auto ?body|collision|body shop|auto repair/.test(base)) { terms.clear(); ['auto body', 'autobody', 'collision', 'body shop', 'body & paint', 'paint and body', 'auto repair', 'auto service', 'car repair', 'mechanic'].forEach((t) => terms.add(t)); }
   else if (/roof|landscap|remodel|home service/.test(base)) { terms.clear(); ['roof', 'landscap', 'lawn care', 'hardscape', 'remodel', 'renovation', 'general contractor', 'kitchen and bath', 'home improvement', 'construction'].forEach((t) => terms.add(t)); }
   if (/med(ical|i)?\s*spa/.test(base)) ['med spa', 'medspa', 'medical spa', 'medi spa', 'aesthetic', 'botox', 'injector', 'laser'].forEach((t) => terms.add(t));
@@ -827,7 +839,8 @@ const BACKYARD_NICHES = ['backyard contractor', 'hardscape contractor', 'paver i
 const HOME_NICHES = ['roofing contractor', 'roof repair', 'roofer', 'landscaper', 'landscaping company', 'landscape contractor', 'remodeling contractor', 'kitchen remodeler', 'bathroom remodeler', 'home remodeling', 'general contractor'];
 const AUTO_NICHES = ['auto body shop', 'collision repair', 'collision center', 'auto body and paint', 'body shop', 'auto repair shop', 'auto mechanic', 'car repair'];
 const LOCAL_NICHES = ['dog groomer', 'mobile dog grooming', 'pet groomer', 'landscaper', 'lawn care service', 'house painter', 'painting contractor', 'mobile detailing', 'auto detailing', 'auto body shop'];
-const AUTO_DEFAULTS = { enabled: false, niches: LOCAL_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 50, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
+const LOCK_PHONE_NICHES = ['locksmith', 'mobile locksmith', 'emergency locksmith', 'car locksmith', 'cell phone repair', 'iphone repair', 'phone screen repair', 'mobile phone repair'];
+const AUTO_DEFAULTS = { enabled: false, niches: LOCK_PHONE_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 50, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -1416,7 +1429,7 @@ const LEAD_PRIO = `(${REV_TIER_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1
 const REV_BUSY_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews >= 100 THEN 0 WHEN l.reviews >= 50 THEN 1 WHEN l.reviews >= 25 THEN 2 WHEN l.reviews >= 10 THEN 3 ELSE 4 END';
 const LEAD_PRIO_BUSY = `(${REV_BUSY_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
 const isMedFocus = async (env) => /med(ical|i)?\s*spa|aesthetic/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
-const isLowRevFocus = async (env) => (await isMedFocus(env)) || /local service/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
+const isLowRevFocus = async (env) => (await isMedFocus(env)) || /local service|locksmith|phone repair/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
 const leadPrio = async (env) => ((await isLowRevFocus(env)) ? LEAD_PRIO : LEAD_PRIO_BUSY);
 const maxReviews = async (env) => { if (!(await isLowRevFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
@@ -3476,6 +3489,8 @@ const CURATED = {
   fitness: [['#F97316', '#22C55E', '#1F2937', '#F8FAFC']],
   auto: [['#DC2626', '#DC2626', '#0F172A', '#F8FAFC'], ['#1E293B', '#DC2626', '#F8FAFC', '#0F172A']],
   home: [['#1E40AF', '#EA580C', '#EFF6FF', '#1E3A8A']],
+  locksmith: [['#F59E0B', '#F59E0B', '#0B0F17', '#F8FAFC'], ['#DC2626', '#FBBF24', '#0F172A', '#F8FAFC']],
+  phonerepair: [['#2563EB', '#06B6D4', '#F8FAFC', '#0F172A'], ['#7C3AED', '#22D3EE', '#0B1020', '#F8FAFC']],
   landscape: [['#166534', '#CA8A04', '#F7F5EF', '#14532D'], ['#3F6212', '#B45309', '#FAFAF5', '#1A2E05']],
   painter: [['#0F172A', '#F97316', '#FFFFFF', '#0F172A'], ['#1D4ED8', '#F59E0B', '#F8FAFC', '#0B1220']],
 };
@@ -3490,6 +3505,8 @@ const NICHE_UI = {
   food: { styles: ['vibrant', 'clay', 'editorial', 'flat', 'organic'], pairs: ['menu', 'retro', 'music', 'indie', 'handwritten'] },
   fitness: { styles: ['vibrant', 'brutal', 'flat', 'luxury'], pairs: ['sports', 'bold', 'genz', 'startup'] },
   home: { styles: ['flat', 'swiss', 'soft', 'vibrant'], pairs: ['geometric', 'startup', 'techy', 'soft'] },
+  locksmith: { styles: ['luxury', 'brutal', 'flat', 'swiss'], pairs: ['sports', 'bold', 'techy', 'genz'] },
+  phonerepair: { styles: ['glass', 'swiss', 'flat', 'vibrant'], pairs: ['techy', 'startup', 'geometric', 'gaming'] },
   landscape: { styles: ['organic', 'editorial', 'soft', 'luxury'], pairs: ['wellness', 'classic', 'estate', 'luxmin'] },
   painter: { styles: ['swiss', 'editorial', 'flat', 'vibrant'], pairs: ['fashion', 'geometric', 'startup', 'luxmin'] },
   general: { styles: DSTYLES, pairs: Object.keys(DPAIRS) },
@@ -3517,6 +3534,8 @@ const NICHE_STYLE = {
   food: { dark: 0.5, hues: [10, 25, 40, 120, 0, 350], fonts: ['rubik', 'righteous', 'archivo', 'bebas', 'abril', 'bricolage'] },
   fitness: { dark: 0.8, hues: [0, 25, 80, 200, 270], fonts: ['archivo', 'bebas', 'unbounded', 'anton', 'chakra'] },
   home: { dark: 0.2, hues: [200, 150, 210, 30, 120, 180], fonts: ['outfit', 'sora', 'spacegrotesk', 'bricolage', 'rubik'] },
+  locksmith: { dark: 0.85, hues: [45, 30, 0, 210, 50], fonts: ['archivo', 'bebas', 'oswald', 'anton', 'chakra'] },
+  phonerepair: { dark: 0.45, hues: [200, 220, 260, 170, 190], fonts: ['spacegrotesk', 'sora', 'outfit', 'unbounded', 'chakra'] },
   landscape: { dark: 0.25, hues: [120, 140, 95, 40, 160], fonts: ['fraunces', 'cormorant', 'dmserif', 'playfair', 'outfit'] },
   painter: { dark: 0.15, hues: [210, 20, 45, 340, 190, 260], fonts: ['syne', 'outfit', 'archivo', 'spacegrotesk', 'bricolage'] },
   general: { dark: 0.5, hues: [210, 30, 160, 270, 0, 45], fonts: Object.keys(DFONTS) },
@@ -4127,6 +4146,8 @@ const PEXELS_QUERIES = {
   fitness: ['gym workout', 'personal trainer', 'weightlifting gym', 'boxing training'],
   junk: ['junk removal truck', 'furniture removal', 'garage cleanout', 'hauling trash'],
   home: ['house cleaning', 'landscaping garden', 'plumber working', 'handyman tools', 'clean kitchen'],
+  locksmith: ['locksmith', 'door lock key', 'locksmith tools', 'car key fob', 'house keys door'],
+  phonerepair: ['phone repair', 'smartphone screen repair', 'cracked phone screen', 'electronics repair technician', 'iphone repair'],
   landscape: ['landscaping garden', 'green lawn house', 'backyard landscape design', 'gardener planting flowers', 'lawn mowing'],
   painter: ['house painter', 'painting wall roller', 'freshly painted house exterior', 'interior painting room', 'paint brush wall'],
   general: ['small business owner', 'local shop interior', 'storefront', 'customer service smile'],
@@ -4486,6 +4507,10 @@ const NICHES = [
     photos: ['an athlete training hard with battle ropes in a modern gym, dramatic lighting', 'a personal trainer coaching a client lifting dumbbells', 'a clean modern gym interior with racks and weights', 'close-up of hands chalked up gripping a barbell'] },
   { key: 'junk', re: /(junk|haul|debris|clean\s?-?out|dumpster|trash|rubbish|garbage|waste removal)/, theme: 'drive', services: 'What we haul', book: 'Get a free estimate', eyebrow: 'Gone in a day',
     photos: ['two workers in matching work shirts carrying an old couch out of a house toward a white junk removal truck, bright daylight', 'a white junk removal truck parked in front of a suburban home with the back full of neatly loaded furniture', 'a clean empty garage after a professional cleanout, swept floor, daylight through the open door', 'a smiling junk removal crew member in gloves lifting a cardboard box into a truck'] },
+  { key: 'locksmith', re: /(locksmith|\block(s|out|smith)?\b|\bkeys?\b|rekey)/, theme: 'drive', services: 'What we do', book: 'Call now', eyebrow: 'Fast. Licensed. Local.',
+    photos: ['a locksmith in a dark work jacket opening a front door lock with professional tools at night, porch light glowing', 'close-up of a locksmith cutting a new key on a key machine with sparks of metal', 'a mobile locksmith service van parked in front of a house at dusk', 'a modern smart lock on a sleek front door, close-up'] },
+  { key: 'phonerepair', re: /(\bphones?\b|\bcell\b|cellular|iphone|screen repair|device repair|electronics repair|wireless|mobile repair|ubreakifix)/, theme: 'fresh', services: 'Repairs', book: 'Get a quote', eyebrow: 'Fixed today',
+    photos: ['a technician replacing a cracked smartphone screen with precision tools on an anti-static mat, bright clean workshop', 'close-up of a shattered phone screen next to a brand new one', 'a modern phone repair shop counter with neatly arranged devices and parts', 'a happy customer holding a freshly repaired phone, bright storefront'] },
   { key: 'landscape', re: /(landscap|lawn|garden|yard|tree service|arborist|sod|irrigation|hardscape)/, theme: 'fresh', services: 'What we do', book: 'Get a free estimate', eyebrow: 'Yards worth coming home to',
     photos: ['a lush manicured green lawn with fresh flower beds in front of a California home at golden hour', 'a landscaper in work gloves planting colorful flowers in a garden bed', 'a modern backyard with clean stone pathway, drought tolerant plants and warm evening light', 'close-up of freshly cut grass with mower stripes, shallow depth of field'] },
   { key: 'painter', re: /(paint|painter|drywall|stucco|coating)/, theme: 'fresh', services: 'Services', book: 'Get a free quote', eyebrow: 'Clean lines. Zero mess.',
@@ -5076,6 +5101,34 @@ const KIT_REMODEL = {
   ],
   ideas: ['How much to remodel a kitchen?', 'Can you come give an estimate this week?', 'Do you handle permits?', 'How long does a bathroom take?'],
 };
+const KIT_LOCKSMITH = {
+  type: 'locksmith', visit: 'service call', customer: 'customer',
+  tagline: 'Locked out in {city}? We come to you, fast.',
+  services: [
+    { name: 'House and apartment lockout', unit: 'project', lo: 85, hi: 225, q: 'Where are you locked out, and is anyone or anything inside that needs help?', blurb: 'Fast, damage-free entry, day or night.' },
+    { name: 'Car lockout', unit: 'project', lo: 75, hi: 195, q: 'What year, make and model is the car, and where is it parked?', blurb: 'Back in your car without a scratch.' },
+    { name: 'Car key replacement and programming', unit: 'project', lo: 120, hi: 450, q: 'What car is it, and do you have any working key right now?', blurb: 'New keys and fobs cut and programmed on the spot.' },
+    { name: 'Lock rekey and change', unit: 'project', lo: 65, hi: 300, q: 'How many locks, and did you just move in or lose a key?', blurb: 'New keys for every lock after a move or a lost key.' },
+    { name: 'Lock repair and install', unit: 'project', lo: 90, hi: 400, q: 'Is it a front door, a deadbolt, or a business lock?', blurb: 'Deadbolts, smart locks and commercial hardware.' },
+    { name: 'Business lockout and access', unit: 'project', lo: 110, hi: 500, q: 'Is the business locked out now, or do you need new locks or access control?', blurb: 'Storefronts, offices and master key systems.' },
+  ],
+  ideas: ['I\'m locked out of my house, can you come now?', 'I lost my car key', 'How much for a lockout?', 'How fast can you get here?'],
+};
+const KIT_PHONEREPAIR = {
+  type: 'phone repair shop', visit: 'repair', customer: 'customer',
+  tagline: 'Cracked screen? Fixed today in {city}.',
+  services: [
+    { name: 'Screen repair', unit: 'project', lo: 79, hi: 329, q: 'What phone model is it, and is it just the glass or is the screen black too?', blurb: 'Most screens fixed the same day, often while you wait.' },
+    { name: 'Battery replacement', unit: 'project', lo: 59, hi: 129, q: 'What phone is it, and how long does the battery last right now?', blurb: 'All-day battery again in under an hour.' },
+    { name: 'Charging port repair', unit: 'project', lo: 59, hi: 149, q: 'Does it charge at all, or only at an angle?', blurb: 'Loose or dead charging ports fixed fast.' },
+    { name: 'Water damage repair', unit: 'project', lo: 79, hi: 249, q: 'When did it get wet, and does it turn on?', blurb: 'The sooner you bring it in, the better the odds.' },
+    { name: 'Back glass and camera repair', unit: 'project', lo: 69, hi: 249, q: 'Is it the back glass, or the camera lens?', blurb: 'Cracked backs and cameras made like new.' },
+    { name: 'Tablet and laptop repair', unit: 'project', lo: 89, hi: 399, q: 'What device is it, and what is wrong with it?', blurb: 'iPads, tablets and laptops too.' },
+  ],
+  ideas: ['How much to fix an iPhone 15 screen?', 'Can you fix it today?', 'Do you need an appointment?', 'My phone won\'t charge'],
+};
+const LOCK_RE = /locksmith|\block(s|out|smith)?\b|\bkeys?\b|rekey|safe ?(&|and) ?lock/i;
+const PHONE_RE = /\bphones?\b|\bcell\b|cellular|iphone|screen repair|device repair|electronics repair|wireless|mobile repair|tech repair|ubreakifix/i;
 const KIT_AUTOBODY = {
   type: 'auto body shop', visit: 'free estimate', customer: 'driver',
   tagline: 'Collision repair in {city}, done right and back on the road.',
@@ -5131,6 +5184,8 @@ function kitProfileClean(o, type) {
 }
 // Ask Workers AI for a believable service menu for any local business type. Falls back to a plain generic menu.
 async function kitProfileAI(env, type, business, city) {
+  if (LOCK_RE.test(type)) return kitProfileClean(KIT_LOCKSMITH, 'locksmith');
+  if (PHONE_RE.test(type)) return kitProfileClean(KIT_PHONEREPAIR, 'phone repair shop');
   if (AUTOBODY_RE.test(type)) return kitProfileClean(KIT_AUTOBODY, 'auto body shop');
   if (ROOF_RE.test(type)) return kitProfileClean(KIT_ROOF, 'roofing contractor');
   if (TILE_RE.test(type)) return kitProfileClean(KIT_TILE, 'tile contractor');
@@ -5157,7 +5212,7 @@ async function kitProfileAI(env, type, business, city) {
 // which kind of demo does this business get?
 function kitNicheFor(category, business) {
   const t = String(category || '') + ' ' + String(business || '');
-  if (AUTOBODY_RE.test(t) || ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
+  if (LOCK_RE.test(t) || PHONE_RE.test(t) || AUTOBODY_RE.test(t) || ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
   if (LANDSCAPE_RE.test(t) && !/paver|hardscape|turf install/i.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
@@ -5732,7 +5787,7 @@ async function kitAdmin(env, user, path, method, body, url) {
     const medFocus = await isMedFocus(env);
     if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
     if (body.niche === 'medspa' && !medFocus) body.niche = 'custom';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : '') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (LOCK_RE.test(oneLine(body.business, 80)) ? 'locksmith' : PHONE_RE.test(oneLine(body.business, 80)) ? 'phone repair shop' : AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : '') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     if (google) data.google = google;
     const slug = kitSlug(data.business), t = now();
