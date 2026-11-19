@@ -5886,6 +5886,32 @@ async function kitAdmin(env, user, path, method, body, url) {
   return null;
 }
 
+// One-time (Nov 18 2026): fill the CRM with 30+ tint & PPF shops that have few reviews, using your own Lead Finder.
+const TINT_SEED = { checked: false };
+const TINT_SEED_SEARCHES = [['window tinting', 'Inglewood, CA'], ['window tinting', 'Hawthorne, CA'], ['window tinting', 'Gardena, CA'], ['window tint shop', 'Los Angeles, CA'],
+  ['window tinting', 'Torrance, CA'], ['window tinting', 'Culver City, CA'], ['ceramic tint and ppf', 'Los Angeles, CA'], ['window tinting', 'Compton, CA'], ['window tinting', 'Long Beach, CA'], ['paint protection film', 'South Bay, CA']];
+async function seedTintLeads(env) {
+  await ensureSchema(env);
+  const raw = await getSetting(env, 'tint_seed_v1');
+  if (raw && !/^running:/.test(raw)) return;
+  if (raw && Date.now() - Date.parse(raw.slice(8)) < 5 * 60e3) return;   // another request is already on it
+  if (!finderProvider(env)) { await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('tint_seed_v1', ?)").bind('skipped: Lead Finder not connected').run(); return; }
+  await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('tint_seed_v1', ?)").bind('running:' + now()).run();
+  const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
+  const b = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind('Tint & PPF shops · starter list', admin ? admin.id : null, now()).run();
+  const seen = new Set(); let added = 0, searched = 0; const errors = [];
+  for (const [what, where] of TINT_SEED_SEARCHES) {
+    if (added >= 45) break;
+    let f;
+    try { f = await finderSearch(env, admin ? admin.id : 1, what, where, undefined, 0); searched++; } catch (e) { errors.push(String(e && e.message || e).slice(0, 120)); if (errors.length >= 3) break; continue; }
+    const city = where.split(',')[0].trim();
+    const rows = f.results.filter((x) => !x.in_crm && !x.dnc && x.phone && !seen.has(x.place_id) && (x.reviews == null || x.reviews <= 50) && TINT_RE.test((x.category || '') + ' ' + x.business))
+      .map((p) => { seen.add(p.place_id); return { business: p.business, phone: p.phone, address: p.address, city: (p.address.match(/,\s*([A-Za-z .'-]+?),\s*CA\b/) || [])[1] || city, category: p.category || 'Window tinting service',
+        rating: p.rating == null ? '' : String(p.rating), link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews, lat: p.lat, lng: p.lng }; });
+    if (rows.length) { const r = await importRows(env, { batchId: b.meta.last_row_id, rows, startStatus: 'new', assign: admin ? String(admin.id) : 'none', skipWithSite: false, source: 'finder' }); added += r.inserted || 0; }
+  }
+  await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('tint_seed_v1', ?)").bind(JSON.stringify({ at: now(), added, searched, errors })).run();
+}
 const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Frame-Options': 'DENY',
@@ -5921,8 +5947,9 @@ export default {
     } catch (e) { console.error('auto lead bot', e); }
     try { await enrichInstagram(env, 20); } catch (e) { console.error('instagram enrich', e); }
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (env.DB && ctx && ctx.waitUntil && !TINT_SEED.checked) { TINT_SEED.checked = true; ctx.waitUntil(seedTintLeads(env).catch((e) => console.error('tint seed', e))); }
     const dm = url.pathname.match(/^\/d\/([a-z0-9-]{3,60})\/?$/);
     if (dm && request.method === 'GET') {
       try {
