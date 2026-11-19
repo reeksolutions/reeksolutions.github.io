@@ -491,7 +491,7 @@
     const lane = LANE_NAME[LV.lane] ? LV.lane : 'new';
     const social = LANES.social.some(([k]) => k === lane);
     const q = LV.q || '';
-    const [counts, list] = await Promise.all([api('GET', '/leads/lanes'), api('GET', '/leads?limit=150&lane2=' + lane + (q ? '&q=' + encodeURIComponent(q) : ''))]);
+    const [counts, list] = await Promise.all([api('GET', '/leads/lanes').catch(() => ({})), api('GET', '/leads?limit=150&lane2=' + lane + (q ? '&q=' + encodeURIComponent(q) : ''))]);
     const chip = ([k, l]) => h('button', { type: 'button', class: 'ln-chip' + (k === lane ? ' on' : ''), onclick: () => { LV.lane = k; lvSave(); viewLeads(); } }, l, h('span', { class: 'ln-n' }, counts[k] || 0));
     const search = h('input', { type: 'search', class: 'ln-search', placeholder: 'Search this list', value: q });
     let st; search.oninput = () => { clearTimeout(st); st = setTimeout(() => { LV.q = search.value.trim(); viewLeads().then(() => { const s2 = document.querySelector('.ln-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }); }, 350); };

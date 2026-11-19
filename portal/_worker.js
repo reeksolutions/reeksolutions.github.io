@@ -379,9 +379,11 @@ async function focusTerms(env) {
 }
 function focusSql(terms) {
   if (!terms.length) return { sql: '0', args: [] };
-  const parts = [], args = [];
-  for (const t of terms) { parts.push('(LOWER(COALESCE(l.category,\'\')) LIKE ? OR LOWER(l.business) LIKE ?)'); args.push('%' + t + '%', '%' + t + '%'); }
-  return { sql: '(' + parts.join(' OR ') + ')', args };
+  // the words go into the SQL as safe text, not as bound values: D1 allows only 100 bound values per query
+  const lit = (t) => "'%" + String(t).toLowerCase().replace(/[^a-z0-9 &'\-]/g, '').replace(/'/g, "''") + "%'";
+  const parts = terms.map((t) => String(t).toLowerCase().replace(/[^a-z0-9 &'\-]/g, '')).filter((t) => t.trim().length >= 2)
+    .map((t) => `(LOWER(COALESCE(l.category,'')) LIKE ${lit(t)} OR LOWER(l.business) LIKE ${lit(t)})`);
+  return { sql: parts.length ? '(' + parts.join(' OR ') + ')' : '0', args: [] };
 }
 
 async function getSetting(env, key) {
