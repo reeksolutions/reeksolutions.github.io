@@ -12,6 +12,8 @@ window.SITE = {
   city: "Los Angeles, CA",
   // Your business cell, like "3105551234". Leave "" to hide the Text me buttons.
   phone: "",
+  // A YouTube link to your demo video. Leave "" to show the sample call instead.
+  video: "",
   // Optional backup: a free form link (formspree.io) to get requests by email.
   formEndpoint: "",
   // Your CRM. Requests from this page land in your Leads tab (Website sign-ups).
@@ -24,7 +26,7 @@ window.SITE = {
 <link rel="canonical" href="https://reeksolutions.github.io/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Reekon Systems">
-<meta property="og:title" content="Film on the glass, phone ringing? Let AI pick up.">
+<meta property="og:title" content="Every call answered. Even with film on the glass.">
 <meta property="og:description" content="AI receptionist for tint and PPF shops. Answers every call, quotes your prices, books the slot. Free demo.">
 <meta property="og:url" content="https://reeksolutions.github.io/">
 <meta property="og:image" content="https://reeksolutions.github.io/og-image.png">
@@ -34,314 +36,422 @@ window.SITE = {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#06070a;--bg2:#0b0d13;--card:rgba(255,255,255,.04);--line:rgba(255,255,255,.1);--ink:#f4f6fb;--mut:#a2a8b8;--dim:#7a8094;--acc:#5b8cff;--acc2:#a9c2ff;--pop:#d7ff3f;--pop-ink:#141a00;--ok:#3ddc97;--bad:#ff7a7a;--r:20px;
- --mix:linear-gradient(110deg,#5b8cff 0%,#8fb0ff 45%,#d7ff3f 100%)}
+:root{--bg:#06070a;--bg2:#0b0d13;--glass:rgba(255,255,255,.04);--glass2:rgba(255,255,255,.065);--line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.16);
+ --ink:#f4f6fb;--mut:#a2a8b8;--dim:#7a8094;--acc:#5b8cff;--acc2:#a9c2ff;--acc-ink:#05070d;--ok:#3ddc97;--bad:#ff7a7a;
+ --rs:12px;--rl:22px;--rx:30px;--ease:cubic-bezier(.2,.7,.2,1);color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",Inter,system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));overflow-x:hidden;
- background-image:radial-gradient(800px 500px at 92% -8%,rgba(91,140,255,.22),transparent 70%),radial-gradient(600px 420px at -10% 38%,rgba(215,255,63,.06),transparent 70%)}
-.wrap{max-width:1080px;margin:0 auto}
+body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",Inter,system-ui,sans-serif;font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:clip;
+ background-image:radial-gradient(900px 560px at 85% -10%,rgba(91,140,255,.18),transparent 70%),radial-gradient(700px 500px at -15% 45%,rgba(91,140,255,.06),transparent 70%)}
 a{color:inherit}
-.mono{font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--acc2)}
-.mono.pop{color:var(--pop)}
-nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;gap:12px}
-.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
-.logo i{width:22px;height:22px;border-radius:50%;border:3px solid var(--acc);box-shadow:0 0 14px rgba(91,140,255,.6);position:relative;flex:none}
-.logo i::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--pop)}
+img,svg{max-width:100%}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+.mono,.eyebrow{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500;text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--acc)}
+h1{font-size:clamp(40px,7vw,76px);line-height:1;letter-spacing:-.045em;font-weight:800;text-wrap:balance}
+h2{font-size:clamp(30px,4.8vw,50px);line-height:1.05;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
+h3{font-size:20px;letter-spacing:-.02em;font-weight:700;line-height:1.25}
+.grad{background:linear-gradient(100deg,var(--ink) 0%,var(--acc2) 40%,var(--acc) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,2.1vw,20px);color:var(--mut);max-width:620px}
+.fine{font-size:14px;color:var(--dim)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 26px;border-radius:999px;border:0;background:var(--acc);color:var(--acc-ink);font:700 16px "Inter Tight",sans-serif;text-decoration:none;cursor:pointer;
+ box-shadow:0 0 0 1px rgba(91,140,255,.4),0 10px 40px rgba(91,140,255,.35);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 0 0 1px rgba(91,140,255,.55),0 14px 54px rgba(91,140,255,.5)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
+.btn.ghost:hover{box-shadow:inset 0 0 0 1px var(--acc)}
+.btn.sm{min-height:40px;padding:0 18px;font-size:14px}
+.glass{background:var(--glass);border:1px solid var(--line);border-radius:var(--rl);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+section{padding-block:clamp(84px,11vw,130px)}
+.shead{display:flex;flex-direction:column;gap:14px;max-width:760px}
+.ph{display:grid;place-items:center;border:1.5px dashed var(--line2);border-radius:var(--rl);color:var(--dim);font:500 12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:20;background:rgba(6,7,10,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid transparent;transition:border-color .2s}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px;padding-top:env(safe-area-inset-top)}
+.logo{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.03em;text-decoration:none;white-space:nowrap}
+.logo svg{width:26px;height:26px}
+.logo .arc{transform-origin:16px 16px;animation:sweep 3.2s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
 .logo em{font-style:normal;color:var(--acc)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--acc);color:#05070d;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;text-decoration:none;border:0;cursor:pointer;font-family:inherit;box-shadow:0 0 36px rgba(91,140,255,.35);transition:transform .15s,box-shadow .15s}
-.btn:hover{transform:translateY(-1px)}
-.btn.pop{background:var(--pop);color:var(--pop-ink);box-shadow:0 0 36px rgba(215,255,63,.28)}
-.btn.sm{padding:9px 18px;font-size:14px;box-shadow:none}
-.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
-section{padding:72px 0}
-h1{font-size:clamp(38px,6.8vw,66px);line-height:1.02;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
-h2{font-size:clamp(28px,4.6vw,44px);line-height:1.08;letter-spacing:-.035em;font-weight:800;text-wrap:balance}
-h3{font-size:20px;letter-spacing:-.02em;font-weight:700}
-.mix{background:var(--mix);-webkit-background-clip:text;background-clip:text;color:transparent}
-.lead{font-size:clamp(17px,2.3vw,20px);color:var(--mut);max-width:620px;margin-top:20px}
-.fine{font-size:14px;color:var(--dim);margin-top:14px}
-.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px;align-items:center}
+.nav-links{display:flex;gap:28px;font-size:15px;color:var(--mut)}
+.nav-links a{text-decoration:none}.nav-links a:hover{color:var(--ink)}
 
 /* hero */
-.hero{padding-top:36px;display:grid;gap:40px;grid-template-columns:1.1fr .9fr;align-items:center}
-.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
-.pill{font-size:13px;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--card)}
-.pill b{color:var(--pop);font-weight:700}
+.hero{position:relative;overflow-x:clip;padding-top:clamp(56px,8vw,96px);padding-bottom:40px;text-align:center}
+.hero .eyebrow{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border-radius:999px;border:1px solid rgba(91,140,255,.35);background:rgba(91,140,255,.08)}
+.hero .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.hero h1{margin:22px auto 0;max-width:960px}
+.hero .lead{margin:22px auto 0}
+.orb{position:absolute;left:50%;top:-140px;width:min(560px,100vw);height:min(560px,100vw);transform:translateX(-50%);pointer-events:none;z-index:-1}
+.orb::before{content:"";position:absolute;inset:18%;border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(169,194,255,.55),rgba(91,140,255,.25) 40%,transparent 70%);filter:blur(30px)}
+.orb::after{content:"";position:absolute;inset:6%;border-radius:50%;border:1px solid rgba(91,140,255,.22);border-top-color:rgba(169,194,255,.7);animation:sweep 14s linear infinite}
+.player{position:relative;margin:44px auto 0;max-width:880px;aspect-ratio:16/9;border-radius:var(--rx);overflow:hidden;padding:0}
+.player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.callwrap{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:24px;padding:clamp(18px,3.5vw,40px);text-align:left;
+ background:radial-gradient(500px 300px at 20% 30%,rgba(91,140,255,.18),transparent 70%),linear-gradient(160deg,#0d1018,#07080c)}
+.callmeta{display:flex;flex-direction:column;gap:12px}
+.callmeta .tag{align-self:flex-start}
+.callmeta h3{font-size:clamp(20px,2.6vw,28px)}
+.callmeta p{color:var(--mut);font-size:15px}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid var(--line2);font:500 11px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.tag.live{border-color:rgba(61,220,151,.4);color:var(--ok)}
+.tag.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.lines{display:flex;flex-direction:column;gap:8px;max-height:100%;overflow:hidden}
+.ln{font-size:13.5px;line-height:1.4;padding:10px 13px;border-radius:16px;max-width:92%;opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease),transform .4s var(--ease)}
+.ln.show{opacity:1;transform:none}
+.ln span{display:block;font:600 9.5px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
+.ln.c{background:rgba(255,255,255,.07);align-self:flex-end;border-bottom-right-radius:4px}
+.ln.a{background:rgba(91,140,255,.16);border:1px solid rgba(91,140,255,.35);align-self:flex-start;border-bottom-left-radius:4px}
+.ln.done{background:var(--acc);color:var(--acc-ink);font-weight:700;align-self:stretch;max-width:none;border-radius:12px}
+.hero-cta{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:34px}
 
-/* phone mockup */
-.demo{justify-self:center;width:100%;max-width:330px;display:grid;gap:14px;justify-items:center}
-.switch{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:4px;background:var(--card)}
-.switch button{font:600 13px "Inter Tight",sans-serif;color:var(--mut);background:none;border:0;padding:8px 14px;border-radius:999px;cursor:pointer}
-.switch button[aria-pressed="true"]{background:var(--pop);color:var(--pop-ink)}
-.phone{width:100%;max-width:300px;aspect-ratio:9/18.5;border-radius:42px;padding:10px;background:linear-gradient(160deg,#1b1f2b,#0b0d13);border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(91,140,255,.22),inset 0 0 0 1px rgba(255,255,255,.04);animation:float 6s ease-in-out infinite}
-@keyframes float{50%{transform:translateY(-8px)}}
-.scr{height:100%;border-radius:33px;overflow:hidden;background:#f6f4ef;color:#15171c;position:relative;display:flex;flex-direction:column;font-size:12px}
-.scr .bar{display:flex;justify-content:space-between;align-items:center;padding:16px 16px 10px;font-weight:800;font-size:13px;letter-spacing:-.01em}
-.scr .bar span{font-size:10px;font-weight:700;background:var(--sk);color:#fff;padding:5px 10px;border-radius:999px}
-.scr .ph{margin:0 12px;border-radius:18px;height:34%;background:var(--shero);position:relative;overflow:hidden;display:grid;place-items:center}
-.scr .ph svg{width:44%;opacity:.9}
-.scr .ph .badge{position:absolute;left:10px;bottom:10px;background:rgba(255,255,255,.92);border-radius:999px;padding:4px 9px;font-weight:700;font-size:10px}
-.scr .tx{padding:14px 16px 0}
-.scr .tx h4{font-size:19px;line-height:1.08;letter-spacing:-.03em;font-weight:800}
-.scr .tx p{color:#5a5f6b;margin-top:6px;font-size:11.5px;line-height:1.35}
-.scr .bt{display:flex;gap:8px;padding:12px 16px 0}
-.scr .bt i{font-style:normal;flex:1;text-align:center;padding:9px 0;border-radius:999px;font-weight:800;font-size:11.5px;background:var(--sk);color:#fff}
-.scr .bt i+i{background:#fff;color:#15171c;border:1px solid #ddd}
-.scr ul{list-style:none;padding:12px 16px 0;display:grid;gap:6px}
-.scr li{display:flex;justify-content:space-between;background:#fff;border:1px solid #ebe8e0;border-radius:12px;padding:8px 10px;font-weight:600;font-size:11.5px}
-.scr li b{color:#5a5f6b;font-weight:600}
-.scr .call{margin-top:auto;background:var(--sk);color:#fff;text-align:center;font-weight:800;padding:13px 0 16px;font-size:12.5px}
-.sample{font-size:12px;color:var(--dim)}
+/* work */
+.work-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.counter{display:flex;align-items:center;gap:12px}
+.counter b{font:600 14px "JetBrains Mono",monospace;color:var(--mut);min-width:64px;text-align:center}
+.arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--line2);background:var(--glass);color:var(--ink);font-size:20px;cursor:pointer}
+.arrow:hover{border-color:var(--acc)}
+.track{display:grid;grid-auto-flow:column;grid-auto-columns:min(560px,86%);gap:18px;margin-top:36px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;scrollbar-width:none}
+.track::-webkit-scrollbar{display:none}
+.wcard{scroll-snap-align:start;display:flex;flex-direction:column;gap:18px;padding:28px;min-width:0}
+.wcard-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.wcard-h .num{font:600 13px "JetBrains Mono",monospace;color:var(--acc)}
+.ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.35);color:var(--acc2)}
+.ic svg{width:22px;height:22px}
+.wcard p{color:var(--mut)}
+.wcard ul{list-style:none;display:grid;gap:9px;padding-top:16px;border-top:1px solid var(--line)}
+.wcard li{position:relative;padding-left:24px;font-size:15.5px}
+.wcard li::before{content:"";position:absolute;left:2px;top:9px;width:10px;height:6px;border-left:2px solid var(--ok);border-bottom:2px solid var(--ok);transform:rotate(-45deg)}
+.wcard .lbl{font:500 11px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.marquee{margin-top:44px;border-block:1px solid var(--line);overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent)}
+.marquee-in{display:flex;gap:44px;width:max-content;padding:18px 0;animation:mq 28s linear infinite}
+.marquee span{font:600 15px "Inter Tight",sans-serif;color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:44px}
+.marquee span::after{content:"◆";font-size:8px;color:var(--acc)}
+@keyframes mq{to{transform:translateX(-50%)}}
 
-/* cards */
-.grid{display:grid;gap:16px;margin-top:32px}
-.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;min-width:0}
-.card p{color:var(--mut);margin-top:8px;font-size:16px}
-.card .n{font:600 12px "JetBrains Mono",monospace;letter-spacing:.12em;color:var(--bad);text-transform:uppercase}
-.card.bad{border-color:rgba(255,122,122,.3);background:rgba(255,122,122,.045)}
-.card .n+h3{margin-top:10px}
-.math{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-top:30px;font-size:clamp(20px,3.4vw,32px);font-weight:700;letter-spacing:-.02em}
-.math b{color:var(--pop);font-size:clamp(30px,5.6vw,52px)}
+/* why now */
+.cost{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:40px}
+.cost .glass{padding:26px;display:flex;flex-direction:column;gap:10px}
+.cost .amt{font-size:clamp(34px,4vw,44px);font-weight:800;letter-spacing:-.04em}
+.cost .amt small{font-size:16px;color:var(--mut);font-weight:600;letter-spacing:0}
+.cost p{color:var(--mut);font-size:15px}
+.cost .feat{border-color:rgba(91,140,255,.55);box-shadow:0 0 0 1px rgba(91,140,255,.25),0 20px 70px rgba(91,140,255,.22)}
+.cost .bad .amt{color:var(--bad)}
+.mathline{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-top:36px;padding:24px 28px;font-size:clamp(18px,2.6vw,26px);font-weight:700;letter-spacing:-.02em}
+.mathline b{font-size:clamp(28px,4.4vw,44px);color:var(--acc2)}
 
-.feat{display:flex;gap:14px;align-items:flex-start}
-.feat .ic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(91,140,255,.14);border:1px solid rgba(91,140,255,.4);color:var(--acc2)}
-.feat .ic svg{width:20px;height:20px}
-.feat h3{font-size:17px}
-.feat p{margin-top:4px;font-size:15px}
+/* changes */
+.stat{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-top:28px}
+.stat b{font-size:clamp(56px,9vw,100px);font-weight:800;letter-spacing:-.05em;line-height:1}
+.stat span{color:var(--mut);max-width:360px}
+.cards3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:40px}
+.ncard{padding:28px;display:flex;flex-direction:column;gap:12px;transition:transform .25s var(--ease),border-color .25s}
+.ncard:hover{transform:translateY(-4px);border-color:rgba(91,140,255,.45)}
+.ncard .num{font:600 13px "JetBrains Mono",monospace;color:var(--acc)}
+.ncard p{color:var(--mut);font-size:15.5px}
+.swipe{display:none;margin-top:14px}
 
-.steps{display:grid;gap:16px;grid-template-columns:repeat(3,1fr);margin-top:32px;counter-reset:s}
-.step{position:relative;padding:24px;border-radius:var(--r);border:1px solid var(--line);background:var(--card)}
-.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--mix);color:#05070d;font-weight:800;margin-bottom:16px}
-.step p{color:var(--mut);margin-top:6px}
+/* trust */
+.trust{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:40px}
+.trust .glass{padding:22px;display:flex;flex-direction:column;gap:10px}
+.trust p{color:var(--mut);font-size:14.5px}
+
+/* founder */
+.founder{display:grid;grid-template-columns:240px 1fr;gap:36px;align-items:center;padding:clamp(26px,4vw,44px)}
+.founder .ph{aspect-ratio:1;border-radius:var(--rl)}
+.founder blockquote{font-size:clamp(20px,2.6vw,28px);font-weight:700;letter-spacing:-.025em;line-height:1.3}
+.founder p{color:var(--mut);margin-top:14px}
 
 /* pricing */
-.price{position:relative;display:flex;flex-direction:column}
-.price .amt{display:flex;align-items:baseline;gap:10px;margin-top:14px}
-.price .amt b{font-size:48px;letter-spacing:-.04em;font-weight:800}
-.price .amt s{color:var(--dim);font-size:18px}
-.price .sub{color:var(--dim);font-size:14px;margin-top:2px}
-.price ul{list-style:none;margin:18px 0 22px;display:grid;gap:10px}
-.price li{padding-left:28px;position:relative;color:var(--mut)}
-.price li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}
+.prices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:40px}
+.price{padding:30px;display:flex;flex-direction:column;gap:6px;position:relative}
+.price.feat{border-color:rgba(91,140,255,.55);box-shadow:0 0 0 1px rgba(91,140,255,.25),0 24px 80px rgba(91,140,255,.25)}
+.price .amt{font-size:52px;font-weight:800;letter-spacing:-.045em;margin-top:10px}
+.price .sub{color:var(--dim);font-size:14px}
+.price ul{list-style:none;display:grid;gap:10px;margin:20px 0 26px}
+.price li{position:relative;padding-left:26px;color:var(--mut)}
+.price li::before{content:"";position:absolute;left:3px;top:9px;width:10px;height:6px;border-left:2px solid var(--ok);border-bottom:2px solid var(--ok);transform:rotate(-45deg)}
 .price .btn{margin-top:auto}
-.price.best{border:1px solid transparent;background:linear-gradient(var(--bg2),var(--bg2)) padding-box,var(--mix) border-box}
-.flag{position:absolute;top:-12px;right:20px;background:var(--pop);color:var(--pop-ink);font:700 11px "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;border-radius:999px}
+.flag{position:absolute;top:-12px;right:22px}
+.flag.tag{background:var(--acc);color:var(--acc-ink);border-color:transparent}
 
-/* form */
-.formcard{border-radius:28px;padding:clamp(22px,5vw,44px);border:1px solid rgba(91,140,255,.45);background:linear-gradient(135deg,rgba(91,140,255,.13),rgba(215,255,63,.04))}
-form{display:grid;gap:12px;margin-top:22px}
-input,textarea{width:100%;padding:15px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--ink);font:inherit;font-size:16px}
-input:focus,textarea:focus{outline:2px solid var(--acc);border-color:transparent}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chips label{cursor:pointer}
-.chips input{position:absolute;opacity:0;width:1px;height:1px}
-.chips span{display:inline-block;padding:10px 16px;border-radius:999px;border:1px solid var(--line);color:var(--mut);font-weight:600;font-size:15px}
-.chips input:checked+span{background:var(--pop);color:var(--pop-ink);border-color:transparent}
-.chips input:focus-visible+span{outline:2px solid var(--acc)}
-.lbl{font-size:14px;color:var(--mut);font-weight:600}
-
-details{border-bottom:1px solid var(--line);padding:18px 0}
+/* faq + final */
+details{border-bottom:1px solid var(--line);padding:20px 0}
 summary{cursor:pointer;font-weight:700;font-size:18px;list-style:none;display:flex;justify-content:space-between;gap:16px}
 summary::-webkit-details-marker{display:none}
-summary::after{content:"+";color:var(--pop)}details[open] summary::after{content:"–"}
-details p{color:var(--mut);margin-top:10px;max-width:700px}
-.final{text-align:center;border-top:1px solid var(--line)}
-footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);font-size:14px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;border-top:1px solid var(--line)}
-.sticky{position:fixed;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(6,7,10,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);display:none;z-index:9}
+summary::after{content:"+";color:var(--acc);font-weight:500}details[open] summary::after{content:"–"}
+details p{color:var(--mut);margin-top:10px;max-width:720px}
+.final{text-align:center;padding:clamp(40px,7vw,80px) 24px;border-radius:var(--rx);position:relative;overflow:hidden}
+.final::before{content:"";position:absolute;inset:auto -20% -60% -20%;height:120%;background:radial-gradient(closest-side,rgba(91,140,255,.28),transparent);pointer-events:none}
+.final h2{position:relative}.final .lead{margin:16px auto 0;position:relative}
+.final .hero-cta{position:relative}
+footer{padding-block:36px calc(36px + env(safe-area-inset-bottom));border-top:1px solid var(--line);color:var(--dim);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(3,4,8,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.modal.open{opacity:1;pointer-events:auto}
+.mbox{width:min(520px,100%);max-height:calc(100svh - 32px);overflow:auto;padding:28px;background:#0d1018;border:1px solid var(--line2);border-radius:var(--rl);box-shadow:0 30px 90px rgba(0,0,0,.6);transform:translateY(12px);transition:transform .25s var(--ease)}
+.modal.open .mbox{transform:none}
+.mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
+.mhead h3{font-size:24px}
+.x{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid var(--line2);background:var(--glass);color:var(--mut);font-size:20px;cursor:pointer}
+form{display:grid;gap:12px;margin-top:18px}
+.lbl2{font-size:14px;color:var(--mut);font-weight:600}
+input,select{width:100%;min-height:50px;padding:0 16px;border-radius:14px;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--ink);font:inherit;font-size:16px}
+input:focus,select:focus{outline:2px solid var(--acc);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{cursor:pointer}
+.chips input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
+.chips span{display:inline-block;padding:10px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--mut);font-weight:600;font-size:14.5px}
+.chips input:checked+span{background:var(--acc);color:var(--acc-ink);border-color:transparent}
+.chips input:focus-visible+span{outline:2px solid var(--acc)}
+
+/* sticky + reveal */
+.sticky{position:fixed;left:0;right:0;bottom:0;z-index:15;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(6,7,10,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .3s var(--ease);display:none}
+.sticky.show{transform:none}
 .sticky .btn{width:100%}
-.rv{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
 .rv.in{opacity:1;transform:none}
-@media(max-width:860px){.hero{grid-template-columns:1fr}.g3,.g2,.g4,.steps{grid-template-columns:1fr}section{padding:52px 0}.sticky{display:block}body{padding-bottom:84px}.nav-cta{display:none}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}.phone{animation:none}.rv{opacity:1;transform:none;transition:none}}
-/* call mockup */
-.call{height:100%;border-radius:33px;overflow:hidden;background:linear-gradient(180deg,#10131c,#07080c);display:flex;flex-direction:column;padding:18px 14px 14px;gap:12px}
-.call-top{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);font-weight:600}
-.call-top .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.6s ease-in-out infinite}
-@keyframes pulse{50%{opacity:.35}}
-.call-top .timer{margin-left:auto;font-family:"JetBrains Mono",monospace;color:var(--ink)}
-.call-who{display:flex;flex-direction:column;align-items:center;padding:6px 0 4px;border-bottom:1px solid var(--line)}
-.call-who b{font-size:16px}.call-who small{color:var(--dim);font-size:11.5px}
-.lines{display:flex;flex-direction:column;gap:8px;flex:1;overflow:hidden}
-.ln{font-size:12.5px;line-height:1.38;padding:9px 11px;border-radius:14px;max-width:88%;margin:0}
-.ln span{display:block;font:600 9.5px "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
-.ln.c{background:rgba(255,255,255,.07);align-self:flex-end;border-bottom-right-radius:4px}
-.ln.a{background:rgba(91,140,255,.18);border:1px solid rgba(91,140,255,.35);align-self:flex-start;border-bottom-left-radius:4px}
-.booked{background:var(--pop);color:var(--pop-ink);font-weight:700;font-size:12px;padding:10px 12px;border-radius:12px;line-height:1.3}
+
+@media(max-width:900px){
+ .nav-links{display:none}
+ .callwrap{grid-template-columns:1fr;align-content:start}
+ .callmeta p{display:none}
+ .cost,.cards3,.prices{grid-template-columns:1fr}
+ .trust{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .founder{grid-template-columns:1fr}
+ .founder .ph{max-width:200px}
+}
+@media(max-width:700px){
+ .player{aspect-ratio:auto;height:auto}
+ .callwrap{position:relative;inset:auto}
+ .lines{max-height:none}
+ .hero .eyebrow{font-size:10.5px;letter-spacing:.1em}
+ .hero-cta .btn,.final .btn{width:100%}
+ .cards3{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:84%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+ .cards3::-webkit-scrollbar{display:none}
+ .cards3 .ncard{scroll-snap-align:start}
+ .swipe{display:block}
+ .trust{grid-template-columns:1fr}
+ .sticky{display:block}
+ body{padding-bottom:80px}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important}.rv,.ln{opacity:1;transform:none;transition:none}.btn,.ncard,.mbox,.sticky{transition:none}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<nav><a class="logo" href="#top"><i></i><span>Reekon <em>Systems</em></span></a><a class="btn sm pop nav-cta" href="#start">Hear my free demo</a></nav>
+<header class="nav" id="nav"><div class="wrap">
+ <a class="logo" href="#top" aria-label="Reekon Systems home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" fill="none" stroke="#5b8cff" stroke-opacity=".3" stroke-width="2.2"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="#5b8cff" stroke-opacity=".22" stroke-width="1.6"/><circle cx="16" cy="16" r="3.2" fill="#5b8cff"/><path class="arc" d="M16 4a12 12 0 0 1 12 12" fill="none" stroke="#5b8cff" stroke-width="2.6" stroke-linecap="round"/></svg><span>Reekon <em>Systems</em></span></a>
+ <nav class="nav-links" aria-label="Sections"><a href="#work">What we build</a><a href="#why">Why now</a><a href="#trust">Your rules</a><a href="#price">Pricing</a></nav>
+ <button class="btn sm" data-open style="white-space:nowrap">Free demo</button>
+</div></header>
 
-<header class="hero" id="top">
- <div>
-  <div class="mono pop">AI receptionist for tint &amp; PPF shops · LA</div>
-  <h1 style="margin-top:14px">Film on the glass, phone ringing? <span class="mix">Let AI pick up.</span></h1>
-  <p class="lead">Every “how much for ceramic?” call you can’t grab goes to the next tint shop on Google. Our AI receptionist answers every call, quotes from your price sheet and books the slot while you work.</p>
-  <div class="cta-row"><a class="btn pop" href="#start">Hear a demo for my shop</a><a class="btn ghost txt" href="#start" hidden>Text me</a><a class="btn ghost" href="#price">Pricing</a></div>
-  <div class="pills"><span class="pill">Answers <b>every</b> call, 24/7</span><span class="pill">Quotes your prices</span><span class="pill">Built by a guy who worked in a tint shop</span></div>
- </div>
- <div class="demo">
-  <div class="switch" role="group" aria-label="Pick a sample call"><button type="button" aria-pressed="true" data-k="tint">Ceramic tint call</button><button type="button" aria-pressed="false" data-k="ppf">PPF call</button></div>
-  <div class="phone" aria-label="Sample call handled by the AI receptionist">
-   <div class="call">
-    <div class="call-top"><span class="dot"></span><span id="c-shop">Southside Tint Co.</span><span class="timer" id="c-time">0:42</span></div>
-    <div class="call-who"><b>AI receptionist</b><small>answering for the shop</small></div>
-    <div class="lines" id="c-lines"></div>
-    <div class="booked" id="c-booked"></div>
+<main id="top">
+<section class="hero"><div class="wrap">
+ <div class="orb" aria-hidden="true"></div>
+ <span class="eyebrow rv"><i></i>AI receptionist for tint &amp; PPF shops · LA</span>
+ <h1 class="rv">Every call answered. <span class="grad">Even with film on the glass.</span></h1>
+ <p class="lead rv">When you’re mid-install, the AI picks up, quotes from your price sheet and books the car. You finish the job. The customer’s already on your calendar.</p>
+ <div class="player glass rv" id="player">
+  <div class="callwrap" id="callwrap">
+   <div class="callmeta">
+    <span class="tag live">Sample call</span>
+    <h3 id="c-title">“How much for ceramic on my Civic?”</h3>
+    <p>This is how it handles a price shopper. Your demo uses your shop’s name and your real prices.</p>
    </div>
-  </div>
-  <div class="sample">Sample call with a made-up shop. Yours uses your shop name and your prices.</div>
- </div>
-</header>
-
-<section id="pain" class="rv">
- <div class="mono">What happens now</div>
- <h2 style="margin-top:12px">The calls you miss are the ones that would’ve paid.</h2>
- <p class="lead">Tint customers price shop. If nobody answers, they don’t leave a voicemail. They call the next shop.</p>
- <div class="grid g3">
-  <div class="card bad"><div class="n">01 · Mid-install</div><h3>Gloves wet, film on the glass</h3><p>You can’t stop a windshield to grab the phone. That call rings out.</p></div>
-  <div class="card bad"><div class="n">02 · Price shoppers</div><h3>They call three shops</h3><p>“How much for ceramic on my Civic?” The first shop that answers usually gets the car.</p></div>
-  <div class="card bad"><div class="n">03 · After hours</div><h3>Nobody picks up at 7 PM</h3><p>People call after work. Your shop’s closed, so they book somewhere that answers.</p></div>
- </div>
- <div class="math"><span>2 missed ceramic jobs a week</span><span>×</span><span>$400</span><span>=</span><b>$41,600 a year</b></div>
- <p class="fine">Example numbers to show the math. One saved PPF job can pay for a year.</p>
-</section>
-
-<section class="rv">
- <div class="mono">What it does</div>
- <h2 style="margin-top:12px">Like a front desk that never puts the phone down.</h2>
- <div class="grid g2">
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><div><h3>Answers every call</h3><p>Picks up when you can’t: mid-install, at lunch, after close. Sounds natural, not robotic.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><h3>Quotes from your price sheet</h3><p>By car size and film: standard, ceramic, windshield, PPF, coating. Only your prices, never a guess.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div><div><h3>Books the appointment</h3><p>Gets the car, the service and a time that works, then puts it on your calendar.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><h3>Texts you the details</h3><p>Name, number, car and what they want, the second the call ends.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/></svg></div><div><h3>Handles the same questions all day</h3><p>Shades, ceramic vs. regular, how long it takes, warranty, where you’re located.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5h7M7.5 3v2c0 4-2 7-4 8M5 9c1 2 3 3.5 6 4M13 20l4-9 4 9M14.5 17h5"/></svg></div><div><h3>English or Spanish</h3><p>Answers in whatever language your customer calls in.</p></div></div>
- </div>
-</section>
-
-<section class="rv">
- <div class="mono">How it works</div>
- <h2 style="margin-top:12px">Call your own demo before you pay a dollar.</h2>
- <div class="steps">
-  <div class="step"><h3>Send your shop name</h3><p>Fill out the form or DM us. We pull your info from Google.</p></div>
-  <div class="step"><h3>Call your free demo</h3><p>We build one with your shop’s name and services. Call it and ask it anything a customer would.</p></div>
-  <div class="step"><h3>Live this week</h3><p>We load your price sheet, set it to pick up when you don’t, and you’re covered.</p></div>
- </div>
-</section>
-
-<section id="price" class="rv">
- <div class="mono">Pricing</div>
- <h2 style="margin-top:12px">Founding-shop prices.</h2>
- <p class="lead">One saved ceramic or PPF job a month covers it.</p>
- <div class="grid g2" style="margin-top:36px">
-  <div class="card price best">
-   <span class="flag">Most shops start here</span>
-   <h3>AI receptionist</h3>
-   <div class="amt"><b>$997</b></div><div class="sub">setup, then $297 a month</div>
-   <ul><li>Answers every call, 24/7</li><li>Quotes from your price sheet</li><li>Books appointments and texts you the details</li><li>English and Spanish</li></ul>
-   <a class="btn pop" href="#start" data-plan="AI receptionist">Hear my free demo</a>
-  </div>
-  <div class="card price">
-   <h3>AI receptionist + website</h3>
-   <div class="amt"><b>$1,497</b></div><div class="sub">setup, then $297 a month</div>
-   <ul><li>Everything in AI receptionist</li><li>A clean site with your prices, reviews and tap-to-call</li><li>Built from your Google page</li><li>Great if you have no site or an old one</li></ul>
-   <a class="btn ghost" href="#start" data-plan="AI receptionist + website">Hear my free demo</a>
+   <div class="lines" id="c-lines" aria-live="polite"></div>
   </div>
  </div>
-</section>
+ <div class="hero-cta rv"><button class="btn" data-open>Get my free demo</button><span class="fine">Free. 4 quick questions. You’ll hear it answer as your shop.</span></div>
+</div></section>
 
-<section id="start" class="rv">
- <div class="formcard grid g2" style="margin-top:0;align-items:start">
-  <div>
-   <div class="mono pop">Free demo</div>
-   <h2 style="margin-top:12px">Hear it answer for your shop.</h2>
-   <p class="lead" style="margin-top:16px">Tell us your shop. We build a demo with your name and services and text you the number to call.</p>
-   <p class="fine" style="margin-top:20px">Rather DM? Message <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
-  </div>
+<section id="work"><div class="wrap">
+ <div class="work-top rv">
+  <div class="shead"><span class="eyebrow">What we build</span><h2>One system that catches every job you’re missing.</h2></div>
+  <div class="counter" aria-hidden="true"><button class="arrow" id="prev" aria-label="Previous">‹</button><b id="count">01 / 04</b><button class="arrow" id="next" aria-label="Next">›</button></div>
+ </div>
+ <div class="track" id="track" tabindex="0" aria-label="What we build, swipe for more">
+  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><span class="num">01 / 04</span></div>
+   <h3>AI receptionist</h3><p>Picks up every call you can’t, in a voice that sounds like a real front desk.</p>
+   <span class="lbl">What it does</span><ul><li>Answers 24/7, mid-install or after close</li><li>English or Spanish</li><li>Handles shades, legal %, warranty and hours</li></ul></article>
+  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span class="num">02 / 04</span></div>
+   <h3>Quotes from your price sheet</h3><p>Price shoppers get a real number in seconds, so they don’t call the next shop.</p>
+   <span class="lbl">What it does</span><ul><li>Prices by car size and film</li><li>Standard, ceramic, windshield, PPF, coating</li><li>Not sure? Books a look-over instead of guessing</li></ul></article>
+  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div><span class="num">03 / 04</span></div>
+   <h3>Books the car and texts you</h3><p>Turns the call into an appointment and sends you the details before you’ve peeled your gloves off.</p>
+   <span class="lbl">What it does</span><ul><li>Books open slots on your calendar</li><li>Texts you name, number, car and job</li><li>Texts back anyone who hangs up</li></ul></article>
+  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h4"/></svg></div><span class="num">04 / 04</span></div>
+   <h3>A site that sends calls (optional)</h3><p>For shops with no website or an old one. Built from your Google page.</p>
+   <span class="lbl">What it does</span><ul><li>Your prices, reviews and tap-to-call</li><li>Linked to your Google listing</li><li>Every call it sends goes to the AI if you’re busy</li></ul></article>
+ </div>
+ <div class="marquee" aria-label="Built for these shops"><div class="marquee-in"><span>Auto tint</span><span>Ceramic tint</span><span>PPF / clear bra</span><span>Ceramic coating</span><span>Windshield heat film</span><span>Home window film</span><span>Commercial film</span><span>Vinyl wraps</span><span>Auto tint</span><span>Ceramic tint</span><span>PPF / clear bra</span><span>Ceramic coating</span><span>Windshield heat film</span><span>Home window film</span><span>Commercial film</span><span>Vinyl wraps</span></div></div>
+</div></section>
+
+<section id="why"><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">Why now</span><h2>A front desk costs thousands. Voicemail costs more.</h2>
+  <p class="lead">Tint customers price shop. If nobody answers, they don’t leave a message. They call the next shop on Google.</p></div>
+ <div class="cost">
+  <div class="glass rv"><span class="tag">Hire a front desk</span><div class="amt">$2,400<small>+/mo</small></div><p>Roughly a part-time receptionist in LA, before payroll taxes. Still misses calls on breaks and after close.</p></div>
+  <div class="glass bad rv"><span class="tag">Let it ring</span><div class="amt">$0<small> up front</small></div><p>Costs nothing until you count the ceramic and PPF jobs that went to the shop that picked up.</p></div>
+  <div class="glass feat rv"><span class="tag live">Reekon AI receptionist</span><div class="amt">$297<small>/mo</small></div><p>Answers every call, quotes, books and texts you. Plus a one-time $997 setup.</p></div>
+ </div>
+ <div class="mathline glass rv"><span>2 missed ceramic jobs a week</span><span>×</span><span>$400</span><span>=</span><b>$41,600 a year</b></div>
+ <p class="fine rv" style="margin-top:12px">Example numbers to show the math. The front desk figure is a rough LA estimate.</p>
+</div></section>
+
+<section><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">What changes for you</span><h2>You stay in the bay. The phone gets handled.</h2></div>
+ <div class="stat rv"><b>24/7</b><span>Every call picked up, including the ones at 7 PM and the ones while you’re on a windshield.</span></div>
+ <div class="cards3">
+  <div class="ncard glass rv"><span class="num">01</span><h3>No more “sorry, we were busy”</h3><p>Every caller gets an answer and a price. The ones who were going to call three shops book with you first.</p></div>
+  <div class="ncard glass rv"><span class="num">02</span><h3>Built around your shop</h3><p>Your shop name, your films, your prices, your hours. It sounds like your front desk, not a call center.</p></div>
+  <div class="ncard glass rv"><span class="num">03</span><h3>One clean handoff</h3><p>Every job lands on your calendar with a text to your phone. No sticky notes, no missed voicemails.</p></div>
+ </div>
+ <p class="swipe fine">Swipe →</p>
+</div></section>
+
+<section id="trust"><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">Your shop, your rules</span><h2>Nothing goes live until you’ve heard it.</h2></div>
+ <div class="trust">
+  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="3"/></svg></div><h3>You hear it first</h3><p>You call your demo and approve how it talks before any customer does.</p></div>
+  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><h3>Your number stays</h3><p>Calls you don’t pick up forward to the AI. Answer when you’re free like always.</p></div>
+  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Only your prices</h3><p>It quotes from the sheet you give us. If it’s not sure, it books a look-over.</p></div>
+  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>You’re always in the loop</h3><p>Want to talk to the owner? It takes their number and texts you right away.</p></div>
+ </div>
+</div></section>
+
+<section><div class="wrap">
+ <div class="founder glass rv">
+  <div class="ph" aria-label="Photo placeholder">Your photo</div>
+  <div><span class="eyebrow">Why I built this</span>
+   <blockquote style="margin-top:14px">“I worked in a tint shop. I watched the phone ring out while we had film on the glass, and I knew every one of those was a job.”</blockquote>
+   <p>I’m Marquise, based in LA. I build these myself for tint and PPF shops, set them up around how your shop actually runs, and stay your point of contact after it’s live.</p></div>
+ </div>
+</div></section>
+
+<section id="price"><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">Pricing</span><h2>Founding-shop prices.</h2><p class="lead">One saved ceramic or PPF job a month covers it.</p></div>
+ <div class="prices">
+  <div class="price glass feat rv"><span class="flag tag">Most shops start here</span><h3>AI receptionist</h3><div class="amt">$997</div><div class="sub">setup, then $297 a month</div>
+   <ul><li>Answers every call, 24/7</li><li>Quotes from your price sheet</li><li>Books appointments and texts you</li><li>English and Spanish</li></ul><button class="btn" data-open data-plan="AI receptionist">Get my free demo</button></div>
+  <div class="price glass rv"><h3>AI receptionist + website</h3><div class="amt">$1,497</div><div class="sub">setup, then $297 a month</div>
+   <ul><li>Everything in AI receptionist</li><li>A clean site with prices, reviews and tap-to-call</li><li>Built from your Google page</li><li>For shops with no site or an old one</li></ul><button class="btn ghost" data-open data-plan="AI receptionist + website">Get my free demo</button></div>
+ </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+ <div class="shead rv"><h2>Questions</h2></div>
+ <div class="rv" style="margin-top:16px">
+  <details><summary>Will it sound like a robot?</summary><p>No. It talks like a friendly front desk, and you hear it yourself on the demo before you decide anything.</p></details>
+  <details><summary>What if it quotes the wrong price?</summary><p>It only quotes from the price sheet you give us, by car size and film. If it’s not sure, it books a look-over instead of guessing.</p></details>
+  <details><summary>Do I need a new phone number?</summary><p>No. Your number stays the same. Calls you don’t pick up get forwarded to the AI.</p></details>
+  <details><summary>What if the customer wants to talk to me?</summary><p>It takes their name and number and texts you right away so you can call back between cars.</p></details>
+  <details><summary>Is the demo really free?</summary><p>Yes. We build it with your shop name and services and send it to you. If it’s not for you, you don’t pay anything.</p></details>
+ </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+ <div class="final glass rv">
+  <span class="eyebrow">Free demo</span>
+  <h2 style="margin-top:14px">Find out how many calls you’re missing.</h2>
+  <p class="lead">Answer 4 quick questions. We build a demo with your shop’s name and text you the number to call.</p>
+  <div class="hero-cta"><button class="btn" data-open>Get my free demo</button><span class="fine">I build each one myself, so I only take on a few new shops at a time.</span></div>
+ </div>
+</div></section>
+</main>
+
+<footer><div class="wrap"><span>© <span id="yr"></span> Reekon Systems · <span id="city"></span></span><span><a href="" class="ig" style="text-decoration:none"></a> · <a href="" id="em" style="text-decoration:none"></a></span></div></footer>
+<div class="sticky" id="sticky"><button class="btn" data-open>Get my free demo</button></div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle" aria-hidden="true">
+ <div class="mbox">
+  <div class="mhead"><div><span class="eyebrow">Free demo</span><h3 id="mtitle" style="margin-top:8px">Hear it answer for your shop</h3></div><button class="x" id="mclose" aria-label="Close">×</button></div>
+  <p class="fine">4 quick questions. We text you your demo, usually the same day.</p>
   <form id="f" novalidate>
-   <div class="lbl">What does your shop do?</div>
+   <div class="lbl2">1. What does your shop do?</div>
    <div class="chips">
     <label><input type="radio" name="type" value="Auto tint" checked><span>Auto tint</span></label>
     <label><input type="radio" name="type" value="Tint + PPF/ceramic"><span>Tint + PPF / ceramic</span></label>
     <label><input type="radio" name="type" value="Home & commercial film"><span>Home &amp; commercial</span></label>
    </div>
-   <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
+   <label class="lbl2" for="miss">2. How many calls do you think you miss a day?</label>
+   <select id="miss" name="miss"><option value="Not sure">Not sure</option><option value="1-2">1–2</option><option value="3-5">3–5</option><option value="6+">6 or more</option></select>
+   <div class="lbl2">3. Your shop</div>
    <input name="biz" placeholder="Shop name" autocomplete="organization" required aria-label="Shop name">
+   <input name="link" placeholder="City or Google Maps link (optional)" aria-label="City or Google Maps link">
+   <div class="lbl2">4. Where should we text the demo?</div>
+   <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
    <input name="phone" type="tel" placeholder="Best phone number" autocomplete="tel" required aria-label="Best phone number">
-   <input name="link" placeholder="Google Maps link or city (optional)" aria-label="Google Maps link or city">
-   <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+   <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;min-height:0;opacity:0">
    <input type="hidden" name="plan" value="">
-   <button class="btn pop" type="submit">Build my free demo</button>
-   <p class="fine" id="fs" role="status" style="margin:0">No payment. We reply the same day.</p>
+   <button class="btn" type="submit" style="margin-top:6px">Build my free demo</button>
+   <p class="fine" id="fs" role="status">No payment. No pressure.</p>
   </form>
  </div>
-</section>
-
-<section class="rv">
- <h2>Questions</h2>
- <div style="margin-top:20px">
-  <details><summary>Will it sound like a robot?</summary><p>No. It talks like a friendly front desk, and you hear it yourself on the demo before you decide anything.</p></details>
-  <details><summary>What if it quotes the wrong price?</summary><p>It only quotes from the price sheet you give us, by car size and film. If it’s not sure, it books a look-over instead of guessing.</p></details>
-  <details><summary>What if the customer wants to talk to me?</summary><p>It takes their name and number and texts you right away so you can call back between cars.</p></details>
-  <details><summary>Do I need a new phone number?</summary><p>No. Your number stays the same. Calls you don’t pick up get forwarded to the AI, so you can still answer when you’re free.</p></details>
-  <details><summary>Does it speak Spanish?</summary><p>Yes. It answers in English or Spanish, depending on how the customer talks.</p></details>
-  <details><summary>Is the demo really free?</summary><p>Yes. We build it with your shop name and services and send it to you. If it’s not for you, you don’t pay anything.</p></details>
- </div>
-</section>
-
-<section class="final rv">
- <h2>Tonight, someone’s calling about ceramic tint.</h2>
- <p class="lead" style="margin-inline:auto">Make sure your shop is the one that answers.</p>
- <div class="cta-row" style="justify-content:center"><a class="btn pop" href="#start">Hear a demo for my shop</a></div>
- <p class="fine">Or DM <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
-</section>
-
-<footer><span>© <span id="yr"></span> Reekon Systems · <span id="city"></span></span><span><a href="" id="em" style="text-decoration:none"></a></span></footer>
 </div>
-<div class="sticky"><a class="btn pop" href="#start">Hear my free demo</a></div>
+
 <script>
 const S=window.SITE,$=id=>document.getElementById(id);
 $("yr").textContent=new Date().getFullYear();$("city").textContent=S.city;
 document.querySelectorAll(".ig").forEach(a=>{a.href=S.instagram;a.textContent=S.handle});
 $("em").href="mailto:"+S.email;$("em").textContent=S.email;
-const digits=String(S.phone||"").replace(/\D/g,"");
-if(digits.length>=10)document.querySelectorAll(".txt").forEach(a=>{a.hidden=false;a.href="sms:+1"+digits.slice(-10);a.textContent="Text me";});
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* sample calls (made-up shop) */
-const C={
- tint:{time:"0:48",lines:[["c","Hey, how much for ceramic tint on a 2022 Civic?"],["a","Great choice. Ceramic on a sedan, all windows, is $399 with a lifetime warranty. Want the front windshield heat film too?"],["c","Just the windows. Can I come Saturday?"],["a","I have Saturday at 10 AM or 1 PM. Which works?"],["c","10 is good."]],booked:"Booked · Sat 10:00 AM · 2022 Civic · Ceramic, all windows"},
- ppf:{time:"1:05",lines:[["c","What do you charge for PPF on a new Model Y?"],["a","Front end, that’s full hood, fenders, bumper and mirrors, is $1,450. Full body is $5,200. Which are you thinking?"],["c","Front end. Is it self-healing?"],["a","Yes, light scratches heal with heat. I can get you in Tuesday at 9 AM, it takes the day. Want it?"],["c","Yeah, book it."]],booked:"Booked · Tue 9:00 AM · Model Y · PPF front end"}
-};
-let cur="tint",auto=true;
-function show(k){cur=k;const c=C[k];$("c-time").textContent=c.time;
- $("c-lines").innerHTML=c.lines.map(([w,t])=>`<p class="ln ${w}"><span>${w==="a"?"AI":"Caller"}</span>${t}</p>`).join("");
- $("c-booked").textContent="✓ "+c.booked;
- document.querySelectorAll(".switch button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));}
-document.querySelectorAll(".switch button").forEach(b=>b.addEventListener("click",()=>{show(b.dataset.k);auto=false}));
-show("tint");
-if(!matchMedia("(prefers-reduced-motion: reduce)").matches)setInterval(()=>{if(auto)show(cur==="tint"?"ppf":"tint")},6000);
+/* hero: your video if set, else the sample call */
+const yt=String(S.video||"").match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/);
+if(yt){const f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+yt[1]+"?rel=0";f.title="Demo video";f.allow="accelerometer; encrypted-media; gyroscope; picture-in-picture";f.allowFullscreen=true;$("callwrap").replaceWith(f);}
+else{
+ const CALLS=[
+  {t:"“How much for ceramic on my Civic?”",l:[["c","Hey, how much for ceramic tint on a 2022 Civic?"],["a","Ceramic on a sedan, all windows, is $399 with a lifetime warranty. Want the windshield heat film too?"],["c","Just the windows. Can I come Saturday?"],["a","I have Saturday at 10 or 1. Which works?"],["c","10’s good."],["done","✓ Booked · Sat 10:00 AM · Ceramic, all windows · texted to you"]]},
+  {t:"“What do you charge for PPF?”",l:[["c","What do you charge for PPF on a new Model Y?"],["a","Front end, that’s hood, fenders, bumper and mirrors, is $1,450. Full body is $5,200. Which are you thinking?"],["c","Front end. Is it self-healing?"],["a","Yes, light scratches heal with heat. I can get you in Tuesday at 9. Want it?"],["c","Book it."],["done","✓ Booked · Tue 9:00 AM · PPF front end · texted to you"]]}
+ ];
+ let ci=0;
+ const play=()=>{const c=CALLS[ci%CALLS.length];ci++;$("c-title").textContent=c.t;const box=$("c-lines");box.innerHTML="";
+  c.l.forEach(([w,t],i)=>{const p=document.createElement("p");p.className="ln "+w;if(w!=="done"){const s=document.createElement("span");s.textContent=w==="a"?"AI":"Caller";p.append(s);}p.append(document.createTextNode(t));box.append(p);
+   if(reduce)p.classList.add("show");else setTimeout(()=>p.classList.add("show"),400+i*1100);});
+  if(!reduce)setTimeout(play,400+c.l.length*1100+4200);};
+ play();
+}
 
-/* reveal on scroll */
-const io="IntersectionObserver" in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12}):null;
-document.querySelectorAll(".rv").forEach(el=>io?io.observe(el):el.classList.add("in"));
+/* work carousel */
+const track=$("track"),cards=[...track.children];
+const at=()=>Math.round(track.scrollLeft/(cards[0].offsetWidth+18));
+const upd=()=>{$("count").textContent=String(Math.min(cards.length,at()+1)).padStart(2,"0")+" / "+String(cards.length).padStart(2,"0")};
+track.addEventListener("scroll",()=>requestAnimationFrame(upd),{passive:true});
+const go=d=>{const i=Math.max(0,Math.min(cards.length-1,at()+d));track.scrollTo({left:cards[i].offsetLeft-cards[0].offsetLeft,behavior:reduce?"auto":"smooth"})};
+$("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 
-/* tracking + form */
+/* nav border + sticky bar */
+const nav=$("nav"),sticky=$("sticky"),hero=document.querySelector(".hero");
+addEventListener("scroll",()=>{nav.classList.toggle("scrolled",scrollY>8);sticky.classList.toggle("show",scrollY>hero.offsetHeight-80)},{passive:true});
+
+/* reveal on scroll, staggered */
+if("IntersectionObserver" in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const sib=[...e.target.parentElement.children].filter(x=>x.classList.contains("rv"));e.target.style.transitionDelay=(Math.max(0,sib.indexOf(e.target))*80)+"ms";e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12});document.querySelectorAll(".rv").forEach(el=>io.observe(el));}
+else document.querySelectorAll(".rv").forEach(el=>el.classList.add("in"));
+
+/* tracking */
 let SRC="";try{SRC=(new URLSearchParams(location.search).get("src")||sessionStorage.getItem("src")||"").slice(0,40);if(SRC)sessionStorage.setItem("src",SRC)}catch(_){}
 const ping=k=>{if(!S.portal)return;try{fetch(S.portal+"/site/hit",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({k,src:SRC,ref:document.referrer||""}),keepalive:true}).catch(()=>{})}catch(_){}};
 ping("view");
-document.querySelectorAll('a[href="#start"]').forEach(a=>a.addEventListener("click",()=>{ping("cta");if(a.dataset.plan)document.querySelector('[name="plan"]').value=a.dataset.plan}));
+
+/* modal */
+const modal=$("modal");let lastFocus=null;
+const openM=plan=>{lastFocus=document.activeElement;modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.querySelector('[name="plan"]').value=plan||"";document.body.style.overflow="hidden";setTimeout(()=>modal.querySelector(".chips input").focus(),60);ping("cta")};
+const closeM=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.style.overflow="";if(lastFocus)lastFocus.focus()};
+document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>openM(b.dataset.plan)));
+$("mclose").onclick=closeM;modal.addEventListener("click",e=>{if(e.target===modal)closeM()});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))closeM()});
+
+/* form */
 $("f").addEventListener("submit",async e=>{e.preventDefault();
  const f=e.target,d=Object.fromEntries(new FormData(f)),st=$("fs");
- if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your name, shop and phone.";st.style.color="var(--bad)";return}
+ if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your shop, name and phone.";st.style.color="var(--bad)";return}
  st.style.color="";st.textContent="Sending…";
- const msg=["Free demo request (AI receptionist)","Shop: "+d.type,d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
+ const msg=["Free demo request (AI receptionist)","Shop: "+d.type,"Misses about "+d.miss+" calls a day",d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
  const payload={name:d.name,biz:d.biz,phone:d.phone,msg,hp:d.hp,src:SRC};
- const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the number to call.";};
+ const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the number to call.";st.style.color="var(--ok)"};
  if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)});const j=await r.json().catch(()=>({}));if(r.ok){done();return}
   if(j&&j.error&&r.status<500){st.textContent=j.error;st.style.color="var(--bad)";return}}catch(_){}}
  if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(payload)});if(r.ok){done();return}}catch(_){}}
