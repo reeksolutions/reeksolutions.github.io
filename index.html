@@ -10,210 +10,331 @@ window.SITE = {
   instagram: "https://instagram.com/reekthewealthguy",
   handle: "@reekthewealthguy",
   city: "Los Angeles, CA",
-  // Paste a free form link (formspree.io) to get requests by email automatically.
-  // Leave "" and the form opens the visitor's email app with everything filled in.
+  // Your business cell, like "3105551234". Leave "" to hide the Text me buttons.
+  phone: "",
+  // Optional backup: a free form link (formspree.io) to get requests by email.
   formEndpoint: "",
-  // Your CRM address (no slash at the end). Turns on: sign-ups into your Leads tab,
-  // Discord alerts, and visit counting. Example: "https://your-portal.workers.dev"
-  portal: "",
-  // Your audit video: upload a file next to this page (e.g. "audit.mp4") or leave as the demo.
-  video: "missed-calls.mp4"
+  // Your CRM. Requests from this page land in your Leads tab (Website sign-ups).
+  portal: "https://reeksolutions-github-io.reekbusiness04.workers.dev"
 };
 </script>
-<title>Reekon Systems | Stop losing customers to missed calls</title>
-<meta name="description" content="Businesses lose customers every day to missed calls, slow replies and forgotten follow-ups. Reekon Systems installs AI that answers, follows up and books for you. Free 30-minute AI audit.">
+<title>Reekon Systems | Websites for Locksmiths &amp; Phone Repair Shops</title>
+<meta name="description" content="Websites for locksmiths and phone repair shops in Los Angeles. Built from your Google listing, live in about a week. See a free demo before you pay. Founding price $497.">
 <meta name="theme-color" content="#06070a">
 <link rel="canonical" href="https://reeksolutions.github.io/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Reekon Systems">
-<meta property="og:title" content="Stop losing customers to missed calls | Reekon Systems">
-<meta property="og:description" content="AI that answers every call, follows up every lead and books the appointment. Free 30-minute AI audit.">
+<meta property="og:title" content="No website? Your next customer is calling the shop that has one.">
+<meta property="og:description" content="Websites for locksmiths and phone repair shops. Free demo built from your Google listing. Founding price $497.">
 <meta property="og:url" content="https://reeksolutions.github.io/">
 <meta property="og:image" content="https://reeksolutions.github.io/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2306070a'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%235b8cff' stroke-opacity='.35' stroke-width='2'/%3E%3Cpath d='M16 7a9 9 0 0 1 9 9' fill='none' stroke='%235b8cff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235b8cff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#06070a;--bg2:#0b0d13;--card:rgba(255,255,255,.04);--line:rgba(255,255,255,.1);--ink:#f4f6fb;--mut:#a2a8b8;--dim:#7a8094;--acc:#5b8cff;--acc2:#a9c2ff;--ok:#3ddc97;--bad:#ff7a7a;--r:20px}
+:root{--bg:#06070a;--bg2:#0b0d13;--card:rgba(255,255,255,.04);--line:rgba(255,255,255,.1);--ink:#f4f6fb;--mut:#a2a8b8;--dim:#7a8094;--acc:#5b8cff;--acc2:#a9c2ff;--pop:#d7ff3f;--pop-ink:#141a00;--ok:#3ddc97;--bad:#ff7a7a;--r:20px;
+ --mix:linear-gradient(110deg,#5b8cff 0%,#8fb0ff 45%,#d7ff3f 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",Inter,system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));overflow-x:hidden;
- background-image:radial-gradient(800px 500px at 90% -5%,rgba(91,140,255,.2),transparent 70%),radial-gradient(700px 500px at -10% 40%,rgba(91,140,255,.08),transparent 70%)}
-.wrap{max-width:1040px;margin:0 auto}
+ background-image:radial-gradient(800px 500px at 92% -8%,rgba(91,140,255,.22),transparent 70%),radial-gradient(600px 420px at -10% 38%,rgba(215,255,63,.06),transparent 70%)}
+.wrap{max-width:1080px;margin:0 auto}
 a{color:inherit}
 .mono{font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--acc2)}
-nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
-.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em;text-decoration:none}
-.logo i{width:22px;height:22px;border-radius:50%;border:3px solid var(--acc);box-shadow:0 0 14px rgba(91,140,255,.6);position:relative}
-.logo i::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--acc)}
+.mono.pop{color:var(--pop)}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;gap:12px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
+.logo i{width:22px;height:22px;border-radius:50%;border:3px solid var(--acc);box-shadow:0 0 14px rgba(91,140,255,.6);position:relative;flex:none}
+.logo i::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--pop)}
 .logo em{font-style:normal;color:var(--acc)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--acc);color:#05070d;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;text-decoration:none;border:0;cursor:pointer;font-family:inherit;box-shadow:0 0 36px rgba(91,140,255,.35);transition:transform .15s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--acc);color:#05070d;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;text-decoration:none;border:0;cursor:pointer;font-family:inherit;box-shadow:0 0 36px rgba(91,140,255,.35);transition:transform .15s,box-shadow .15s}
 .btn:hover{transform:translateY(-1px)}
+.btn.pop{background:var(--pop);color:var(--pop-ink);box-shadow:0 0 36px rgba(215,255,63,.28)}
 .btn.sm{padding:9px 18px;font-size:14px;box-shadow:none}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);box-shadow:none}
-section{padding:64px 0}
-h1{font-size:clamp(38px,7.2vw,68px);line-height:1.02;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
+section{padding:72px 0}
+h1{font-size:clamp(38px,6.8vw,66px);line-height:1.02;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
 h2{font-size:clamp(28px,4.6vw,44px);line-height:1.08;letter-spacing:-.035em;font-weight:800;text-wrap:balance}
 h3{font-size:20px;letter-spacing:-.02em;font-weight:700}
-.lead{font-size:clamp(17px,2.4vw,21px);color:var(--mut);max-width:640px;margin-top:20px}
-.hl{color:var(--acc2)}.bad{color:var(--bad)}.ok{color:var(--ok)}
-.hero{padding-top:40px;display:grid;gap:36px;grid-template-columns:1.15fr .85fr;align-items:center}
-.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px;align-items:center}
+.mix{background:var(--mix);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,2.3vw,20px);color:var(--mut);max-width:620px;margin-top:20px}
 .fine{font-size:14px;color:var(--dim);margin-top:14px}
-.vid{border-radius:24px;border:1px solid var(--line);overflow:hidden;background:#000;aspect-ratio:9/16;max-height:600px;justify-self:center;width:100%;max-width:340px;box-shadow:0 30px 80px rgba(91,140,255,.18)}
-.vid video{width:100%;height:100%;object-fit:cover;display:block}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px;align-items:center}
+
+/* hero */
+.hero{padding-top:36px;display:grid;gap:40px;grid-template-columns:1.1fr .9fr;align-items:center}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.pill{font-size:13px;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--card)}
+.pill b{color:var(--pop);font-weight:700}
+
+/* phone mockup */
+.demo{justify-self:center;width:100%;max-width:330px;display:grid;gap:14px;justify-items:center}
+.switch{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:4px;background:var(--card)}
+.switch button{font:600 13px "Inter Tight",sans-serif;color:var(--mut);background:none;border:0;padding:8px 14px;border-radius:999px;cursor:pointer}
+.switch button[aria-pressed="true"]{background:var(--pop);color:var(--pop-ink)}
+.phone{width:100%;max-width:300px;aspect-ratio:9/18.5;border-radius:42px;padding:10px;background:linear-gradient(160deg,#1b1f2b,#0b0d13);border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(91,140,255,.22),inset 0 0 0 1px rgba(255,255,255,.04);animation:float 6s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+.scr{height:100%;border-radius:33px;overflow:hidden;background:#f6f4ef;color:#15171c;position:relative;display:flex;flex-direction:column;font-size:12px}
+.scr .bar{display:flex;justify-content:space-between;align-items:center;padding:16px 16px 10px;font-weight:800;font-size:13px;letter-spacing:-.01em}
+.scr .bar span{font-size:10px;font-weight:700;background:var(--sk);color:#fff;padding:5px 10px;border-radius:999px}
+.scr .ph{margin:0 12px;border-radius:18px;height:34%;background:var(--shero);position:relative;overflow:hidden;display:grid;place-items:center}
+.scr .ph svg{width:44%;opacity:.9}
+.scr .ph .badge{position:absolute;left:10px;bottom:10px;background:rgba(255,255,255,.92);border-radius:999px;padding:4px 9px;font-weight:700;font-size:10px}
+.scr .tx{padding:14px 16px 0}
+.scr .tx h4{font-size:19px;line-height:1.08;letter-spacing:-.03em;font-weight:800}
+.scr .tx p{color:#5a5f6b;margin-top:6px;font-size:11.5px;line-height:1.35}
+.scr .bt{display:flex;gap:8px;padding:12px 16px 0}
+.scr .bt i{font-style:normal;flex:1;text-align:center;padding:9px 0;border-radius:999px;font-weight:800;font-size:11.5px;background:var(--sk);color:#fff}
+.scr .bt i+i{background:#fff;color:#15171c;border:1px solid #ddd}
+.scr ul{list-style:none;padding:12px 16px 0;display:grid;gap:6px}
+.scr li{display:flex;justify-content:space-between;background:#fff;border:1px solid #ebe8e0;border-radius:12px;padding:8px 10px;font-weight:600;font-size:11.5px}
+.scr li b{color:#5a5f6b;font-weight:600}
+.scr .call{margin-top:auto;background:var(--sk);color:#fff;text-align:center;font-weight:800;padding:13px 0 16px;font-size:12.5px}
+.sample{font-size:12px;color:var(--dim)}
+
+/* cards */
 .grid{display:grid;gap:16px;margin-top:32px}
-.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;min-width:0}
 .card p{color:var(--mut);margin-top:8px;font-size:16px}
-.card.bad{border-color:rgba(255,122,122,.35);background:rgba(255,122,122,.05)}
-.card.good{border-color:rgba(61,220,151,.35);background:rgba(61,220,151,.05)}
-.tag{display:inline-block;font:600 12px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;padding:6px 12px;border-radius:999px;border:1px solid var(--line);margin-bottom:14px}
-.tag.bad{color:var(--bad);border-color:rgba(255,122,122,.5)}.tag.ok{color:var(--ok);border-color:rgba(61,220,151,.5)}
-.math{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;margin-top:28px;font-size:clamp(22px,3.6vw,34px);font-weight:700;letter-spacing:-.02em}
-.math b{color:var(--bad);font-size:clamp(32px,6vw,56px)}
-.steps{counter-reset:s}.step{position:relative;padding-left:64px}
-.step::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;width:44px;height:44px;border-radius:50%;background:rgba(91,140,255,.15);border:1px solid rgba(91,140,255,.5);display:grid;place-items:center;font-weight:800;color:var(--acc2)}
-.step+.step{margin-top:24px}
-.guar{border:1px solid rgba(91,140,255,.5);background:linear-gradient(135deg,rgba(91,140,255,.14),rgba(91,140,255,.03));border-radius:28px;padding:clamp(24px,5vw,48px)}
-.guar p{font-size:clamp(18px,2.6vw,24px);margin-top:14px;max-width:760px}
-ul.chk{list-style:none;margin-top:14px;display:grid;gap:10px}
-ul.chk li{padding-left:30px;position:relative;color:var(--mut)}
-ul.chk li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}
-details{border-bottom:1px solid var(--line);padding:18px 0}
-summary{cursor:pointer;font-weight:700;font-size:18px;list-style:none;display:flex;justify-content:space-between;gap:16px}
-summary::after{content:"+";color:var(--acc2)}details[open] summary::after{content:"–"}
-details p{color:var(--mut);margin-top:10px;max-width:700px}
-form{display:grid;gap:12px;margin-top:24px;max-width:520px}
+.card .n{font:600 12px "JetBrains Mono",monospace;letter-spacing:.12em;color:var(--bad);text-transform:uppercase}
+.card.bad{border-color:rgba(255,122,122,.3);background:rgba(255,122,122,.045)}
+.card .n+h3{margin-top:10px}
+.math{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-top:30px;font-size:clamp(20px,3.4vw,32px);font-weight:700;letter-spacing:-.02em}
+.math b{color:var(--pop);font-size:clamp(30px,5.6vw,52px)}
+
+.feat{display:flex;gap:14px;align-items:flex-start}
+.feat .ic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(91,140,255,.14);border:1px solid rgba(91,140,255,.4);color:var(--acc2)}
+.feat .ic svg{width:20px;height:20px}
+.feat h3{font-size:17px}
+.feat p{margin-top:4px;font-size:15px}
+
+.steps{display:grid;gap:16px;grid-template-columns:repeat(3,1fr);margin-top:32px;counter-reset:s}
+.step{position:relative;padding:24px;border-radius:var(--r);border:1px solid var(--line);background:var(--card)}
+.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--mix);color:#05070d;font-weight:800;margin-bottom:16px}
+.step p{color:var(--mut);margin-top:6px}
+
+/* pricing */
+.price{position:relative;display:flex;flex-direction:column}
+.price .amt{display:flex;align-items:baseline;gap:10px;margin-top:14px}
+.price .amt b{font-size:48px;letter-spacing:-.04em;font-weight:800}
+.price .amt s{color:var(--dim);font-size:18px}
+.price .sub{color:var(--dim);font-size:14px;margin-top:2px}
+.price ul{list-style:none;margin:18px 0 22px;display:grid;gap:10px}
+.price li{padding-left:28px;position:relative;color:var(--mut)}
+.price li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}
+.price .btn{margin-top:auto}
+.price.best{border:1px solid transparent;background:linear-gradient(var(--bg2),var(--bg2)) padding-box,var(--mix) border-box}
+.flag{position:absolute;top:-12px;right:20px;background:var(--pop);color:var(--pop-ink);font:700 11px "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;border-radius:999px}
+
+/* form */
+.formcard{border-radius:28px;padding:clamp(22px,5vw,44px);border:1px solid rgba(91,140,255,.45);background:linear-gradient(135deg,rgba(91,140,255,.13),rgba(215,255,63,.04))}
+form{display:grid;gap:12px;margin-top:22px}
 input,textarea{width:100%;padding:15px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--ink);font:inherit;font-size:16px}
 input:focus,textarea:focus{outline:2px solid var(--acc);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{cursor:pointer}
+.chips input{position:absolute;opacity:0;width:1px;height:1px}
+.chips span{display:inline-block;padding:10px 16px;border-radius:999px;border:1px solid var(--line);color:var(--mut);font-weight:600;font-size:15px}
+.chips input:checked+span{background:var(--pop);color:var(--pop-ink);border-color:transparent}
+.chips input:focus-visible+span{outline:2px solid var(--acc)}
+.lbl{font-size:14px;color:var(--mut);font-weight:600}
+
+details{border-bottom:1px solid var(--line);padding:18px 0}
+summary{cursor:pointer;font-weight:700;font-size:18px;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--pop)}details[open] summary::after{content:"–"}
+details p{color:var(--mut);margin-top:10px;max-width:700px}
 .final{text-align:center;border-top:1px solid var(--line)}
-.final form{margin-inline:auto;text-align:left}
 footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);font-size:14px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;border-top:1px solid var(--line)}
-.sticky{position:fixed;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(6,7,10,.92);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:none;z-index:9}
+.sticky{position:fixed;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(6,7,10,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);display:none;z-index:9}
 .sticky .btn{width:100%}
-@media(max-width:820px){.hero{grid-template-columns:1fr}.g3,.g2{grid-template-columns:1fr}section{padding:48px 0}.sticky{display:block}body{padding-bottom:84px}.vid{max-width:300px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+.rv{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+.rv.in{opacity:1;transform:none}
+@media(max-width:860px){.hero{grid-template-columns:1fr}.g3,.g2,.g4,.steps{grid-template-columns:1fr}section{padding:52px 0}.sticky{display:block}body{padding-bottom:84px}.nav-cta{display:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}.phone{animation:none}.rv{opacity:1;transform:none;transition:none}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<nav><a class="logo" href="#top"><i></i><span>Reekon <em>Systems</em></span></a><a class="btn sm" href="#audit">Free AI audit</a></nav>
+<nav><a class="logo" href="#top"><i></i><span>Reekon <em>Systems</em></span></a><a class="btn sm pop nav-cta" href="#start">Get my free demo</a></nav>
 
 <header class="hero" id="top">
  <div>
-  <div class="mono">AI for local businesses</div>
-  <h1 style="margin-top:14px">You’re losing customers <span class="hl">every day</span> and never see it.</h1>
-  <p class="lead">Calls go unanswered after hours. Leads wait hours for a reply. Past customers never hear from you again. We install AI that answers, follows up and books, so the money stops leaking.</p>
-  <div class="cta-row"><a class="btn" href="#audit">Get my free 30-minute AI audit</a><a class="btn ghost" href="#how">See how it works</a></div>
-  <p class="fine">No credit card. No pitch deck. We look at your business and show you what’s leaking.</p>
+  <div class="mono pop">Websites for locksmiths &amp; phone repair · LA</div>
+  <h1 style="margin-top:14px">No website? Your next customer is calling <span class="mix">the shop that has one.</span></h1>
+  <p class="lead">Locked out or holding a cracked phone, people search “near me” and call the first shop that looks legit. We build you that site, with tap-to-call, your Google reviews and your prices, live in about a week.</p>
+  <div class="cta-row"><a class="btn pop" href="#start">See my free demo site</a><a class="btn ghost txt" href="#start" hidden>Text me</a><a class="btn ghost" href="#price">Pricing</a></div>
+  <div class="pills"><span class="pill">Free demo <b>before</b> you pay</span><span class="pill">Built from your Google page</span><span class="pill">Live in ~7 days</span></div>
  </div>
- <div class="vid"><video id="v" playsinline muted loop autoplay preload="metadata" controls aria-label="Short video showing how missed calls cost a business money and how AI fixes it"></video></div>
+ <div class="demo">
+  <div class="switch" role="group" aria-label="Pick a sample"><button type="button" aria-pressed="true" data-k="lock">Locksmith</button><button type="button" aria-pressed="false" data-k="phone">Phone repair</button></div>
+  <div class="phone" aria-label="Sample website on a phone">
+   <div class="scr" id="scr">
+    <div class="bar"><span id="m-name" style="all:unset">Keystone Lock &amp; Key</span><span>Call now</span></div>
+    <div class="ph"><svg id="m-ic" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></svg><div class="badge" id="m-badge">★ 4.8 · Google reviews</div></div>
+    <div class="tx"><h4 id="m-h">Locked out? We’re there in 30 min.</h4><p id="m-p">24/7 lockouts, car keys and rekeys across Inglewood &amp; South LA.</p></div>
+    <div class="bt"><i>Call now</i><i>Text us</i></div>
+    <ul id="m-list"></ul>
+    <div class="call" id="m-call">Tap to call · open 24/7</div>
+   </div>
+  </div>
+  <div class="sample">Sample design with a made-up shop name. Yours uses your real info.</div>
+ </div>
 </header>
 
-<section id="pain">
- <div class="mono">The problem</div>
- <h2 style="margin-top:12px">Most businesses don’t have a marketing problem. They have a leak.</h2>
- <p class="lead">You already pay to get people to call, click and message. The loss happens right after, and nobody tracks it.</p>
+<section id="pain" class="rv">
+ <div class="mono">What happens now</div>
+ <h2 style="margin-top:12px">Customers are looking for you. They just can’t find much.</h2>
+ <p class="lead">A Google listing with no website gives people nothing to go on. So they tap the next shop.</p>
  <div class="grid g3">
-  <div class="card bad"><span class="tag bad">After hours</span><h3>Nobody picks up after 5</h3><p>A customer calls at 6:42 PM, hits voicemail and books whoever answers next. Most won’t leave a message.</p></div>
-  <div class="card bad"><span class="tag bad">Slow replies</span><h3>The first to answer wins</h3><p>A new lead who waits hours has already messaged three other businesses. Speed decides who gets the job.</p></div>
-  <div class="card bad"><span class="tag bad">No follow-up</span><h3>Old customers go quiet</h3><p>Hundreds of people already trusted you once. Without a nudge, they forget you and spend elsewhere.</p></div>
+  <div class="card bad"><div class="n">01 · The search</div><h3>“Locksmith near me”</h3><p>They’re stressed and in a hurry. They pick the shop with a real website, clear prices and a big call button.</p></div>
+  <div class="card bad"><div class="n">02 · The doubt</div><h3>No prices, no proof</h3><p>Can’t see what a screen fix or a lockout costs, or that you’re legit? They keep scrolling.</p></div>
+  <div class="card bad"><div class="n">03 · The miss</div><h3>Gone to the next shop</h3><p>You never know it happened. No missed call, no message. Just a job someone else got.</p></div>
  </div>
- <div class="math"><span>3 missed customers a week</span><span>×</span><span>$400 each</span><span>=</span><b>$62,400 a year</b></div>
- <p class="fine">Example numbers to show the math. Your audit uses your real ones.</p>
+ <div class="math"><span>1 lost job a week</span><span>×</span><span>$150</span><span>=</span><b>$7,800 a year</b></div>
+ <p class="fine">Example numbers to show the math. One extra job a month covers the founding price.</p>
 </section>
 
-<section id="how">
- <div class="mono">The fix</div>
- <h2 style="margin-top:12px">AI that does the work your team can’t be there for.</h2>
- <p class="lead">We build it, set it up on your phone, calendar and tools, and keep it running. You don’t learn any software.</p>
+<section class="rv">
+ <div class="mono">What you get</div>
+ <h2 style="margin-top:12px">A site that turns searches into calls.</h2>
  <div class="grid g2">
-  <div class="card good"><span class="tag ok">Answers 24/7</span><h3>AI voice receptionist</h3><p>Picks up every call, answers common questions, and books the appointment on your calendar.</p></div>
-  <div class="card good"><span class="tag ok">Never miss a lead</span><h3>Missed-call text-back</h3><p>If a call slips through, the customer gets a text within seconds that starts the conversation.</p></div>
-  <div class="card good"><span class="tag ok">Speed to lead</span><h3>Instant follow-up</h3><p>New inquiries get a reply in under a minute, day or night, and a nudge until they book.</p></div>
-  <div class="card good"><span class="tag ok">Win back revenue</span><h3>Reactivation campaigns</h3><p>Friendly texts to past customers that bring them back, with zero staff time.</p></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><div><h3>Tap-to-call and tap-to-text</h3><p>Big buttons on every screen. One tap and they’re talking to you.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></div><div><h3>Your real Google reviews &amp; photos</h3><p>Pulled from your Google page so people see you’re legit right away.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><div><h3>Services and price ranges</h3><p>Lockouts, rekeys, car keys, screens, batteries, charging ports, whatever you do.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/></svg></div><div><h3>Hours, service area and map</h3><p>Set up so Google understands where you work and links it to your listing.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div><div><h3>Made for phones first</h3><p>Fast and clean on a phone, because that’s where your customers are.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></div><div><h3>Changes by text</h3><p>New price or new hours? Text us and it gets updated.</p></div></div>
  </div>
- <p class="fine">Also available: AI websites and chatbots, AI CRM, lead tracking, and custom AI agents. The audit decides what you actually need.</p>
 </section>
 
-
-<section>
+<section class="rv">
  <div class="mono">How it works</div>
- <h2 style="margin:12px 0 32px">Three steps. You stay in control.</h2>
+ <h2 style="margin-top:12px">See it first. Pay only if you love it.</h2>
  <div class="steps">
-  <div class="step"><h3>Free 30-minute AI audit</h3><p style="color:var(--mut)">We learn how leads reach you, who handles them, and where they fall through. You leave knowing exactly what’s leaking and a ballpark of what fixing it looks like.</p></div>
-  <div class="step"><h3>A short, plain-English plan</h3><p style="color:var(--mut)">One page: what we’ll build, what it costs and what it should do for you. One clear option, no jargon, no pressure.</p></div>
-  <div class="step"><h3>We build it and it goes live</h3><p style="color:var(--mut)">We set it up, test it with you, and monitor it after launch. Aim: live and booking within 30 days.</p></div>
+  <div class="step"><h3>Send your shop name</h3><p>Fill out the form or DM us. We find your Google page ourselves.</p></div>
+  <div class="step"><h3>Get your free demo</h3><p>We build a demo from your real Google info and send you the link, usually within a day.</p></div>
+  <div class="step"><h3>Go live this week</h3><p>Like it? We add your changes, connect your domain and launch.</p></div>
  </div>
 </section>
 
-<section id="audit">
- <div class="grid g2" style="align-items:start;margin-top:0">
+<section id="price" class="rv">
+ <div class="mono">Pricing</div>
+ <h2 style="margin-top:12px">Founding-client prices for LA shops.</h2>
+ <p class="lead">One-time setup, plus a small monthly plan for hosting and changes. We tell you the monthly before you start.</p>
+ <div class="grid g2" style="margin-top:36px">
+  <div class="card price">
+   <h3>Website</h3>
+   <div class="amt"><b>$497</b><s>$997</s></div><div class="sub">one-time setup</div>
+   <ul><li>Custom site built from your Google page</li><li>Tap-to-call, tap-to-text, reviews, prices</li><li>Google-ready setup and map</li><li>Live in about 7 days</li></ul>
+   <a class="btn ghost" href="#start" data-plan="Website">Start with a free demo</a>
+  </div>
+  <div class="card price best">
+   <span class="flag">Never miss a call</span>
+   <h3>Website + AI receptionist</h3>
+   <div class="amt"><b>$1,497</b><s>$2,997</s></div><div class="sub">one-time setup</div>
+   <ul><li>Everything in Website</li><li>AI answers your calls 24/7, even mid-job</li><li>Texts back missed calls in seconds</li><li>Takes the address, the job and a callback number for you</li></ul>
+   <a class="btn pop" href="#start" data-plan="Website + AI">Start with a free demo</a>
+  </div>
+ </div>
+</section>
+
+<section id="start" class="rv">
+ <div class="formcard grid g2" style="margin-top:0;align-items:start">
   <div>
-   <div class="mono">Free AI audit</div>
-   <h2 style="margin-top:12px">Find out what your business is losing.</h2>
-   <p class="lead" style="margin-top:16px">A 30-minute call. Put your card away, this is about understanding your business.</p>
-   <ul class="chk"><li>How your leads and calls come in today</li><li>Where they get lost, and what that costs</li><li>The software and process you already use</li><li>What we’d fix first, with a ballpark price before we hang up</li></ul>
+   <div class="mono pop">Free demo site</div>
+   <h2 style="margin-top:12px">See your website before you spend a dollar.</h2>
+   <p class="lead" style="margin-top:16px">Tell us your shop. We build a demo from your Google page and text you the link.</p>
+   <p class="fine" style="margin-top:20px">Rather DM? Message <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
   </div>
-  <div class="card">
-   <h3>Request your audit</h3>
-   <form id="f" novalidate>
-    <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
-    <input name="biz" placeholder="Business name" autocomplete="organization" required aria-label="Business name">
-    <input name="phone" type="tel" placeholder="Best phone number" autocomplete="tel" required aria-label="Best phone number">
-    <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
-    <textarea name="msg" rows="3" placeholder="What’s your biggest headache right now? (optional)" aria-label="Biggest headache"></textarea>
-    <button class="btn" type="submit">Book my free audit</button>
-    <p class="fine" id="fs" role="status" style="margin:0">We reply the same day.</p>
-   </form>
-  </div>
+  <form id="f" novalidate>
+   <div class="lbl">What kind of shop?</div>
+   <div class="chips">
+    <label><input type="radio" name="type" value="Locksmith" checked><span>Locksmith</span></label>
+    <label><input type="radio" name="type" value="Phone repair"><span>Phone repair</span></label>
+    <label><input type="radio" name="type" value="Other"><span>Other</span></label>
+   </div>
+   <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
+   <input name="biz" placeholder="Shop name" autocomplete="organization" required aria-label="Shop name">
+   <input name="phone" type="tel" placeholder="Best phone number" autocomplete="tel" required aria-label="Best phone number">
+   <input name="link" placeholder="Google Maps link or city (optional)" aria-label="Google Maps link or city">
+   <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+   <input type="hidden" name="plan" value="">
+   <button class="btn pop" type="submit">Build my free demo</button>
+   <p class="fine" id="fs" role="status" style="margin:0">No payment. We reply the same day.</p>
+  </form>
  </div>
 </section>
 
-<section>
+<section class="rv">
  <h2>Questions</h2>
  <div style="margin-top:20px">
-  <details><summary>Is the audit really free?</summary><p>Yes. It’s 30 minutes of us learning your business. You’ll get real findings whether or not you work with us.</p></details>
-  <details><summary>Do I need to be technical?</summary><p>No. We set everything up and handle the tools. You tell us how your business works and we do the rest.</p></details>
-  <details><summary>Will it sound like a robot to my customers?</summary><p>We tune the voice and wording to your business, and test it with you before it goes live. You decide what it can and can’t say.</p></details>
-  <details><summary>What if a customer needs a real person?</summary><p>The AI can hand off to you or your team, take a message, or book a callback. It handles the routine so your people handle the rest.</p></details>
-  <details><summary>What does it cost?</summary><p>It depends on what you need, so we quote after the audit. You’ll get one clear price, and a ballpark before the first call ends.</p></details>
-  <details><summary>What kinds of businesses do you work with?</summary><p>Local, appointment- and call-based businesses where a missed call or slow reply costs real money.</p></details>
+  <details><summary>Is the demo really free?</summary><p>Yes. We build it from your Google page and send you the link. If you don’t want it, you don’t pay anything.</p></details>
+  <details><summary>I already have Facebook or Instagram. Why a website?</summary><p>Keep them. But when someone searches Google for a locksmith or phone repair, a website with your prices and a call button is what makes them pick you. Your socials can link to it too.</p></details>
+  <details><summary>How fast can it be live?</summary><p>The demo usually comes within a day. After you say yes, most sites go live in about a week.</p></details>
+  <details><summary>Will it get me to the top of Google?</summary><p>We set it up the way Google likes and connect it to your Google listing. Rankings take time and nobody honest can promise #1, but having a real site gives you a much better shot than not having one.</p></details>
+  <details><summary>What’s the AI receptionist?</summary><p>An AI voice that picks up when you can’t, like when you’re under a dashboard or mid-repair. It answers questions, takes the job details and texts you. You decide what it says.</p></details>
+  <details><summary>What does the monthly plan cover?</summary><p>Hosting, keeping the site running, and changes you text us. We give you the exact amount before you start, with no surprises.</p></details>
  </div>
 </section>
 
-<section class="final">
- <h2>Every day you wait, the calls keep going to voicemail.</h2>
- <p class="lead" style="margin-inline:auto">Get your free audit and see exactly what it’s costing you.</p>
- <div class="cta-row" style="justify-content:center"><a class="btn" href="#audit">Get my free AI audit</a></div>
- <p class="fine">Prefer to message? DM <a href="" id="ig" style="color:var(--acc2)"></a> on Instagram.</p>
+<section class="final rv">
+ <h2>Your competitors’ sites are getting your calls tonight.</h2>
+ <p class="lead" style="margin-inline:auto">Get your free demo and see what yours would look like.</p>
+ <div class="cta-row" style="justify-content:center"><a class="btn pop" href="#start">See my free demo site</a></div>
+ <p class="fine">Or DM <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
 </section>
 
 <footer><span>© <span id="yr"></span> Reekon Systems · <span id="city"></span></span><span><a href="" id="em" style="text-decoration:none"></a></span></footer>
 </div>
-<div class="sticky"><a class="btn" href="#audit">Get my free AI audit</a></div>
+<div class="sticky"><a class="btn pop" href="#start">Get my free demo site</a></div>
 <script>
 const S=window.SITE,$=id=>document.getElementById(id);
 $("yr").textContent=new Date().getFullYear();$("city").textContent=S.city;
-$("ig").href=S.instagram;$("ig").textContent=S.handle;$("em").href="mailto:"+S.email;$("em").textContent=S.email;
-if(S.video)$("v").src=S.video;else $("v").parentElement.style.display="none";
+document.querySelectorAll(".ig").forEach(a=>{a.href=S.instagram;a.textContent=S.handle});
+$("em").href="mailto:"+S.email;$("em").textContent=S.email;
+const digits=String(S.phone||"").replace(/\D/g,"");
+if(digits.length>=10)document.querySelectorAll(".txt").forEach(a=>{a.hidden=false;a.href="sms:+1"+digits.slice(-10);a.textContent="Text me";});
+
+/* sample site switcher (made-up shops) */
+const KEY='<circle cx="22" cy="32" r="10"/><path d="M32 32h24M48 32v8M54 32v6"/>';
+const PH='<rect x="20" y="8" width="24" height="48" rx="5"/><path d="M28 50h8M26 16l12 14M38 18l-6 8"/>';
+const M={
+ lock:{name:"Keystone Lock &amp; Key",ic:KEY,h:"Locked out? We’re there in 30 min.",p:"24/7 lockouts, car keys and rekeys across Inglewood &amp; South LA.",sk:"#1d3557",hero:"linear-gradient(135deg,#1d3557,#457b9d)",badge:"★ 4.8 · Google reviews",call:"Tap to call · open 24/7",list:[["Home lockout","from $85"],["Car key replacement","from $149"],["Rekey locks","from $25/lock"]]},
+ phone:{name:"Fix-It Phone Lab",ic:PH,h:"Cracked screen? Fixed in 45 min.",p:"iPhone &amp; Samsung screens, batteries and charging ports. Walk-ins welcome.",sk:"#2b2d42",hero:"linear-gradient(135deg,#2b2d42,#5b8cff)",badge:"★ 4.9 · Google reviews",call:"Tap to call · walk-ins till 8 PM",list:[["Screen repair","from $79"],["Battery swap","from $59"],["Charging port","from $49"]]}
+};
+function show(k){const m=M[k],s=$("scr");s.style.setProperty("--sk",m.sk);s.style.setProperty("--shero",m.hero);
+ $("m-name").innerHTML=m.name;$("m-ic").innerHTML=m.ic;$("m-h").textContent=m.h;$("m-p").innerHTML=m.p;$("m-badge").textContent=m.badge;$("m-call").textContent=m.call;
+ $("m-list").innerHTML=m.list.map(([a,b])=>`<li>${a}<b>${b}</b></li>`).join("");
+ document.querySelectorAll(".switch button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));}
+document.querySelectorAll(".switch button").forEach(b=>b.addEventListener("click",()=>{show(b.dataset.k);auto=false}));
+let auto=true;show("lock");
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches)setInterval(()=>{if(auto)show(document.querySelector('.switch [aria-pressed="true"]').dataset.k==="lock"?"phone":"lock")},4500);
+
+/* reveal on scroll */
+const io="IntersectionObserver" in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12}):null;
+document.querySelectorAll(".rv").forEach(el=>io?io.observe(el):el.classList.add("in"));
+
+/* tracking + form */
 let SRC="";try{SRC=(new URLSearchParams(location.search).get("src")||sessionStorage.getItem("src")||"").slice(0,40);if(SRC)sessionStorage.setItem("src",SRC)}catch(_){}
 const ping=k=>{if(!S.portal)return;try{fetch(S.portal+"/site/hit",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({k,src:SRC,ref:document.referrer||""}),keepalive:true}).catch(()=>{})}catch(_){}};
 ping("view");
-document.querySelectorAll('a[href="#audit"]').forEach(a=>a.addEventListener("click",()=>ping("cta")));
+document.querySelectorAll('a[href="#start"]').forEach(a=>a.addEventListener("click",()=>{ping("cta");if(a.dataset.plan)document.querySelector('[name="plan"]').value=a.dataset.plan}));
 $("f").addEventListener("submit",async e=>{e.preventDefault();
  const f=e.target,d=Object.fromEntries(new FormData(f)),st=$("fs");
- if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your name, business and phone.";st.style.color="var(--bad)";return}
- st.style.color="";
- const body=`Name: ${d.name}\nBusiness: ${d.biz}\nPhone: ${d.phone}\n\n${d.msg||""}`;
- if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({...d,src:SRC})});const j=await r.json().catch(()=>({}));if(r.ok){f.reset();st.textContent="Got it. We’ll reach out today to set up your audit.";return}
+ if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your name, shop and phone.";st.style.color="var(--bad)";return}
+ st.style.color="";st.textContent="Sending…";
+ const msg=["Free demo request","Type: "+d.type,d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
+ const payload={name:d.name,biz:d.biz,phone:d.phone,msg,hp:d.hp,src:SRC};
+ const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the link.";};
+ if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)});const j=await r.json().catch(()=>({}));if(r.ok){done();return}
   if(j&&j.error&&r.status<500){st.textContent=j.error;st.style.color="var(--bad)";return}}catch(_){}}
- if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(d)});if(r.ok){f.reset();st.textContent="Got it. We’ll reach out today to set up your audit.";return}}catch(_){}
-  st.textContent="Couldn’t send. Please email "+S.email;return}
- location.href="mailto:"+S.email+"?subject="+encodeURIComponent("Free AI audit request: "+d.biz)+"&body="+encodeURIComponent(body);
+ if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(payload)});if(r.ok){done();return}}catch(_){}}
+ location.href="mailto:"+S.email+"?subject="+encodeURIComponent("Free demo request: "+d.biz)+"&body="+encodeURIComponent(`Name: ${d.name}\nShop: ${d.biz}\nPhone: ${d.phone}\n\n${msg}`);
  st.textContent="Your email app should open. If not, email "+S.email+".";
 });
 </script>
