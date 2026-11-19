@@ -487,16 +487,90 @@
     if (l.status === 'callback' && l.callback_at) return 'Callback ' + new Date(l.callback_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     return STATUS[l.status] || l.status;
   };
-  // map library, loaded the first time the Leads page opens
-  let leafletP = null;
-  function loadLeaflet() {
-    if (window.L) return Promise.resolve(window.L);
-    if (leafletP) return leafletP;
-    leafletP = new Promise((res, rej) => {
-      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/vendor/leaflet/leaflet.css'; document.head.append(css);
-      const js = document.createElement('script'); js.src = '/vendor/leaflet/leaflet.js'; js.onload = () => res(window.L); js.onerror = () => { leafletP = null; rej(new Error('Map failed to load')); }; document.head.append(js);
+  // ---- neon grid map: our own 3D map, no map company, no keys ----
+  const NG_TILT = 58;
+  const NG_PLACES = [['Inglewood', 33.9617, -118.3531], ['Hawthorne', 33.9164, -118.3526], ['Gardena', 33.8883, -118.309], ['Compton', 33.8958, -118.2201], ['Torrance', 33.8358, -118.3406],
+    ['Culver City', 34.0211, -118.3965], ['Long Beach', 33.7701, -118.1937], ['Downtown LA', 34.0407, -118.2468], ['Santa Monica', 34.0195, -118.4912], ['South LA', 33.9897, -118.2913],
+    ['Carson', 33.8317, -118.2817], ['El Segundo', 33.9192, -118.4165], ['Lawndale', 33.8872, -118.3526], ['Hollywood', 34.0928, -118.3287], ['LAX', 33.9416, -118.4085], ['Redondo Beach', 33.8492, -118.3884],
+    ['South Gate', 33.9547, -118.212], ['Huntington Park', 33.9817, -118.2251], ['Westchester', 33.9597, -118.4018], ['Baldwin Hills', 34.0086, -118.3509], ['Pasadena', 34.1478, -118.1445], ['Glendale', 34.1425, -118.2551], ['Burbank', 34.1808, -118.309]];
+  function neonMap(root, { onPick } = {}) {
+    const stage = h('div', { class: 'ng-stage' }), plane = h('div', { class: 'ng-plane' });
+    const card = h('div', { class: 'ng-card', hidden: true });
+    const btn = (label, aria, fn) => h('button', { type: 'button', class: 'ng-btn', 'aria-label': aria, onclick: fn }, label);
+    stage.append(plane);
+    root.replaceChildren(stage, h('div', { class: 'ng-fade' }), h('div', { class: 'ng-ctrl' }, btn('+', 'Zoom in', () => zoomBy(1.35)), btn('−', 'Zoom out', () => zoomBy(1 / 1.35)), btn('⟲', 'Show all pins', () => fit(true))), card);
+    root.classList.add('ng');
+    let W = 0, H = 0, PW = 0, PH = 0, pts = [], pos = new Map(), els = new Map(), z = 1, tx = 0, ty = 0, sel = null;
+    const apply = (anim) => {
+      plane.classList.toggle('anim', !!anim);
+      plane.style.transform = `rotateX(${NG_TILT}deg) scale(${z}) translate(${tx}px, ${ty}px)`;
+      plane.style.setProperty('--iz', String(1 / z));
+    };
+    function layout() {
+      W = root.clientWidth || 600; H = root.clientHeight || 400; PW = W * 2.4; PH = H * 3;
+      Object.assign(plane.style, { width: PW + 'px', height: PH + 'px', left: (W - PW) / 2 + 'px', top: (H - PH) / 2 + 'px' });
+      plane.replaceChildren(); pos.clear(); els.clear();
+      const real = pts.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+      const base = real.length ? real : [{ lat: 33.95, lng: -118.33 }];
+      let la0 = Math.min(...base.map((p) => p.lat)), la1 = Math.max(...base.map((p) => p.lat)), lo0 = Math.min(...base.map((p) => p.lng)), lo1 = Math.max(...base.map((p) => p.lng));
+      const minSpan = 0.06; if (la1 - la0 < minSpan) { const m = (la0 + la1) / 2; la0 = m - minSpan / 2; la1 = m + minSpan / 2; } if (lo1 - lo0 < minSpan) { const m = (lo0 + lo1) / 2; lo0 = m - minSpan / 2; lo1 = m + minSpan / 2; }
+      const latC = (la0 + la1) / 2, lngC = (lo0 + lo1) / 2, k = Math.cos(latC * Math.PI / 180);
+      const boxW = W * 0.68, boxH = H * 0.95;   // more room top-to-bottom: the tilt squashes it
+      const sc = Math.min(boxW / ((lo1 - lo0) * k), boxH / (la1 - la0));
+      const proj = (lat, lng) => [PW / 2 + (lng - lngC) * k * sc, PH / 2 + H * 0.1 - (lat - latC) * sc];
+      const padLa = (la1 - la0) * 0.6, padLo = (lo1 - lo0) * 0.6;
+      for (const [name, lat, lng] of NG_PLACES) {
+        if (lat < la0 - padLa || lat > la1 + padLa || lng < lo0 - padLo || lng > lo1 + padLo) continue;
+        const [x, y] = proj(lat, lng);
+        plane.append(h('div', { class: 'ng-city', style: `left:${x}px;top:${y}px` }, h('span', null, name)));
+      }
+      for (const p of real) {
+        const [x, y] = proj(p.lat, p.lng); pos.set(p.id, [x, y]);
+        const ring = h('i', { class: 'ng-ring', style: `left:${x}px;top:${y}px` });
+        const pin = h('div', { role: 'button', tabindex: '0', class: 'ng-pin', style: `left:${x}px;top:${y}px`, 'aria-label': p.n + '. ' + p.label, title: p.label, 'data-id': p.id, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(p.id, true); } } },
+          h('span', { class: 'ng-n' }, String(p.n)), h('i', { class: 'ng-beam' }));
+        pin.addEventListener('click', (e) => { if (moved) { e.preventDefault(); return; } pick(p.id, true); });
+        plane.append(ring, pin); els.set(p.id, [pin, ring]);
+      }
+      if (sel != null) highlight(sel);
+    }
+    function fit(anim) { z = 1; tx = 0; ty = 0; apply(anim); }
+    function zoomBy(f) { z = Math.min(5, Math.max(0.5, z * f)); apply(true); }
+    function highlight(id) { sel = id; els.forEach(([pin, ring], k) => { pin.classList.toggle('on', k === id); ring.classList.toggle('on', k === id); }); }
+    function focus(id) {
+      const p = pos.get(id); if (!p) return false;
+      tx = PW / 2 - p[0]; ty = PH / 2 - p[1]; z = Math.max(z, 1.7); apply(true); highlight(id); return true;
+    }
+    function pick(id, fromMap) { highlight(id); focus(id); showCard(id); if (onPick) onPick(id, fromMap); }
+    function showCard(id) {
+      const p = pts.find((x) => x.id === id); if (!p || !p.card) { card.hidden = true; return; }
+      card.replaceChildren(h('button', { type: 'button', class: 'ng-x', 'aria-label': 'Close', onclick: () => { card.hidden = true; } }, '×'), p.card());
+      card.hidden = false;
+    }
+    // drag to move, wheel / pinch to zoom
+    const ptrs = new Map(); let moved = false, start = null, pinch = null;
+    stage.addEventListener('pointerdown', (e) => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved = false; start = { x: e.clientX, y: e.clientY, tx, ty };
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z }; } });
+    stage.addEventListener('pointermove', (e) => {
+      if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()]; z = Math.min(5, Math.max(0.5, pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d)); moved = true; apply(false); return; }
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!moved && Math.hypot(dx, dy) < 6) return;
+      if (!moved) { moved = true; try { stage.setPointerCapture(e.pointerId); } catch { /* ok */ } }
+      tx = start.tx + dx / z; ty = start.ty + dy / (z * Math.cos(NG_TILT * Math.PI / 180)) * 0.85; apply(false);
     });
-    return leafletP;
+    const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) setTimeout(() => { moved = false; }, 0); };
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    stage.addEventListener('wheel', (e) => { e.preventDefault(); z = Math.min(5, Math.max(0.5, z * Math.exp(-e.deltaY * 0.0015))); apply(false); }, { passive: false });
+    let rt; const ro = 'ResizeObserver' in window ? new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (root.isConnected && (root.clientWidth !== W || root.clientHeight !== H)) layout(); }, 120); }) : null;
+    if (ro) ro.observe(root);
+    apply(false);
+    return {
+      set(list) { pts = list; layout(); fit(false); },
+      count: () => pos.size,
+      select(id) { const ok = focus(id); if (ok) showCard(id); return ok; },
+      highlight,
+    };
   }
   const hasPin = (l) => l.lat != null && l.lng != null && !(+l.lat === 0 && +l.lng === 0);
   async function viewLeads() {
@@ -509,19 +583,16 @@
     const search = h('input', { type: 'search', class: 'ln-search', placeholder: 'Search this list', value: q });
     let st; search.oninput = () => { clearTimeout(st); st = setTimeout(() => { LV.q = search.value.trim(); viewLeads().then(() => { const s2 = document.querySelector('.ln-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }); }, 350); };
 
-    const mapEl = h('div', { class: 'mp-map', role: 'region', 'aria-label': 'Map of these leads' }, h('div', { class: 'mp-map-msg' }, 'Loading map…'));
-    const markers = new Map(); let map = null, selId = null;
+    const mapEl = h('div', { class: 'mp-map', role: 'region', 'aria-label': 'Map of these leads' });
+    let ngm = null;
     const cards = new Map();
     const tel = (p) => 'tel:' + String(p).replace(/[^\d+]/g, '');
     const note = (l) => l.call_notes || l.next_action || '';
-    function select(id, fromMap) {
-      selId = id;
-      cards.forEach((c, k) => c.classList.toggle('on', k === id));
-      markers.forEach((m, k) => { const el = m.getElement && m.getElement(); if (el) el.classList.toggle('on', k === id); if (k === id) m.setZIndexOffset(1000); else m.setZIndexOffset(0); });
+    const markCard = (id) => cards.forEach((c, k) => c.classList.toggle('on', k === id));
+    function select(id) {
+      markCard(id);
       const l = leads.find((x) => x.id === id);
-      const m = markers.get(id);
-      if (fromMap) { const c = cards.get(id); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-      else if (m && map) { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 14), { duration: 0.6 }); m.openPopup(); }
+      if (ngm && ngm.select(id)) { if (window.matchMedia('(max-width:900px)').matches && mapEl.getBoundingClientRect().top < 0) mapEl.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
       else if (l && !hasPin(l)) toast('No map pin for ' + l.business + ' yet.');
     }
     const cardFor = (l, i) => {
@@ -563,45 +634,24 @@
     ]);
 
     // ---- map ----
-    let L;
-    try { L = await loadLeaflet(); } catch (e) { mapEl.replaceChildren(h('div', { class: 'mp-map-msg' }, 'Map couldn’t load. The list still works.')); return; }
     if (!mapEl.isConnected) return;
-    mapEl.replaceChildren();
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-    map = L.map(mapEl, { zoomControl: true, attributionControl: true, scrollWheelZoom: true }).setView([33.97, -118.33], 11);
-    // free OpenStreetMap tiles (no key); dark theme darkens them with a CSS filter
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: light ? '' : 'mp-dark-tiles',
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
-    const addPin = (l) => {
-      if (!hasPin(l) || markers.has(l.id)) return;
-      const i = leads.indexOf(l);
-      const icon2 = L.divIcon({ className: 'mp-pin', html: '<span>' + (i + 1) + '</span>', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] });
-      const m = L.marker([+l.lat, +l.lng], { icon: icon2, title: l.business, keyboard: true }).addTo(map);
-      const pop = document.createElement('div'); pop.className = 'mp-pop';
-      const nb = document.createElement('b'); nb.textContent = l.business; pop.append(nb);
-      const meta = [l.rating ? '★ ' + l.rating : '', l.reviews != null ? l.reviews + ' reviews' : ''].filter(Boolean).join(' · ');
-      if (meta) { const s = document.createElement('small'); s.textContent = meta; pop.append(s); }
-      const row = document.createElement('div'); row.className = 'mp-pop-acts';
-      if (l.phone && !social) { const a = document.createElement('a'); a.href = tel(l.phone); a.className = 'btn small primary'; a.textContent = 'Call'; row.append(a); }
-      const o = document.createElement('a'); o.href = '#/lead/' + l.id; o.className = 'btn small'; o.textContent = 'Open'; row.append(o);
-      pop.append(row);
-      m.bindPopup(pop, { closeButton: false, offset: [0, 0] });
-      m.on('click', () => select(l.id, true));
-      markers.set(l.id, m);
-    };
-    const fit = () => { const pts = [...markers.values()].map((m) => m.getLatLng()); if (pts.length === 1) map.setView(pts[0], 14); else if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 14 }); };
-    leads.forEach(addPin); fit();
-    setTimeout(() => map && map.invalidateSize(), 60);
+    const popCard = (l) => () => h('div', { class: 'ng-pop' }, h('b', null, l.business),
+      h('small', null, [l.rating ? '★ ' + l.rating : '', l.reviews != null ? l.reviews + ' reviews' : '', l.city].filter(Boolean).join(' · ')),
+      h('div', { class: 'ng-pop-acts' }, l.phone && !social ? h('a', { class: 'btn small primary', href: tel(l.phone) }, icon('phone'), 'Call') : null, h('a', { class: 'btn small', href: '#/lead/' + l.id }, 'Open')));
+    const points = () => leads.filter(hasPin).map((l) => ({ id: l.id, lat: +l.lat, lng: +l.lng, n: leads.indexOf(l) + 1, label: l.business, card: popCard(l) }));
+    ngm = neonMap(mapEl, { onPick: (id, fromMap) => { markCard(id); if (fromMap) { const c = cards.get(id); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } } });
+    ngm.set(points());
+    const empty = () => { const old = mapEl.querySelector('.mp-map-msg'); if (old) old.remove(); if (!ngm.count()) mapEl.append(h('div', { class: 'mp-map-msg over' }, leads.length ? 'Pins show up as your leads get located.' : 'Pins show up here when you have leads.')); };
+    empty();
     // leads without a pin yet: look them up (25 at a time) and drop them on the map
     const missing = leads.filter((l) => l.lat == null || l.lng == null).map((l) => l.id).slice(0, 25);
     if (missing.length) {
       try {
         const r = await api('POST', '/leads/geo', { ids: missing });
-        (r.pins || []).forEach((p) => { const l = leads.find((x) => x.id === p.id); if (l) { l.lat = p.lat; l.lng = p.lng; addPin(l); } });
-        if ((r.pins || []).length && mapEl.isConnected) fit();
+        (r.pins || []).forEach((p) => { const l = leads.find((x) => x.id === p.id); if (l) { l.lat = p.lat; l.lng = p.lng; } });
+        if ((r.pins || []).length && mapEl.isConnected) { ngm.set(points()); empty(); }
       } catch { /* map just shows what it has */ }
     }
-    if (!markers.size && mapEl.isConnected) mapEl.append(h('div', { class: 'mp-map-msg over' }, leads.length ? 'No map pins for these leads yet.' : 'Pins show up here when you have leads.'));
   }
   async function viewLeadsAll() {
     const isAdmin = S.me.role === 'admin';

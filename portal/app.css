@@ -1805,3 +1805,42 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
   .ln-lanes .ln-chips::-webkit-scrollbar{display:none}
   .ln-chip{flex:none;padding:7px 12px}
 }
+
+/* neon grid map (our own, no map provider) */
+.mp-map.ng{background:radial-gradient(120% 70% at 50% 0%,#1a1046 0%,#0a0b1e 45%,#04050b 100%);border-color:rgba(91,140,255,.35);box-shadow:inset 0 0 60px rgba(91,140,255,.12)}
+.ng-stage{position:absolute;inset:0;perspective:900px;perspective-origin:50% 22%;overflow:hidden;touch-action:none;cursor:grab}
+.ng-stage:active{cursor:grabbing}
+.ng-plane{position:absolute;transform-origin:50% 50%;transform-style:preserve-3d;will-change:transform;
+  background-image:
+    linear-gradient(rgba(91,140,255,.55) 2px,transparent 2px),linear-gradient(90deg,rgba(91,140,255,.55) 2px,transparent 2px),
+    linear-gradient(rgba(91,140,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(91,140,255,.18) 1px,transparent 1px);
+  background-size:240px 240px,240px 240px,48px 48px,48px 48px;background-position:center center}
+.ng-plane::before{content:"";position:absolute;inset:0;background:radial-gradient(closest-side,rgba(91,140,255,.16),transparent 70%);pointer-events:none}
+.ng-plane.anim{transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+.ng-fade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(#04050b 0%,rgba(4,5,11,.7) 9%,transparent 26%),linear-gradient(0deg,rgba(4,5,11,.55),transparent 18%)}
+.ng-fade::after{content:"";position:absolute;left:0;right:0;top:17%;height:2px;background:linear-gradient(90deg,transparent,rgba(215,255,63,.55),rgba(91,140,255,.7),rgba(215,255,63,.55),transparent);filter:blur(1px);opacity:.7}
+.ng-city{position:absolute;width:0;height:0;pointer-events:none}
+.ng-city span{position:absolute;left:0;bottom:0;transform-origin:50% 100%;transform:translate(-50%,0) rotateX(-58deg) scale(var(--iz,1));white-space:nowrap;
+  font:700 22px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:rgba(169,194,255,.42);text-shadow:0 0 12px rgba(91,140,255,.55)}
+.ng-ring{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:2px solid rgba(91,140,255,.8);box-shadow:0 0 16px rgba(91,140,255,.8),inset 0 0 12px rgba(91,140,255,.5);pointer-events:none;animation:ngpulse 2.4s ease-out infinite}
+.ng-ring.on{border-color:var(--pop);box-shadow:0 0 22px rgba(215,255,63,.9),inset 0 0 14px rgba(215,255,63,.6)}
+@keyframes ngpulse{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.9);opacity:0}}
+.ng-pin{position:absolute;width:0;height:0;padding:0;border:0;background:none;cursor:pointer;transform-style:preserve-3d;outline:none}
+.ng-pin .ng-n,.ng-pin .ng-beam{position:absolute;left:0;bottom:0}
+.ng-pin .ng-beam{width:3px;height:64px;margin-left:-1.5px;transform-origin:50% 100%;transform:rotateX(-90deg) scale(var(--iz,1));background:linear-gradient(0deg,rgba(91,140,255,.95),rgba(91,140,255,0));box-shadow:0 0 10px rgba(91,140,255,.9)}
+.ng-pin .ng-n{transform-style:preserve-3d;display:grid;place-items:center;width:44px;height:44px;margin-left:-22px;border-radius:50%;transform-origin:50% 100%;transform:translateZ(calc(64px * var(--iz,1))) rotateX(-58deg) scale(var(--iz,1));
+  background:radial-gradient(circle at 35% 30%,#8fb0ff,#3d6cf0 60%,#2245b8);color:#fff;font:800 18px var(--font);border:2px solid rgba(255,255,255,.85);box-shadow:0 0 18px rgba(91,140,255,.95),0 0 40px rgba(91,140,255,.5);transition:transform .2s}
+.ng-pin.on .ng-n{background:radial-gradient(circle at 35% 30%,#f3ffb0,#d7ff3f 60%,#9ccc00);color:#141a00;box-shadow:0 0 22px rgba(215,255,63,1),0 0 50px rgba(215,255,63,.55);transform:translateZ(calc(78px * var(--iz,1))) rotateX(-58deg) scale(calc(var(--iz,1) * 1.25))}
+.ng-pin.on .ng-beam{background:linear-gradient(0deg,rgba(215,255,63,1),rgba(215,255,63,0));box-shadow:0 0 12px rgba(215,255,63,.9);height:78px}
+.ng-pin:focus-visible{outline:none}.ng-pin:focus-visible .ng-n{outline:3px solid #fff;outline-offset:2px}
+.ng-ctrl{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.ng-btn{width:36px;height:36px;border-radius:10px;border:1px solid rgba(91,140,255,.5);background:rgba(6,8,20,.75);color:#dfe7ff;font:700 18px var(--font);cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 0 12px rgba(91,140,255,.25)}
+.ng-btn:hover{border-color:var(--pop);color:var(--pop)}
+.ng-card{position:absolute;left:12px;right:12px;bottom:12px;z-index:4;max-width:340px;padding:12px 14px;border-radius:14px;background:rgba(6,8,20,.88);border:1px solid rgba(215,255,63,.55);box-shadow:0 0 24px rgba(215,255,63,.18);backdrop-filter:blur(8px);color:#f4f6fb}
+.ng-x{position:absolute;top:6px;right:8px;background:none;border:0;color:#a2a8b8;font-size:20px;cursor:pointer;line-height:1}
+.ng-pop{display:flex;flex-direction:column;gap:3px;padding-right:18px}
+.ng-pop b{font-size:15px}.ng-pop small{color:#a2a8b8;font-size:12.5px}
+.ng-pop-acts{display:flex;gap:6px;margin-top:8px}
+.ng-pop-acts .btn svg{width:14px;height:14px}
+.mp-map.ng .mp-map-msg{color:#a9c2ff;text-shadow:0 0 10px rgba(91,140,255,.6);z-index:2}
+@media(prefers-reduced-motion:reduce){.ng-ring{animation:none}.ng-plane.anim{transition:none}}
