@@ -1906,3 +1906,6 @@ html.crm2 #toast{left:calc(50% + 128px)}
   html.crm2 #toast{left:50%}
 }
 @media (prefers-reduced-motion:reduce){.cm-side,.cm-scrim{transition:none}}
+
+.cm-sec{display:flex;flex-direction:column;gap:4px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.cm-label{font:500 10.5px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);padding:0 12px 4px}

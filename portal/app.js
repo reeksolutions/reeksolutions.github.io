@@ -162,7 +162,7 @@
     if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
-  const home = () => (S.me.role === 'dev' ? 'studio' : S.me.role === 'admin' ? 'finder' : 'home');
+  const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
   const TAB_ICON = { sell: 'phone', create: 'spark', crew: 'users', calendar: 'calendar', rebrief: 'chart', cards: 'deals', settings: 'account', content: 'spark', tracker: 'flag', recordings: 'phone', emailbot: 'mail', earnings: 'deals', team: 'chart', callbacks: 'callbacks', upload: 'batches', integrations: 'bolt', studio: 'spark', finder: 'search' };
   // phone categories (admin): each bottom tab opens a page of big buttons for the tabs inside it
   const CATS = {
@@ -299,16 +299,18 @@
     } }, icon('leads'), h('span', null, 'Leads'), h('i', { class: 'cm-caret' }, icon('chev')));
     const closeMenu = () => document.documentElement.classList.remove('cm-open');
     const menu = h('aside', { class: 'cm-side', 'aria-label': 'Menu' },
-      h('div', { class: 'cm-brand' }, h('a', { href: '#/finder', class: 'cm-logo', onclick: closeMenu }, icon('logo'), h('span', null, 'Reekon')),
+      h('div', { class: 'cm-brand' }, h('a', { href: '#/home', class: 'cm-logo', onclick: closeMenu }, icon('logo'), h('span', null, 'Reekon')),
         h('button', { type: 'button', class: 'cm-x', 'aria-label': 'Close menu', onclick: closeMenu }, icon('close'))),
       h('nav', { class: 'cm-nav', onclick: (e) => { if (e.target.closest('a')) closeMenu(); } },
-        h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder')),
-        leadsBtn, subList),
+        h('a', { href: '#/home', class: 'cm-link' + (page === 'home' ? ' on' : ''), 'aria-current': page === 'home' ? 'page' : null }, icon('home'), h('span', null, 'Home')),
+        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList),
+        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
+          h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder')))),
       h('a', { href: '#/account', class: 'cm-me' + (page === 'account' ? ' on' : ''), onclick: closeMenu }, h('span', { class: 'cm-av' }, initials(S.me.name)),
         h('span', { class: 'cm-who' }, h('b', null, S.me.name), h('small', null, 'Account'))));
     const bar = h('header', { class: 'cm-bar' },
       h('button', { type: 'button', class: 'cm-burger', 'aria-label': 'Open menu', onclick: () => document.documentElement.classList.add('cm-open') }, icon('menu')),
-      h('a', { href: '#/finder', class: 'cm-logo' }, icon('logo'), h('span', null, 'Reekon')));
+      h('a', { href: '#/home', class: 'cm-logo' }, icon('logo'), h('span', null, 'Reekon')));
     const main = h('main', { id: 'view', class: 'cm-main enter' }, content);
     closeMenu();
     $app.replaceChildren(menu, h('div', { class: 'cm-scrim', onclick: closeMenu }), h('div', { class: 'cm-frame' }, bar, main));
@@ -384,11 +386,13 @@
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
     if (S.me.role === 'admin') {
       try {
+        if (route === 'home') return crmShell('home', [h('div', { class: 'cm-head' }, h('span', { class: 'eyebrow' }, 'Reekon'), h('h1', null, 'Home')),
+          h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon('home')), h('b', null, 'Nothing here yet'), h('p', null, 'Your Home dashboard comes next.'))]);
         if (route === 'finder') return await viewFinder();
         if (route === 'leads') return viewLeadSection(arg || 'email');
         if (route === 'account') return viewAccount();
       } catch (e) { return crmShell(route, h('div', { class: 'empty' }, h('b', null, 'Could not load this page'), e.message)); }
-      location.hash = '#/finder'; return;
+      location.hash = '#/home'; return;
     }
     const extra = { admin: ['overview', 'allleads', 'lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
