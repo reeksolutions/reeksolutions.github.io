@@ -174,6 +174,8 @@ async function ensureSchema(env) {
   ]);
   try { await env.DB.prepare('ALTER TABLE finder_log ADD COLUMN provider TEXT').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+  try { await env.DB.prepare('ALTER TABLE cal_events ADD COLUMN done INTEGER NOT NULL DEFAULT 0').run(); }
+  catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
   for (const [name, type] of Object.entries(TRACKER_COLUMNS)) {
     if (!tcols.has(name)) {
@@ -2500,7 +2502,7 @@ async function api(request, env, url) {
   }
 
   /* ---- calendar ---- */
-  const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup', 'posted'];
+  const CAL_KINDS = ['event', 'audit', 'closing', 'demo', 'meeting', 'training', 'call', 'followup', 'posted', 'todo', 'note'];
   if (path === '/google/status' && method === 'GET') {
     need(user, 'admin', 'rep');
     return json({ configured: gConfigured(env), connected: !!(await getSetting(env, 'google_refresh')), email: (await getSetting(env, 'google_email')) || '', redirect_uri: gRedirect(url) });
@@ -2533,7 +2535,7 @@ async function api(request, env, url) {
     need(user, 'admin', 'rep');
     const from = validIso(url.searchParams.get('from')), until = validIso(url.searchParams.get('until'));
     if (!from || !until) bad('Missing date range');
-    const ev = await env.DB.prepare(`SELECT e.id, e.title, e.kind, e.starts_at, e.ends_at, e.notes, e.lead_id, e.link, e.user_id, u.name AS owner_name, l.business AS lead_name
+    const ev = await env.DB.prepare(`SELECT e.id, e.title, e.kind, e.starts_at, e.ends_at, e.notes, e.lead_id, e.link, e.user_id, e.done, u.name AS owner_name, l.business AS lead_name
       FROM cal_events e LEFT JOIN users u ON u.id = e.user_id LEFT JOIN leads l ON l.id = e.lead_id
       WHERE e.starts_at >= ? AND e.starts_at < ? ${user.role === 'rep' ? 'AND e.user_id = ?' : ''} ORDER BY e.starts_at ASC LIMIT 500`).bind(...[from, until].concat(user.role === 'rep' ? [user.id] : [])).all();
     const own = user.role === 'rep' ? 'AND l.assigned_to = ?' : '';
@@ -2570,6 +2572,7 @@ async function api(request, env, url) {
     if (body.starts_at !== undefined) { const v = validIso(body.starts_at); if (!v) bad('Pick a date and time'); sets.push('starts_at = ?'); args.push(v); }
     if (body.ends_at !== undefined) { const v = body.ends_at ? validIso(body.ends_at) : null; if (body.ends_at && !v) bad('That end time is not valid'); sets.push('ends_at = ?'); args.push(v); }
     if (body.notes !== undefined) { sets.push('notes = ?'); args.push(str(body.notes, 1000) || null); }
+    if (body.done !== undefined) { sets.push('done = ?'); args.push(body.done ? 1 : 0); }
     if (body.link !== undefined) { const l = str(body.link, 300); if (l && !/^https?:\/\//i.test(l)) bad('The link must start with https://'); sets.push('link = ?'); args.push(l || null); }
     if (sets.length) await env.DB.prepare(`UPDATE cal_events SET ${sets.join(', ')} WHERE id = ?`).bind(...args, ev.id).run();
     return json({ ok: true });

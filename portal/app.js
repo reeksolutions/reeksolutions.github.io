@@ -1521,10 +1521,10 @@
   }
 
   /* ================= calendar ================= */
-  const CAL_KIND = { audit: 'Audit call', closing: 'Closing call', demo: 'Demo', meeting: 'Meeting', training: 'Training', call: 'Call', followup: 'Follow-up', posted: 'Posted', event: 'Other' };
-  const CAL_MINS = { audit: 30, closing: 45, demo: 30, meeting: 30, training: 60, call: 15, followup: 15, posted: 0, event: 0 };
-  const CAL_GROUP = { audit: 'audits', closing: 'closing', demo: 'demos', meeting: 'meetings', training: 'meetings', call: 'calls', followup: 'calls', callback: 'calls', booked: 'calls', posted: 'posted', event: 'other' };
-  const CAL_FILTERS = [['all', 'All'], ['audits', 'Audits'], ['closing', 'Closing'], ['demos', 'Demos'], ['meetings', 'Meetings'], ['calls', 'Calls'], ['posted', 'Posted'], ['other', 'Other']];
+  const CAL_KIND = { meeting: 'Meeting', call: 'Call', audit: 'Audit call', closing: 'Closing call', demo: 'Demo', followup: 'Follow-up', training: 'Training', todo: 'To-do', note: 'Note', posted: 'Posted', event: 'Other' };
+  const CAL_MINS = { audit: 30, closing: 45, demo: 30, meeting: 30, training: 60, call: 15, followup: 15, posted: 0, event: 0, todo: 0, note: 0 };
+  const CAL_GROUP = { audit: 'audits', closing: 'closing', demo: 'demos', meeting: 'meetings', training: 'meetings', call: 'calls', followup: 'calls', callback: 'calls', booked: 'calls', posted: 'posted', event: 'other', todo: 'todos', note: 'notes' };
+  const CAL_FILTERS = [['all', 'All'], ['meetings', 'Meetings'], ['calls', 'Calls'], ['todos', 'To-dos'], ['notes', 'Notes'], ['audits', 'Audits'], ['closing', 'Closing'], ['demos', 'Demos'], ['other', 'Other']];
   const CAL_LEGEND = [['audit', 'Audit'], ['closing', 'Closing'], ['demo', 'Demo'], ['meeting', 'Meeting'], ['callback', 'Callback'], ['booked', 'Booked'], ['posted', 'Posted']];
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
@@ -1566,7 +1566,7 @@
       const base = ev ? new Date(ev.starts_at) : pre.start ? new Date(pre.start) : new Date(presetDay + 'T09:00');
       const done = await sheet((box, close) => {
         const title = h('input', { type: 'text', maxlength: 120, placeholder: 'Audit call with Torres Pavers', value: ev ? ev.title : pre.title || '' });
-        const kind = h('select', null, Object.entries(CAL_KIND).filter(([v]) => v !== 'posted' || (ev && ev.kind === 'posted')).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'audit') === v ? true : null }, t)));
+        const kind = h('select', null, Object.entries(CAL_KIND).filter(([v]) => v !== 'posted' || (ev && ev.kind === 'posted')).map(([v, t]) => h('option', { value: v, selected: (ev ? ev.kind : presetKind || 'meeting') === v ? true : null }, t)));
         const starts = h('input', { type: 'datetime-local', value: toLocalInput(base) });
         const ends = h('input', { type: 'datetime-local', value: ev && ev.ends_at ? toLocalInput(new Date(ev.ends_at)) : '' });
         const link = h('input', { type: 'url', placeholder: 'https://meet.google.com/…', inputmode: 'url', value: ev && ev.link ? ev.link : pre.link || '' });
@@ -1652,26 +1652,93 @@
         list.length ? list.map(row) : h('p', { class: 'dim cal-free' }, opts && opts.free ? opts.free : 'Nothing scheduled'));
     };
 
-    // ----- top strip: today and what is next -----
-    const todayN = upcoming.filter((it) => dayKey(new Date(it.at)) === dayKey(now)).length;
-    const next = upcoming.find((it) => new Date(it.at) >= now);
-    const strip = h('div', { class: 'cal-strip' },
-      h('div', null, h('span', { class: 'eyebrow' }, 'Today'), h('b', null, todayN ? todayN + (todayN === 1 ? ' thing' : ' things') : 'Clear')),
-      h('div', { class: 'grow' }, h('span', { class: 'eyebrow' }, 'Up next'),
-        next ? h('b', null, next.title, h('small', null, ' · ' + (dayKey(new Date(next.at)) === dayKey(now) ? '' : new Date(next.at).toLocaleDateString([], { weekday: 'short' }) + ' ') + hm(next.at))) : h('b', null, 'Nothing in the next 7 days')));
-
-    // ----- nav + title -----
+    // ----- header -----
     const stepMonth = (n) => { CAL.month = new Date(CAL.month.getFullYear(), CAL.month.getMonth() + n, 1); redraw(); };
     const stepWeek = (n) => { const d = new Date(selDate); d.setDate(d.getDate() + n * 7); CAL.sel = dayKey(d); CAL.month = new Date(d.getFullYear(), d.getMonth(), 1); redraw(); };
     const title = CAL.view === 'month' ? CAL.month.toLocaleDateString([], { month: 'long', year: 'numeric' })
-      : CAL.view === 'week' ? from.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' – ' + new Date(until.getTime() - 864e5).toLocaleDateString([], { month: 'short', day: 'numeric' })
+      : CAL.view === 'week' ? from.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' – ' + new Date(until.getTime() - 864e5).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
       : 'Next 45 days';
     const goToday = () => { CAL.month = new Date(now.getFullYear(), now.getMonth(), 1); CAL.sel = dayKey(now); redraw(); };
-    const head = h('div', { class: 'cal-head' },
-      CAL.view === 'agenda' ? null : h('button', { class: 'cal-nav', 'aria-label': 'Previous', onclick: () => (CAL.view === 'month' ? stepMonth(-1) : stepWeek(-1)) }, '‹'),
-      h('b', null, title),
-      CAL.view === 'agenda' ? null : h('button', { class: 'cal-nav', 'aria-label': 'Next', onclick: () => (CAL.view === 'month' ? stepMonth(1) : stepWeek(1)) }, '›'),
-      h('button', { class: 'btn small', onclick: goToday }, 'Today'));
+    const head = h('div', { class: 'cx-head' },
+      h('div', { class: 'cx-nav' },
+        h('button', { class: 'cx-today', onclick: goToday }, 'Today'),
+        CAL.view === 'agenda' ? null : h('button', { class: 'cx-arrow', 'aria-label': 'Previous', onclick: () => (CAL.view === 'month' ? stepMonth(-1) : stepWeek(-1)) }, '‹'),
+        CAL.view === 'agenda' ? null : h('button', { class: 'cx-arrow', 'aria-label': 'Next', onclick: () => (CAL.view === 'month' ? stepMonth(1) : stepWeek(1)) }, '›'),
+        h('h2', { class: 'cx-title' }, title)),
+      h('div', { class: 'cx-tools' },
+        h('div', { class: 'cx-seg', role: 'group', 'aria-label': 'View' }, [['month', 'Month'], ['week', 'Week'], ['agenda', 'Agenda']].map(([v, t]) => h('button', { class: CAL.view === v ? 'on' : null, 'aria-pressed': String(CAL.view === v), onclick: () => { CAL.view = v; redraw(); } }, t))),
+        h('button', { class: 'btn primary cx-new', onclick: () => openEditor(null, CAL.view === 'agenda' ? dayKey(now) : CAL.sel) }, '+ New')));
+    const counts = {}; all.forEach((it) => { const g = CAL_GROUP[it.type] || 'other'; counts[g] = (counts[g] || 0) + 1; });
+    const filters = h('div', { class: 'cx-filters', role: 'group', 'aria-label': 'Filter by type' }, CAL_FILTERS.map(([v, t]) =>
+      h('button', { type: 'button', class: 'cx-chip' + (CAL.filter === v ? ' on' : ''), onclick: () => { CAL.filter = v; redraw(); } }, v !== 'all' ? h('i', { class: 'dot g-' + v }) : null, t, v !== 'all' && counts[v] ? h('em', null, String(counts[v])) : null)));
+
+    // ----- floating day window -----
+    const timed = (it) => !['todo', 'note'].includes(it.type);
+    const dayISO = (k, hh) => new Date(k + 'T' + (hh || '08:00')).toISOString();
+    let popEl = null, popKey = null, hoverT = null, leaveT = null;
+    const closePop = () => { if (popEl) popEl.remove(); popEl = null; popKey = null; CAL.pin = null; document.removeEventListener('keydown', onEsc); document.removeEventListener('pointerdown', onOut, true); };
+    const onEsc = (e) => { if (e.key === 'Escape') closePop(); };
+    const onOut = (e) => { if (popEl && !popEl.contains(e.target) && !e.target.closest('.cx-cell')) closePop(); };
+    const afterChange = (k) => { CAL.pin = k; redraw(); };
+    function buildPop(k) {
+      const d = new Date(k + 'T12:00'), list = byDay[k] || [];
+      const sched = list.filter(timed), todos = list.filter((it) => it.type === 'todo'), notes = list.filter((it) => it.type === 'note');
+      const schedRow = (it) => {
+        const past = new Date(it.end || it.at) < now;
+        return h('div', { class: 'cx-item' + (past ? ' past' : '') },
+          h('span', { class: 'cx-bar ' + it.type }),
+          h('button', { type: 'button', class: 'cx-item-main', onclick: () => { if (it.ev) { closePop(); openEditor(it.ev); } } },
+            h('b', null, it.title), h('small', null, hm(it.at) + (it.end ? ' – ' + hm(it.end) : '') + (it.sub ? ' · ' + it.sub : ''))),
+          it.ev && it.ev.link ? h('a', { class: 'btn small', href: it.ev.link, target: '_blank', rel: 'noopener noreferrer' }, 'Join') : null,
+          it.lead && it.lead.phone ? h('a', { class: 'btn small primary', href: telHref(it.lead.phone) }, icon('phone'), 'Call') : null);
+      };
+      const todoRow = (it) => h('label', { class: 'cx-todo' + (it.ev.done ? ' done' : '') },
+        h('input', { type: 'checkbox', checked: !!it.ev.done, onchange: async (e) => { try { await api('PATCH', '/calendar/' + it.ev.id, { done: e.target.checked }); afterChange(k); } catch (x) { fail(x); e.target.checked = !e.target.checked; } } }),
+        h('span', null, it.title),
+        h('button', { type: 'button', class: 'cx-del', 'aria-label': 'Delete to-do', onclick: async (e) => { e.preventDefault(); try { await api('DELETE', '/calendar/' + it.ev.id); afterChange(k); } catch (x) { fail(x); } } }, '×'));
+      const noteRow = (it) => h('div', { class: 'cx-note' }, h('p', null, it.ev.notes || it.title),
+        h('button', { type: 'button', class: 'cx-del', 'aria-label': 'Delete note', onclick: async () => { try { await api('DELETE', '/calendar/' + it.ev.id); afterChange(k); } catch (x) { fail(x); } } }, '×'));
+      const quick = (kind, ph) => {
+        const inp = h('input', { type: 'text', maxlength: kind === 'note' ? 1000 : 120, placeholder: ph, 'aria-label': ph });
+        const go = async () => {
+          const v = inp.value.trim(); if (!v) return;
+          inp.disabled = true;
+          try { await api('POST', '/calendar', { title: v.slice(0, 120), kind, starts_at: dayISO(k), notes: kind === 'note' ? v : '' }); afterChange(k); }
+          catch (x) { fail(x); inp.disabled = false; }
+        };
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        return h('div', { class: 'cx-quick' }, inp, h('button', { type: 'button', class: 'cx-add', 'aria-label': 'Add', onclick: go }, '+'));
+      };
+      const sec = (label, n, kids) => h('section', { class: 'cx-sec' }, h('div', { class: 'cx-sec-h' }, h('span', null, label), n ? h('em', null, String(n)) : null), kids);
+      return h('div', { class: 'cx-pop', role: 'dialog', 'aria-label': d.toDateString() },
+        h('div', { class: 'cx-pop-h' },
+          h('div', null, h('small', null, d.toLocaleDateString([], { weekday: 'long' }) + (k === dayKey(now) ? ' · Today' : '')), h('b', null, d.toLocaleDateString([], { month: 'long', day: 'numeric' }))),
+          h('button', { type: 'button', class: 'cx-x', 'aria-label': 'Close', onclick: closePop }, '×')),
+        h('div', { class: 'cx-pop-b' },
+          sec('Schedule', sched.length, [sched.length ? sched.map(schedRow) : h('p', { class: 'cx-empty' }, 'No meetings or calls.'),
+            h('button', { type: 'button', class: 'cx-link', onclick: () => { closePop(); openEditor(null, k, 'meeting'); } }, '+ Add a meeting or call')]),
+          sec('To-dos', todos.filter((t) => !t.ev.done).length, [todos.map(todoRow), quick('todo', 'Add a to-do and press Enter')]),
+          sec('Notes', notes.length, [notes.map(noteRow), quick('note', 'Write a note and press Enter')])));
+    }
+    function openPop(k, cell, pin) {
+      if (popKey === k && popEl) { if (pin) CAL.pin = k; return; }
+      closePop();
+      popEl = buildPop(k); popKey = k; if (pin) CAL.pin = k;
+      document.body.append(popEl);
+      const narrow = window.matchMedia('(max-width:700px)').matches;
+      if (narrow) popEl.classList.add('sheetish');
+      else {
+        const r = cell.getBoundingClientRect(), pw = popEl.offsetWidth, ph = popEl.offsetHeight, vw = innerWidth, vh = innerHeight;
+        let left = r.right + 10; if (left + pw > vw - 12) left = r.left - pw - 10; if (left < 12) left = Math.max(12, Math.min(vw - pw - 12, r.left + r.width / 2 - pw / 2));
+        let top = r.top; if (top + ph > vh - 12) top = Math.max(12, vh - ph - 12);
+        popEl.style.left = left + 'px'; popEl.style.top = top + 'px';
+      }
+      popEl.addEventListener('mouseenter', () => clearTimeout(leaveT));
+      popEl.addEventListener('mouseleave', () => { if (!CAL.pin) leaveT = setTimeout(closePop, 250); });
+      document.addEventListener('keydown', onEsc);
+      setTimeout(() => document.addEventListener('pointerdown', onOut, true), 0);
+    }
+    const canHover = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
 
     // ----- views -----
     let body;
@@ -1679,39 +1746,46 @@
       const cells = [];
       for (let i = 0; i < 42; i++) {
         const d = new Date(from); d.setDate(from.getDate() + i);
-        const k = dayKey(d), list = byDay[k] || [];
-        cells.push(h('button', { type: 'button', class: 'cal-cell' + (d.getMonth() !== CAL.month.getMonth() ? ' out' : '') + (k === dayKey(now) ? ' today' : '') + (k === CAL.sel ? ' sel' : ''),
-          'aria-label': d.toDateString() + (list.length ? ', ' + list.length + ' items' : ''), onclick: () => { CAL.sel = k; document.querySelectorAll('.cal-cell.sel').forEach((c) => c.classList.remove('sel')); openDay(k); } },
-          h('span', { class: 'n' }, String(d.getDate())),
-          h('span', { class: 'dots' }, list.slice(0, 3).map((it) => h('i', { class: 'dot ' + it.type })), list.length > 3 ? h('b', null, '+' + (list.length - 3)) : null)));
+        const k = dayKey(d), list = (byDay[k] || []).filter(timed).concat((byDay[k] || []).filter((it) => !timed(it)));
+        const shownChips = list.slice(0, 3);
+        const cell = h('div', { class: 'cx-cell' + (d.getMonth() !== CAL.month.getMonth() ? ' out' : '') + (k === dayKey(now) ? ' today' : '') + (d.getDay() === 0 || d.getDay() === 6 ? ' wknd' : ''),
+          role: 'button', tabindex: '0', 'aria-label': d.toDateString() + (list.length ? ', ' + list.length + ' items' : ', nothing scheduled'), 'data-day': k },
+          h('div', { class: 'cx-cell-h' }, h('span', { class: 'cx-n' }, String(d.getDate())), list.length ? h('span', { class: 'cx-count' }, String(list.length)) : null),
+          h('div', { class: 'cx-chips' }, shownChips.map((it) => h('div', { class: 'cx-ev ' + it.type + (it.ev && it.ev.done ? ' done' : '') },
+            h('i', { class: 'dot ' + it.type }), timed(it) ? h('time', null, hm(it.at).replace(':00', '').replace(' ', '').toLowerCase()) : null, h('span', null, it.title))),
+            list.length > 3 ? h('div', { class: 'cx-more' }, '+' + (list.length - 3) + ' more') : null),
+          h('div', { class: 'cx-dots' }, list.slice(0, 4).map((it) => h('i', { class: 'dot ' + it.type }))));
+        cell.addEventListener('click', () => { CAL.sel = k; openPop(k, cell, true); });
+        cell.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); CAL.sel = k; openPop(k, cell, true); } });
+        if (canHover) {
+          cell.addEventListener('mouseenter', () => { clearTimeout(leaveT); if (CAL.pin && CAL.pin !== k) return; clearTimeout(hoverT); hoverT = setTimeout(() => openPop(k, cell, false), 320); });
+          cell.addEventListener('mouseleave', () => { clearTimeout(hoverT); if (!CAL.pin) leaveT = setTimeout(closePop, 250); });
+        }
+        cells.push(cell);
       }
-      body = [
-        h('div', { class: 'card cal' }, head,
-          h('div', { class: 'cal-dow' }, ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => h('span', null, x))),
-          h('div', { class: 'cal-grid' }, cells),
-          h('div', { class: 'cal-legend' }, CAL_LEGEND.map(([t, n]) => h('span', null, h('i', { class: 'dot ' + t }), n)))),
-        h('div', { class: 'section' }, dayBlock(selDate, { free: 'Nothing scheduled. Tap + to add an audit, closing call or meeting.' })),
-      ];
+      body = [h('div', { class: 'cx-month' },
+        h('div', { class: 'cx-dow' }, ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((x) => h('span', null, x))),
+        h('div', { class: 'cx-grid' }, cells))];
     } else if (CAL.view === 'week') {
       const days = []; for (let i = 0; i < 7; i++) { const d = new Date(from); d.setDate(from.getDate() + i); days.push(dayBlock(d, { free: 'Free' })); }
-      body = [h('div', { class: 'card cal slim' }, head), h('div', { class: 'cal-week' }, days)];
+      body = [h('div', { class: 'cal-week' }, days)];
     } else {
       const keys = Object.keys(byDay).sort();
-      body = [h('div', { class: 'card cal slim' }, head),
-        keys.length ? keys.map((k) => dayBlock(new Date(k + 'T12:00'))) : h('div', { class: 'card empty' }, h('b', null, 'Nothing coming up'), 'Add an audit call, closing call or meeting with + Add.')];
+      body = [keys.length ? keys.map((k) => dayBlock(new Date(k + 'T12:00'))) : h('div', { class: 'card empty' }, h('b', null, 'Nothing coming up'), 'Add a meeting, call, to-do or note with + New.')];
     }
 
     if (CAL.preset) { const pr = CAL.preset; CAL.preset = null; setTimeout(() => openEditor(null, dayKey(new Date(pr.start)), 'audit', pr).then(() => {}), 80); }
-    const counts = {}; all.forEach((it) => { const g = CAL_GROUP[it.type] || 'other'; counts[g] = (counts[g] || 0) + 1; });
+    const todayList = upcoming.filter((it) => dayKey(new Date(it.at)) === dayKey(now));
+    const next = upcoming.find((it) => timed(it) && new Date(it.at) >= now);
+    const openTodos = todayList.filter((it) => it.type === 'todo' && !(it.ev && it.ev.done)).length;
+    document.querySelectorAll('.cx-pop').forEach((x) => x.remove());
     shell('calendar', [
-      h('div', { class: 'head' }, h('div', null, h('h1', null, 'Calendar'), h('p', { class: 'sub' }, 'Audits, closing calls, demos, meetings and callbacks in one place.')),
-        h('button', { class: 'btn primary small', onclick: () => openEditor(null, CAL.view === 'month' || CAL.view === 'week' ? CAL.sel : dayKey(now)) }, '+ Add')),
-      strip,
-      h('div', { class: 'seg compact' }, [['month', 'Month'], ['week', 'Week'], ['agenda', 'Agenda']].map(([v, t]) => h('button', { class: CAL.view === v ? 'on' : null, onclick: () => { CAL.view = v; redraw(); } }, t))),
-      h('div', { class: 'cal-filters', role: 'group', 'aria-label': 'Filter by type' }, CAL_FILTERS.map(([v, t]) =>
-        h('button', { type: 'button', class: 'chip' + (CAL.filter === v ? ' on' : ''), onclick: () => { CAL.filter = v; redraw(); } }, t, v !== 'all' && counts[v] ? h('em', null, String(counts[v])) : null))),
-      body,
+      h('div', { class: 'cm-head cx-top' }, h('span', { class: 'eyebrow' }, 'Schedule'), h('h1', null, 'Calendar'),
+        h('p', { class: 'cx-sum' }, h('span', null, h('b', null, String(todayList.filter(timed).length)), ' on today'), h('span', null, h('b', null, String(openTodos)), ' open to-dos'),
+          h('span', null, 'Next: ', h('b', null, next ? next.title + ' · ' + (dayKey(new Date(next.at)) === dayKey(now) ? '' : new Date(next.at).toLocaleDateString([], { weekday: 'short' }) + ' ') + hm(next.at) : 'nothing this week')))),
+      h('div', { class: 'cx-card' }, head, filters, body),
     ]);
+    if (CAL.pin && CAL.view === 'month') { const k = CAL.pin, c = document.querySelector('.cx-cell[data-day="' + k + '"]'); CAL.pin = null; if (c) openPop(k, c, true); }
   }
 
   /* ================= demo queue ================= */
