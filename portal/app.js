@@ -569,8 +569,9 @@
     mapEl.replaceChildren();
     const light = document.documentElement.getAttribute('data-theme') === 'light';
     map = L.map(mapEl, { zoomControl: true, attributionControl: true, scrollWheelZoom: true }).setView([33.97, -118.33], 11);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/' + (light ? 'light_all' : 'dark_all') + '/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd',
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' }).addTo(map);
+    // free OpenStreetMap tiles (no key); dark theme darkens them with a CSS filter
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: light ? '' : 'mp-dark-tiles',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
     const addPin = (l) => {
       if (!hasPin(l) || markers.has(l.id)) return;
       const i = leads.indexOf(l);

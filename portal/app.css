@@ -1780,6 +1780,7 @@ main.slot-in.in-down{animation:slotInDown .56s cubic-bezier(.2,.8,.2,1) both}
 .mp-map-msg{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font-size:14px;text-align:center;padding:20px;pointer-events:none}
 .mp-map-msg.over{z-index:500;background:linear-gradient(transparent,rgba(0,0,0,.25))}
 .mp-pin{background:none;border:0}
+.mp-dark-tiles{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.88) saturate(.6)}
 .mp-pin span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 13px var(--font);border:2px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.45);transition:transform .15s}
 .mp-pin.on span{background:var(--pop);color:var(--pop-ink);transform:scale(1.22)}
 .mp-pop{display:flex;flex-direction:column;gap:4px;min-width:170px;font-family:var(--font)}
