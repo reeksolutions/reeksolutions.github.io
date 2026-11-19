@@ -1330,6 +1330,8 @@ function laneSql(k) {
     fb: "(l.lane = 'fb' OR COALESCE(TRIM(l.facebook),'') != '') AND l.status NOT IN ('won','lost')",
     ig: "(l.lane = 'ig' OR COALESCE(TRIM(l.instagram),'') != '') AND l.status NOT IN ('won','lost')",
     x: "(l.lane = 'x' OR COALESCE(TRIM(l.xhandle),'') != '') AND l.status NOT IN ('won','lost')",
+    // text follow-ups: anyone you added for texting, plus called leads that didn't pick up and haven't been texted yet
+    sms: "(l.lane = 'sms' OR (COALESCE(l.phone_norm,'') != '' AND COALESCE(l.attempts,0) > 0 AND l.status NOT IN ('booked','call2','won','lost','not_interested','dnc') AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome = 'texted'))) AND l.status NOT IN ('won','lost','dnc')",
   })[k] || '';
 }
 const SOCIAL_LANES = ['email', 'fb', 'ig', 'x'];
@@ -1708,7 +1710,7 @@ async function api(request, env, url) {
   if (path === '/leads/lanes' && method === 'GET') {
     need(user, 'admin', 'rep');
     const out = {};
-    for (const k of ['new', 'old', 'callback', 'noanswer', 'email', 'fb', 'ig', 'x']) {
+    for (const k of ['new', 'old', 'callback', 'noanswer', 'email', 'fb', 'ig', 'x', 'sms']) {
       const p = new URLSearchParams(); p.set('lane2', k);
       let { w, args } = leadFilter(p, user);
       ({ w, args } = hideNonFocus(w, args, focusSql(await focusTerms(env)), p));
@@ -1719,7 +1721,7 @@ async function api(request, env, url) {
   if (path === '/leads/social' && method === 'POST') {
     // email / Facebook / Instagram / X leads you find by hand get dropped in here
     need(user, 'admin', 'rep');
-    const lane = SOCIAL_LANES.includes(body.lane) ? body.lane : bad('Pick Email, Facebook, Instagram or X');
+    const lane = SOCIAL_LANES.concat('sms').includes(body.lane) ? body.lane : bad('Pick Email, Text, Facebook, Instagram or X');
     const business = str(body.business, 120); if (!business) bad('Business name is required');
     const handle = str(body.handle, 200).trim();
     let ig = null, fb = null, xh = null;
@@ -1730,6 +1732,7 @@ async function api(request, env, url) {
     const email = str(body.email, 160).trim().toLowerCase() || null;
     if (lane === 'email' && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email || '')) bad('Add a real email address');
     const pn = normPhone(str(body.phone, 40)) || null;
+    if (lane === 'sms' && !pn) bad('Add a phone number to text');
     const t = now();
     const r = await env.DB.prepare(`INSERT INTO leads (business, owner, phone, phone_norm, city, category, status, assigned_to, created_at, updated_at, email, instagram, facebook, xhandle, lane, source, heat, call_notes)
       VALUES (?,?,?,?,?,?,'new',?,?,?,?,?,?,?,?,?, 'warm', ?)`).bind(business, str(body.owner, 80) || null, str(body.phone, 40) || null, pn, str(body.city, 60) || null, str(body.category, 60) || null, user.id, t, t, email, ig, fb, xh, lane, lane, str(body.notes, 500) || null).run();
