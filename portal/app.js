@@ -305,7 +305,9 @@
         h('a', { href: '#/home', class: 'cm-link' + (page === 'home' ? ' on' : ''), 'aria-current': page === 'home' ? 'page' : null }, icon('home'), h('span', null, 'Home')),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
-          h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder')))),
+          h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
+        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
+          h('a', { href: '#/calendar', class: 'cm-link' + (page === 'calendar' ? ' on' : ''), 'aria-current': page === 'calendar' ? 'page' : null }, icon('calendar'), h('span', null, 'Calendar')))),
       h('a', { href: '#/account', class: 'cm-me' + (page === 'account' ? ' on' : ''), onclick: closeMenu }, h('span', { class: 'cm-av' }, initials(S.me.name)),
         h('span', { class: 'cm-who' }, h('b', null, S.me.name), h('small', null, 'Account'))));
     const bar = h('header', { class: 'cm-bar' },
@@ -389,6 +391,7 @@
         if (route === 'home') return crmShell('home', [h('div', { class: 'cm-head' }, h('span', { class: 'eyebrow' }, 'Reekon'), h('h1', null, 'Home')),
           h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon('home')), h('b', null, 'Nothing here yet'), h('p', null, 'Your Home dashboard comes next.'))]);
         if (route === 'finder') return await viewFinder();
+        if (route === 'calendar') return await viewCalendar();
         if (route === 'leads') return viewLeadSection(arg || 'email');
         if (route === 'account') return viewAccount();
       } catch (e) { return crmShell(route, h('div', { class: 'empty' }, h('b', null, 'Could not load this page'), e.message)); }
