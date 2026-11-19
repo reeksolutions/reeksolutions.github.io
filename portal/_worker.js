@@ -3225,6 +3225,7 @@ async function api(request, env, url) {
   const POST_FALLBACK = [
     "I used to work in a tint shop.\n\nThe thing I remember most isn't the film. It's the phone ringing while we had film on the glass.\n\nTint customers price shop. If nobody picks up, they don't leave a voicemail. They call the next shop, and whoever answers first usually gets the car.\n\n3 ways to stop losing those calls:\n1. Text back every missed call fast\n2. Have your price, ceramic vs regular, and timing answers ready\n3. Cover lunch and after work, when calls spike\n\nThat last one is why I build AI receptionists for tint, PPF and detail shops. If you want to hear one answer as your shop, DM me \"DEMO\".",
     "Quick math for tint and PPF shop owners.\n\nMiss 2 calls a week that would've booked. Average ceramic job $400.\n2 x $400 x 52 weeks = $41,600 a year.\n\n(Example numbers. Plug in your own.)\n\nYou never see it, because a missed call doesn't show up as a lost sale.\n\nFree check: open last week's missed-call log and count the numbers you never called back.\n\nWant a system that answers and books those calls? Comment \"DEMO\".",
+    "When do most people call a tint shop?\n\nNot at 10 AM on a Tuesday.\n\nThey call on lunch breaks, after work, Saturday morning and Sunday night. Exactly when your shop is slammed or closed.\n\nAnd price shoppers don't leave voicemails. They call the next shop.\n\nA few things that help:\n\u2705 Put your hours and booking link on your Google profile\n\u2705 Turn on missed-call auto-texts so nobody gets silence\n\u2705 Answer the top questions (price, ceramic vs regular, how long it takes) right on your page\n\nOr let an AI receptionist cover it 24/7.\n\nShop owners, what time of day do you miss the most calls?",
     "Most tint shops lose the ceramic upsell before the car ever pulls in.\n\nYou're busy, someone asks \"how much to tint my car?\" and you give the cheapest price to get them in. Now that's the number in their head.\n\nAsk one question instead: \"Is heat the main thing for you, or privacy?\"\nHeat? Ceramic sells itself. New car? Mention PPF.\n\nAsking that every single time is the hard part when you're slammed. That's what AI receptionists are for. DM me \"DEMO\" to hear one.",
   ];
   const postRow = (r) => ({ id: r.id, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
@@ -3288,12 +3289,19 @@ async function api(request, env, url) {
     const sys = 'You write social media text posts for Marquise, founder of Reekon Systems in Los Angeles. He used to work in a window tint shop and saw the phone ring out while the crew had film on the glass. ' +
       'Now he builds AI systems for window tint, PPF (paint protection film), ceramic coating and auto detailing shops: AI receptionists that answer every call 24/7, quote from the shop\'s price sheet and book the appointment, missed-call text-back, speed-to-lead follow-up, booking and reminders, and custom CRMs. ' +
       'Audience: tint, PPF and detail shop owners. Pain points: missed calls mid-install, price shoppers calling 3 or 4 shops, after-hours calls, rushed quotes that lose the ceramic upsell, no-shows, slow follow-up, owner stuck on the phone. ' +
-      'Rules: lead with value and pain points, not selling. Teach something practical. At most one short soft call to action at the end (like DM or comment "DEMO"). Never invent clients, results, testimonials or stats; if you use numbers, mark them as an example. ' +
+      'Every post must be VALUE PACKED and make people keep reading. Follow this structure: ' +
+      '1) HOOK: first line stops the scroll (a surprising truth, a short story line like "I used to work in a tint shop.", a bold claim, or a quick math setup). ' +
+      '2) PROBLEM: name one specific pain shop owners feel, in their words. 3) WHY IT HAPPENS or THE HIDDEN COST: one or two short lines that make them think "that is me". ' +
+      '4) VALUE: 2 to 4 practical, specific tips they can use today even without hiring anyone (numbered list, arrows or checkmarks), or a simple math breakdown, or one exact question or text to use. ' +
+      '5) TAKEAWAY: one line that ties it together, and only then mention how AI helps in one or two lines. 6) ONE soft call to action at most (comment or DM "DEMO", or a question to answer in the comments). ' +
+      'About 85 percent teaching, 15 percent mention of what Marquise builds. Never sound like an ad. No fluff, no generic lines like "in today\'s fast-paced world". Short punchy lines with line breaks. ' +
+      'Never invent clients, results, testimonials or stats; if you use numbers, label them as an example. ' +
       'Voice: real, direct, plain words, short lines. Never use em dashes or en dashes. ' +
-      'Platform: ' + P.how + ' ' +
+      'Platform: ' + P.how + ' ' + (P.max <= 500 ? 'This platform is short, so compress the structure to: hook, one sharp insight, one tip they can use today. ' : 'Keep it tight: informative, not long-winded. ') +
+      'Here are examples of the quality and style to match (do not copy them, write something new):\n---\n' + POST_FALLBACK.slice(0, 3).join('\n---\n') + '\n---\n' +
       'Reply ONLY with JSON {"post": string, "hashtags": [strings without #]}.';
     const usr = (ask ? 'Write this post: ' + ask : 'Write a fresh post based on his business. Pick a new angle.') + (recent.length ? '\nDo not repeat these recent openings: ' + recent.join(' | ') : '');
-    const j = await c3AI(sys, usr, 900);
+    const j = await c3AI(sys, usr, 1100);
     let text = j && typeof j.post === 'string' ? j.post.replace(/[—–]/g, ',').trim() : '';
     const tags = j && Array.isArray(j.hashtags) ? j.hashtags.map((x) => String(x).replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8) : [];
     let ai = true;
