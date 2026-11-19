@@ -10,9 +10,7 @@ window.SITE = {
   instagram: "https://instagram.com/reekthewealthguy",
   handle: "@reekthewealthguy",
   city: "Los Angeles, CA",
-  // Your business cell, like "3105551234". Leave "" to hide the Text me buttons.
-  phone: "",
-  // A YouTube link to your demo video. Leave "" to show the sample call instead.
+  // Your VSL: a YouTube link OR a direct .mp4 link. Leave "" to show the placeholder.
   video: "",
   // Optional backup: a free form link (formspree.io) to get requests by email.
   formEndpoint: "",
@@ -20,196 +18,158 @@ window.SITE = {
   portal: "https://reeksolutions-github-io.reekbusiness04.workers.dev"
 };
 </script>
-<title>Reekon Systems | AI Receptionist for Tint &amp; PPF Shops</title>
-<meta name="description" content="An AI receptionist for window tint and PPF shops in Los Angeles. Answers every call, quotes from your price sheet and books the appointment while you work. Free demo.">
-<meta name="theme-color" content="#06070a">
+<title>Reekon Systems | Custom AI Systems for Growing Businesses</title>
+<meta name="description" content="We design, build and launch custom AI systems that answer, follow up and book for your business, so your team stops doing work a system should do. Book a free AI audit.">
+<meta name="theme-color" content="#ffffff">
 <link rel="canonical" href="https://reeksolutions.github.io/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Reekon Systems">
-<meta property="og:title" content="Every call answered. Even with film on the glass.">
-<meta property="og:description" content="AI receptionist for tint and PPF shops. Answers every call, quotes your prices, books the slot. Free demo.">
+<meta property="og:title" content="Custom AI systems that run the busywork for you.">
+<meta property="og:description" content="We design, build and launch AI systems around how your business already works. Book a free AI audit.">
 <meta property="og:url" content="https://reeksolutions.github.io/">
 <meta property="og:image" content="https://reeksolutions.github.io/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2306070a'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%235b8cff' stroke-opacity='.35' stroke-width='2'/%3E%3Cpath d='M16 7a9 9 0 0 1 9 9' fill='none' stroke='%235b8cff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235b8cff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b0d13'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%235b8cff' stroke-opacity='.35' stroke-width='2'/%3E%3Cpath d='M16 7a9 9 0 0 1 9 9' fill='none' stroke='%235b8cff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235b8cff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#06070a;--bg2:#0b0d13;--glass:rgba(255,255,255,.04);--glass2:rgba(255,255,255,.065);--line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.16);
- --ink:#f4f6fb;--mut:#a2a8b8;--dim:#7a8094;--acc:#5b8cff;--acc2:#a9c2ff;--acc-ink:#05070d;--ok:#3ddc97;--bad:#ff7a7a;
- --rs:12px;--rl:22px;--rx:30px;--ease:cubic-bezier(.2,.7,.2,1);color-scheme:dark}
+:root{--bg:#ffffff;--bg2:#f5f6f9;--ink:#0b0d13;--mut:#555b6b;--dim:#868b99;--line:#e6e8ee;--line2:#d6d9e1;--acc:#2f62e8;--acc-soft:#eef3ff;--ok:#12a36d;--bad:#d64545;
+ --rl:20px;--rx:28px;--ease:cubic-bezier(.2,.7,.2,1);color-scheme:light}
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",Inter,system-ui,sans-serif;font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:clip;
- background-image:radial-gradient(900px 560px at 85% -10%,rgba(91,140,255,.18),transparent 70%),radial-gradient(700px 500px at -15% 45%,rgba(91,140,255,.06),transparent 70%)}
+body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",Inter,system-ui,sans-serif;font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:clip}
 a{color:inherit}
-img,svg{max-width:100%}
 .wrap{max-width:1120px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
-.mono,.eyebrow{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500;text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--acc)}
-h1{font-size:clamp(40px,7vw,76px);line-height:1;letter-spacing:-.045em;font-weight:800;text-wrap:balance}
-h2{font-size:clamp(30px,4.8vw,50px);line-height:1.05;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
+.eyebrow{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500;text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--acc)}
+h1{font-size:clamp(38px,6.4vw,72px);line-height:1.02;letter-spacing:-.045em;font-weight:800;text-wrap:balance}
+h2{font-size:clamp(30px,4.6vw,52px);line-height:1.05;letter-spacing:-.04em;font-weight:800;text-wrap:balance}
 h3{font-size:20px;letter-spacing:-.02em;font-weight:700;line-height:1.25}
-.grad{background:linear-gradient(100deg,var(--ink) 0%,var(--acc2) 40%,var(--acc) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
-.lead{font-size:clamp(17px,2.1vw,20px);color:var(--mut);max-width:620px}
+.lead{font-size:clamp(17px,2vw,20px);color:var(--mut);max-width:640px}
 .fine{font-size:14px;color:var(--dim)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 26px;border-radius:999px;border:0;background:var(--acc);color:var(--acc-ink);font:700 16px "Inter Tight",sans-serif;text-decoration:none;cursor:pointer;
- box-shadow:0 0 0 1px rgba(91,140,255,.4),0 10px 40px rgba(91,140,255,.35);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
-.btn:hover{transform:translateY(-2px);box-shadow:0 0 0 1px rgba(91,140,255,.55),0 14px 54px rgba(91,140,255,.5)}
-.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
-.btn.ghost:hover{box-shadow:inset 0 0 0 1px var(--acc)}
-.btn.sm{min-height:40px;padding:0 18px;font-size:14px}
-.glass{background:var(--glass);border:1px solid var(--line);border-radius:var(--rl);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 28px;border-radius:999px;border:0;background:var(--ink);color:#fff;font:700 16px "Inter Tight",sans-serif;text-decoration:none;cursor:pointer;transition:transform .2s var(--ease),box-shadow .2s var(--ease),background .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(11,13,19,.18)}
+.btn.blue{background:var(--acc)}
+.btn.sm{min-height:42px;padding:0 20px;font-size:14.5px}
+.btn.ghost{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
 section{padding-block:clamp(84px,11vw,130px)}
+.alt{background:var(--bg2);border-block:1px solid var(--line)}
 .shead{display:flex;flex-direction:column;gap:14px;max-width:760px}
-.ph{display:grid;place-items:center;border:1.5px dashed var(--line2);border-radius:var(--rl);color:var(--dim);font:500 12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--rl);box-shadow:0 1px 2px rgba(11,13,19,.04),0 10px 30px rgba(11,13,19,.04)}
+.num{font:600 13px "JetBrains Mono",monospace;color:var(--acc)}
 
 /* nav */
-.nav{position:sticky;top:0;z-index:20;background:rgba(6,7,10,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid transparent;transition:border-color .2s}
+.nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
 .nav.scrolled{border-bottom-color:var(--line)}
-.nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px;padding-top:env(safe-area-inset-top)}
+.nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:70px;padding-top:env(safe-area-inset-top)}
 .logo{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.03em;text-decoration:none;white-space:nowrap}
 .logo svg{width:26px;height:26px}
 .logo .arc{transform-origin:16px 16px;animation:sweep 3.2s linear infinite}
 @keyframes sweep{to{transform:rotate(360deg)}}
 .logo em{font-style:normal;color:var(--acc)}
-.nav-links{display:flex;gap:28px;font-size:15px;color:var(--mut)}
+.nav-links{display:flex;gap:30px;font-size:15px;color:var(--mut)}
 .nav-links a{text-decoration:none}.nav-links a:hover{color:var(--ink)}
 
 /* hero */
-.hero{position:relative;overflow-x:clip;padding-top:clamp(56px,8vw,96px);padding-bottom:40px;text-align:center}
-.hero .eyebrow{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border-radius:999px;border:1px solid rgba(91,140,255,.35);background:rgba(91,140,255,.08)}
-.hero .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
-.hero h1{margin:22px auto 0;max-width:960px}
+.hero{text-align:center;padding-top:clamp(56px,8vw,96px);padding-bottom:clamp(70px,9vw,110px);background:radial-gradient(900px 420px at 50% -10%,#eaf0ff,transparent 70%)}
+.hero .eyebrow{display:inline-block;padding:8px 14px;border-radius:999px;background:var(--acc-soft);border:1px solid #d9e3ff}
+.hero h1{margin:22px auto 0;max-width:980px}
 .hero .lead{margin:22px auto 0}
-.orb{position:absolute;left:50%;top:-140px;width:min(560px,100vw);height:min(560px,100vw);transform:translateX(-50%);pointer-events:none;z-index:-1}
-.orb::before{content:"";position:absolute;inset:18%;border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(169,194,255,.55),rgba(91,140,255,.25) 40%,transparent 70%);filter:blur(30px)}
-.orb::after{content:"";position:absolute;inset:6%;border-radius:50%;border:1px solid rgba(91,140,255,.22);border-top-color:rgba(169,194,255,.7);animation:sweep 14s linear infinite}
-.player{position:relative;margin:44px auto 0;max-width:880px;aspect-ratio:16/9;border-radius:var(--rx);overflow:hidden;padding:0}
-.player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.callwrap{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:24px;padding:clamp(18px,3.5vw,40px);text-align:left;
- background:radial-gradient(500px 300px at 20% 30%,rgba(91,140,255,.18),transparent 70%),linear-gradient(160deg,#0d1018,#07080c)}
-.callmeta{display:flex;flex-direction:column;gap:12px}
-.callmeta .tag{align-self:flex-start}
-.callmeta h3{font-size:clamp(20px,2.6vw,28px)}
-.callmeta p{color:var(--mut);font-size:15px}
-.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid var(--line2);font:500 11px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
-.tag.live{border-color:rgba(61,220,151,.4);color:var(--ok)}
-.tag.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
-.lines{display:flex;flex-direction:column;gap:8px;max-height:100%;overflow:hidden}
-.ln{font-size:13.5px;line-height:1.4;padding:10px 13px;border-radius:16px;max-width:92%;opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease),transform .4s var(--ease)}
-.ln.show{opacity:1;transform:none}
-.ln span{display:block;font:600 9.5px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
-.ln.c{background:rgba(255,255,255,.07);align-self:flex-end;border-bottom-right-radius:4px}
-.ln.a{background:rgba(91,140,255,.16);border:1px solid rgba(91,140,255,.35);align-self:flex-start;border-bottom-left-radius:4px}
-.ln.done{background:var(--acc);color:var(--acc-ink);font-weight:700;align-self:stretch;max-width:none;border-radius:12px}
-.hero-cta{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:34px}
+.vsl{position:relative;margin:44px auto 0;max-width:920px;aspect-ratio:16/9;border-radius:var(--rx);overflow:hidden;background:#0b0d13;box-shadow:0 30px 80px rgba(11,13,19,.22),0 0 0 1px rgba(11,13,19,.06)}
+.vsl iframe,.vsl video{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover;background:#000}
+.vsl-ph{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:14px;color:#cfd6ea;text-align:center;padding:20px;
+ background:radial-gradient(600px 300px at 50% 40%,rgba(91,140,255,.35),transparent 70%),linear-gradient(160deg,#0f1424,#06070a)}
+.play{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px)}
+.play::after{content:"";margin-left:6px;border-left:24px solid #fff;border-top:15px solid transparent;border-bottom:15px solid transparent}
+.vsl-ph small{font:500 11px "JetBrains Mono",monospace;letter-spacing:.16em;text-transform:uppercase;opacity:.7}
+.hero-cta{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:36px}
 
 /* work */
 .work-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .counter{display:flex;align-items:center;gap:12px}
-.counter b{font:600 14px "JetBrains Mono",monospace;color:var(--mut);min-width:64px;text-align:center}
-.arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--line2);background:var(--glass);color:var(--ink);font-size:20px;cursor:pointer}
-.arrow:hover{border-color:var(--acc)}
-.track{display:grid;grid-auto-flow:column;grid-auto-columns:min(560px,86%);gap:18px;margin-top:36px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;scrollbar-width:none}
+.counter b{font:600 14px "JetBrains Mono",monospace;color:var(--mut);min-width:68px;text-align:center}
+.arrow{width:46px;height:46px;border-radius:50%;border:1px solid var(--line2);background:#fff;color:var(--ink);font-size:20px;cursor:pointer}
+.arrow:hover{border-color:var(--ink)}
+.track{display:grid;grid-auto-flow:column;grid-auto-columns:min(540px,86%);gap:18px;margin-top:36px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 10px;scrollbar-width:none}
 .track::-webkit-scrollbar{display:none}
-.wcard{scroll-snap-align:start;display:flex;flex-direction:column;gap:18px;padding:28px;min-width:0}
+.wcard{scroll-snap-align:start;display:flex;flex-direction:column;gap:16px;padding:28px;min-width:0}
 .wcard-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.wcard-h .num{font:600 13px "JetBrains Mono",monospace;color:var(--acc)}
-.ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.35);color:var(--acc2)}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid var(--line2);font:500 11px "JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.tag.real{border-color:#bfe8d7;background:#effaf5;color:var(--ok)}
+.ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--acc-soft);border:1px solid #d9e3ff;color:var(--acc)}
 .ic svg{width:22px;height:22px}
+.wcard .tag{align-self:flex-start}
 .wcard p{color:var(--mut)}
+.wcard .lbl{font:500 11px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
 .wcard ul{list-style:none;display:grid;gap:9px;padding-top:16px;border-top:1px solid var(--line)}
 .wcard li{position:relative;padding-left:24px;font-size:15.5px}
 .wcard li::before{content:"";position:absolute;left:2px;top:9px;width:10px;height:6px;border-left:2px solid var(--ok);border-bottom:2px solid var(--ok);transform:rotate(-45deg)}
-.wcard .lbl{font:500 11px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
-.marquee{margin-top:44px;border-block:1px solid var(--line);overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent)}
-.marquee-in{display:flex;gap:44px;width:max-content;padding:18px 0;animation:mq 28s linear infinite}
-.marquee span{font:600 15px "Inter Tight",sans-serif;color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:44px}
-.marquee span::after{content:"◆";font-size:8px;color:var(--acc)}
+.also{margin-top:44px}
+.also .eyebrow{color:var(--dim)}
+.marquee{margin-top:14px;border-block:1px solid var(--line);overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent)}
+.marquee-in{display:flex;width:max-content;padding:18px 0;animation:mq 34s linear infinite}
+.marquee span{font:600 15px "Inter Tight",sans-serif;color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:40px;padding-right:40px}
+.marquee span::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--acc)}
 @keyframes mq{to{transform:translateX(-50%)}}
 
 /* why now */
-.cost{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:40px}
-.cost .glass{padding:26px;display:flex;flex-direction:column;gap:10px}
-.cost .amt{font-size:clamp(34px,4vw,44px);font-weight:800;letter-spacing:-.04em}
-.cost .amt small{font-size:16px;color:var(--mut);font-weight:600;letter-spacing:0}
-.cost p{color:var(--mut);font-size:15px}
-.cost .feat{border-color:rgba(91,140,255,.55);box-shadow:0 0 0 1px rgba(91,140,255,.25),0 20px 70px rgba(91,140,255,.22)}
-.cost .bad .amt{color:var(--bad)}
-.mathline{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-top:36px;padding:24px 28px;font-size:clamp(18px,2.6vw,26px);font-weight:700;letter-spacing:-.02em}
-.mathline b{font-size:clamp(28px,4.4vw,44px);color:var(--acc2)}
+.why{display:grid;grid-template-columns:1.05fr 1fr;gap:clamp(28px,5vw,64px);align-items:center}
+.compare{display:grid;gap:12px}
+.cmp{padding:22px 24px;display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:center}
+.cmp .tag{grid-row:span 2;align-self:start}
+.cmp b{font-size:18px}
+.cmp p{grid-column:2;color:var(--mut);font-size:15px}
+.cmp.new{border-color:#c9d8ff;box-shadow:0 0 0 3px var(--acc-soft),0 10px 30px rgba(47,98,232,.1)}
+.cmp.new .tag{border-color:#c9d8ff;background:var(--acc-soft);color:var(--acc)}
 
 /* changes */
-.stat{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-top:28px}
-.stat b{font-size:clamp(56px,9vw,100px);font-weight:800;letter-spacing:-.05em;line-height:1}
-.stat span{color:var(--mut);max-width:360px}
+.stat{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-top:30px}
+.stat b{font-size:clamp(56px,9vw,104px);font-weight:800;letter-spacing:-.05em;line-height:1;color:var(--acc)}
+.stat span{color:var(--mut);max-width:380px;font-size:17px}
 .cards3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:40px}
 .ncard{padding:28px;display:flex;flex-direction:column;gap:12px;transition:transform .25s var(--ease),border-color .25s}
-.ncard:hover{transform:translateY(-4px);border-color:rgba(91,140,255,.45)}
-.ncard .num{font:600 13px "JetBrains Mono",monospace;color:var(--acc)}
+.ncard:hover{transform:translateY(-4px);border-color:var(--line2)}
 .ncard p{color:var(--mut);font-size:15.5px}
 .swipe{display:none;margin-top:14px}
 
-/* trust */
-.trust{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:40px}
-.trust .glass{padding:22px;display:flex;flex-direction:column;gap:10px}
-.trust p{color:var(--mut);font-size:14.5px}
+/* safety */
+.safe{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:40px}
+.safe .card{padding:26px;display:flex;flex-direction:column;gap:12px}
+.safe p{color:var(--mut);font-size:15.5px}
 
-/* founder */
-.founder{display:grid;grid-template-columns:240px 1fr;gap:36px;align-items:center;padding:clamp(26px,4vw,44px)}
-.founder .ph{aspect-ratio:1;border-radius:var(--rl)}
-.founder blockquote{font-size:clamp(20px,2.6vw,28px);font-weight:700;letter-spacing:-.025em;line-height:1.3}
-.founder p{color:var(--mut);margin-top:14px}
-
-/* pricing */
-.prices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:40px}
-.price{padding:30px;display:flex;flex-direction:column;gap:6px;position:relative}
-.price.feat{border-color:rgba(91,140,255,.55);box-shadow:0 0 0 1px rgba(91,140,255,.25),0 24px 80px rgba(91,140,255,.25)}
-.price .amt{font-size:52px;font-weight:800;letter-spacing:-.045em;margin-top:10px}
-.price .sub{color:var(--dim);font-size:14px}
-.price ul{list-style:none;display:grid;gap:10px;margin:20px 0 26px}
-.price li{position:relative;padding-left:26px;color:var(--mut)}
-.price li::before{content:"";position:absolute;left:3px;top:9px;width:10px;height:6px;border-left:2px solid var(--ok);border-bottom:2px solid var(--ok);transform:rotate(-45deg)}
-.price .btn{margin-top:auto}
-.flag{position:absolute;top:-12px;right:22px}
-.flag.tag{background:var(--acc);color:var(--acc-ink);border-color:transparent}
-
-/* faq + final */
-details{border-bottom:1px solid var(--line);padding:20px 0}
-summary{cursor:pointer;font-weight:700;font-size:18px;list-style:none;display:flex;justify-content:space-between;gap:16px}
-summary::-webkit-details-marker{display:none}
-summary::after{content:"+";color:var(--acc);font-weight:500}details[open] summary::after{content:"–"}
-details p{color:var(--mut);margin-top:10px;max-width:720px}
-.final{text-align:center;padding:clamp(40px,7vw,80px) 24px;border-radius:var(--rx);position:relative;overflow:hidden}
-.final::before{content:"";position:absolute;inset:auto -20% -60% -20%;height:120%;background:radial-gradient(closest-side,rgba(91,140,255,.28),transparent);pointer-events:none}
-.final h2{position:relative}.final .lead{margin:16px auto 0;position:relative}
-.final .hero-cta{position:relative}
+/* final */
+.final{text-align:center;padding:clamp(44px,7vw,84px) 24px;border-radius:var(--rx);background:#0b0d13;color:#fff;position:relative;overflow:hidden}
+.final::before{content:"";position:absolute;left:50%;top:-40%;width:900px;height:600px;transform:translateX(-50%);background:radial-gradient(closest-side,rgba(91,140,255,.4),transparent);pointer-events:none}
+.final>*{position:relative}
+.final .eyebrow{color:#9db8ff}
+.final h2{margin-top:14px}
+.final .lead{color:#b4bbcc;margin:16px auto 0}
+.final .fine{color:#8d94a6}
+.final .btn{background:#fff;color:var(--ink)}
 footer{padding-block:36px calc(36px + env(safe-area-inset-bottom));border-top:1px solid var(--line);color:var(--dim);font-size:14px}
 footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
 
 /* modal */
-.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(3,4,8,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(11,13,19,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .2s}
 .modal.open{opacity:1;pointer-events:auto}
-.mbox{width:min(520px,100%);max-height:calc(100svh - 32px);overflow:auto;padding:28px;background:#0d1018;border:1px solid var(--line2);border-radius:var(--rl);box-shadow:0 30px 90px rgba(0,0,0,.6);transform:translateY(12px);transition:transform .25s var(--ease)}
+.mbox{width:min(540px,100%);max-height:calc(100svh - 32px);overflow:auto;padding:28px;background:#fff;border-radius:var(--rl);box-shadow:0 30px 90px rgba(11,13,19,.35);transform:translateY(12px);transition:transform .25s var(--ease)}
 .modal.open .mbox{transform:none}
 .mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
-.mhead h3{font-size:24px}
-.x{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid var(--line2);background:var(--glass);color:var(--mut);font-size:20px;cursor:pointer}
+.mhead h3{font-size:24px;margin-top:8px}
+.x{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid var(--line2);background:#fff;color:var(--mut);font-size:20px;cursor:pointer}
 form{display:grid;gap:12px;margin-top:18px}
-.lbl2{font-size:14px;color:var(--mut);font-weight:600}
-input,select{width:100%;min-height:50px;padding:0 16px;border-radius:14px;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--ink);font:inherit;font-size:16px}
+.lbl2{font-size:14px;color:var(--ink);font-weight:600}
+input,select{width:100%;min-height:50px;padding:0 16px;border-radius:14px;border:1px solid var(--line2);background:#fff;color:var(--ink);font:inherit;font-size:16px}
 input:focus,select:focus{outline:2px solid var(--acc);border-color:transparent}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips label{cursor:pointer}
 .chips input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
-.chips span{display:inline-block;padding:10px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--mut);font-weight:600;font-size:14.5px}
-.chips input:checked+span{background:var(--acc);color:var(--acc-ink);border-color:transparent}
+.chips span{display:inline-block;padding:10px 15px;border-radius:999px;border:1px solid var(--line2);color:var(--mut);font-weight:600;font-size:14.5px}
+.chips input:checked+span{background:var(--ink);color:#fff;border-color:transparent}
 .chips input:focus-visible+span{outline:2px solid var(--acc)}
 
-/* sticky + reveal */
-.sticky{position:fixed;left:0;right:0;bottom:0;z-index:15;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(6,7,10,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .3s var(--ease);display:none}
+.sticky{position:fixed;left:0;right:0;bottom:0;z-index:15;padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom));background:rgba(255,255,255,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .3s var(--ease);display:none}
 .sticky.show{transform:none}
 .sticky .btn{width:100%}
 .rv{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
@@ -217,177 +177,134 @@ input:focus,select:focus{outline:2px solid var(--acc);border-color:transparent}
 
 @media(max-width:900px){
  .nav-links{display:none}
- .callwrap{grid-template-columns:1fr;align-content:start}
- .callmeta p{display:none}
- .cost,.cards3,.prices{grid-template-columns:1fr}
- .trust{grid-template-columns:repeat(2,minmax(0,1fr))}
- .founder{grid-template-columns:1fr}
- .founder .ph{max-width:200px}
+ .why,.safe{grid-template-columns:1fr}
 }
 @media(max-width:700px){
- .player{aspect-ratio:auto;height:auto}
- .callwrap{position:relative;inset:auto}
- .lines{max-height:none}
- .hero .eyebrow{font-size:10.5px;letter-spacing:.1em}
  .hero-cta .btn,.final .btn{width:100%}
- .cards3{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:84%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+ .cards3{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:84%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:6px}
  .cards3::-webkit-scrollbar{display:none}
  .cards3 .ncard{scroll-snap-align:start}
  .swipe{display:block}
- .trust{grid-template-columns:1fr}
+ .cmp{grid-template-columns:1fr}.cmp .tag{grid-row:auto;justify-self:start}.cmp p{grid-column:1}
  .sticky{display:block}
  body{padding-bottom:80px}
 }
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important}.rv,.ln{opacity:1;transform:none;transition:none}.btn,.ncard,.mbox,.sticky{transition:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important}.rv{opacity:1;transform:none;transition:none}.btn,.ncard,.mbox,.sticky{transition:none}}
 </style>
 </head>
 <body>
 <header class="nav" id="nav"><div class="wrap">
- <a class="logo" href="#top" aria-label="Reekon Systems home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" fill="none" stroke="#5b8cff" stroke-opacity=".3" stroke-width="2.2"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="#5b8cff" stroke-opacity=".22" stroke-width="1.6"/><circle cx="16" cy="16" r="3.2" fill="#5b8cff"/><path class="arc" d="M16 4a12 12 0 0 1 12 12" fill="none" stroke="#5b8cff" stroke-width="2.6" stroke-linecap="round"/></svg><span>Reekon <em>Systems</em></span></a>
- <nav class="nav-links" aria-label="Sections"><a href="#work">What we build</a><a href="#why">Why now</a><a href="#trust">Your rules</a><a href="#price">Pricing</a></nav>
- <button class="btn sm" data-open style="white-space:nowrap">Free demo</button>
+ <a class="logo" href="#top" aria-label="Reekon Systems home"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" fill="none" stroke="#2f62e8" stroke-opacity=".3" stroke-width="2.2"/><circle cx="16" cy="16" r="6.5" fill="none" stroke="#2f62e8" stroke-opacity=".22" stroke-width="1.6"/><circle cx="16" cy="16" r="3.2" fill="#2f62e8"/><path class="arc" d="M16 4a12 12 0 0 1 12 12" fill="none" stroke="#2f62e8" stroke-width="2.6" stroke-linecap="round"/></svg><span>Reekon <em>Systems</em></span></a>
+ <nav class="nav-links" aria-label="Sections"><a href="#work">What we build</a><a href="#why">Why now</a><a href="#safe">Built safe</a></nav>
+ <button class="btn sm" data-open style="white-space:nowrap">Book an audit</button>
 </div></header>
 
 <main id="top">
 <section class="hero"><div class="wrap">
- <div class="orb" aria-hidden="true"></div>
- <span class="eyebrow rv"><i></i>AI receptionist for tint &amp; PPF shops · LA</span>
- <h1 class="rv">Every call answered. <span class="grad">Even with film on the glass.</span></h1>
- <p class="lead rv">When you’re mid-install, the AI picks up, quotes from your price sheet and books the car. You finish the job. The customer’s already on your calendar.</p>
- <div class="player glass rv" id="player">
-  <div class="callwrap" id="callwrap">
-   <div class="callmeta">
-    <span class="tag live">Sample call</span>
-    <h3 id="c-title">“How much for ceramic on my Civic?”</h3>
-    <p>This is how it handles a price shopper. Your demo uses your shop’s name and your real prices.</p>
-   </div>
-   <div class="lines" id="c-lines" aria-live="polite"></div>
-  </div>
+ <span class="eyebrow rv">For businesses ready to stop doing everything by hand</span>
+ <h1 class="rv">We build the AI systems that run your busywork.</h1>
+ <p class="lead rv">Calls answered. Leads followed up. Appointments booked. We design, build and launch it around how your business already works. Watch the video to see how.</p>
+ <div class="vsl rv" id="vsl">
+  <div class="vsl-ph" id="vslph"><span class="play" aria-hidden="true"></span><small>Video coming soon</small></div>
  </div>
- <div class="hero-cta rv"><button class="btn" data-open>Get my free demo</button><span class="fine">Free. 4 quick questions. You’ll hear it answer as your shop.</span></div>
+ <div class="hero-cta rv"><button class="btn blue" data-open>Book your free AI audit</button><span class="fine">Free. A few short questions, then a quick call.</span></div>
 </div></section>
 
-<section id="work"><div class="wrap">
+<section id="work" class="alt"><div class="wrap">
  <div class="work-top rv">
-  <div class="shead"><span class="eyebrow">What we build</span><h2>One system that catches every job you’re missing.</h2></div>
-  <div class="counter" aria-hidden="true"><button class="arrow" id="prev" aria-label="Previous">‹</button><b id="count">01 / 04</b><button class="arrow" id="next" aria-label="Next">›</button></div>
+  <div class="shead"><span class="eyebrow">What we build</span><h2>Systems that do the work, not more tools to manage.</h2>
+   <p class="lead">Every build is custom. Here’s what we build most.</p></div>
+  <div class="counter" aria-hidden="true"><button class="arrow" id="prev" aria-label="Previous">‹</button><b id="count">01 / 05</b><button class="arrow" id="next" aria-label="Next">›</button></div>
  </div>
  <div class="track" id="track" tabindex="0" aria-label="What we build, swipe for more">
-  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><span class="num">01 / 04</span></div>
-   <h3>AI receptionist</h3><p>Picks up every call you can’t, in a voice that sounds like a real front desk.</p>
-   <span class="lbl">What it does</span><ul><li>Answers 24/7, mid-install or after close</li><li>English or Spanish</li><li>Handles shades, legal %, warranty and hours</li></ul></article>
-  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span class="num">02 / 04</span></div>
-   <h3>Quotes from your price sheet</h3><p>Price shoppers get a real number in seconds, so they don’t call the next shop.</p>
-   <span class="lbl">What it does</span><ul><li>Prices by car size and film</li><li>Standard, ceramic, windshield, PPF, coating</li><li>Not sure? Books a look-over instead of guessing</li></ul></article>
-  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div><span class="num">03 / 04</span></div>
-   <h3>Books the car and texts you</h3><p>Turns the call into an appointment and sends you the details before you’ve peeled your gloves off.</p>
-   <span class="lbl">What it does</span><ul><li>Books open slots on your calendar</li><li>Texts you name, number, car and job</li><li>Texts back anyone who hangs up</li></ul></article>
-  <article class="wcard glass"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h4"/></svg></div><span class="num">04 / 04</span></div>
-   <h3>A site that sends calls (optional)</h3><p>For shops with no website or an old one. Built from your Google page.</p>
-   <span class="lbl">What it does</span><ul><li>Your prices, reviews and tap-to-call</li><li>Linked to your Google listing</li><li>Every call it sends goes to the AI if you’re busy</li></ul></article>
+  <article class="wcard card"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><span class="num">01 / 05</span></div>
+   <span class="tag">Example build</span><h3>AI voice receptionist</h3><p>Answers every call in a natural voice, day or night, so no lead hits voicemail.</p>
+   <span class="lbl">What it does</span><ul><li>Answers questions about your services and hours</li><li>Quotes from your real pricing</li><li>Books the appointment and texts you the details</li></ul></article>
+  <article class="wcard card"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></div><span class="num">02 / 05</span></div>
+   <span class="tag">Example build</span><h3>Speed-to-lead follow-up</h3><p>Every new lead gets a reply in seconds, then follow-ups until they book or say no.</p>
+   <span class="lbl">What it does</span><ul><li>Texts back missed calls instantly</li><li>Replies to form fills and DMs</li><li>Follows up on a schedule you set</li></ul></article>
+  <article class="wcard card"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div><span class="num">03 / 05</span></div>
+   <span class="tag">Example build</span><h3>Booking and reminders</h3><p>Fills your calendar and cuts no-shows without anyone on your team touching it.</p>
+   <span class="lbl">What it does</span><ul><li>Books into your real availability</li><li>Sends reminders and confirmations</li><li>Rebooks cancellations automatically</li></ul></article>
+  <article class="wcard card"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div><span class="num">04 / 05</span></div>
+   <span class="tag real">Built and in use</span><h3>Custom CRM and lead engine</h3><p>Our own system, built in-house and used every day to run our outreach.</p>
+   <span class="lbl">What we built</span><ul><li>Lead finder that pulls and scores businesses</li><li>Calling, callbacks and a shared calendar</li><li>One dashboard with every number that matters</li></ul></article>
+  <article class="wcard card"><div class="wcard-h"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h4"/></svg></div><span class="num">05 / 05</span></div>
+   <span class="tag">Example build</span><h3>A website that converts</h3><p>A fast, modern site that turns visitors into calls and bookings, wired into everything else.</p>
+   <span class="lbl">What it does</span><ul><li>Clear offer, real reviews, one-tap contact</li><li>Every inquiry lands in your system</li><li>Hands off to the AI when you’re busy</li></ul></article>
  </div>
- <div class="marquee" aria-label="Built for these shops"><div class="marquee-in"><span>Auto tint</span><span>Ceramic tint</span><span>PPF / clear bra</span><span>Ceramic coating</span><span>Windshield heat film</span><span>Home window film</span><span>Commercial film</span><span>Vinyl wraps</span><span>Auto tint</span><span>Ceramic tint</span><span>PPF / clear bra</span><span>Ceramic coating</span><span>Windshield heat film</span><span>Home window film</span><span>Commercial film</span><span>Vinyl wraps</span></div></div>
+ <div class="also rv"><span class="eyebrow">Built to plug into</span>
+  <div class="marquee"><div class="marquee-in"><span>Phone calls</span><span>Text messages</span><span>Google Calendar</span><span>Website forms</span><span>Instagram DMs</span><span>Facebook</span><span>Email</span><span>Stripe</span><span>Google Business</span><span>Phone calls</span><span>Text messages</span><span>Google Calendar</span><span>Website forms</span><span>Instagram DMs</span><span>Facebook</span><span>Email</span><span>Stripe</span><span>Google Business</span></div></div>
+ </div>
 </div></section>
 
-<section id="why"><div class="wrap">
- <div class="shead rv"><span class="eyebrow">Why now</span><h2>A front desk costs thousands. Voicemail costs more.</h2>
-  <p class="lead">Tint customers price shop. If nobody answers, they don’t leave a message. They call the next shop on Google.</p></div>
- <div class="cost">
-  <div class="glass rv"><span class="tag">Hire a front desk</span><div class="amt">$2,400<small>+/mo</small></div><p>Roughly a part-time receptionist in LA, before payroll taxes. Still misses calls on breaks and after close.</p></div>
-  <div class="glass bad rv"><span class="tag">Let it ring</span><div class="amt">$0<small> up front</small></div><p>Costs nothing until you count the ceramic and PPF jobs that went to the shop that picked up.</p></div>
-  <div class="glass feat rv"><span class="tag live">Reekon AI receptionist</span><div class="amt">$297<small>/mo</small></div><p>Answers every call, quotes, books and texts you. Plus a one-time $997 setup.</p></div>
+<section id="why"><div class="wrap why">
+ <div class="shead rv"><span class="eyebrow">Why now</span><h2>Custom used to be out of reach. Not anymore.</h2>
+  <p class="lead">AI made custom systems faster and cheaper to build. Yet most businesses still pay people to do repetitive work, or juggle software that was never made for them.</p>
+  <p class="lead">The businesses that switch first get faster replies, fuller calendars and a team that works on what matters.</p></div>
+ <div class="compare">
+  <div class="cmp card rv"><span class="tag">Today</span><b>Hire for repetitive work</b><p>Answering, chasing and scheduling eat payroll and still slip after hours.</p></div>
+  <div class="cmp card rv"><span class="tag">Today</span><b>Stack more apps</b><p>Monthly fees for tools that don’t talk to each other, and someone still has to run them.</p></div>
+  <div class="cmp card new rv"><span class="tag">With us</span><b>One system built for you</b><p>It does the work around the clock, connects what you already use, and grows with you.</p></div>
  </div>
- <div class="mathline glass rv"><span>2 missed ceramic jobs a week</span><span>×</span><span>$400</span><span>=</span><b>$41,600 a year</b></div>
- <p class="fine rv" style="margin-top:12px">Example numbers to show the math. The front desk figure is a rough LA estimate.</p>
 </div></section>
 
-<section><div class="wrap">
- <div class="shead rv"><span class="eyebrow">What changes for you</span><h2>You stay in the bay. The phone gets handled.</h2></div>
- <div class="stat rv"><b>24/7</b><span>Every call picked up, including the ones at 7 PM and the ones while you’re on a windshield.</span></div>
+<section class="alt"><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">What changes for you</span><h2>Your team stops doing work a system should do.</h2></div>
+ <div class="stat rv"><b>24/7</b><span>Leads answered and followed up around the clock, not just when someone’s free.</span></div>
  <div class="cards3">
-  <div class="ncard glass rv"><span class="num">01</span><h3>No more “sorry, we were busy”</h3><p>Every caller gets an answer and a price. The ones who were going to call three shops book with you first.</p></div>
-  <div class="ncard glass rv"><span class="num">02</span><h3>Built around your shop</h3><p>Your shop name, your films, your prices, your hours. It sounds like your front desk, not a call center.</p></div>
-  <div class="ncard glass rv"><span class="num">03</span><h3>One clean handoff</h3><p>Every job lands on your calendar with a text to your phone. No sticky notes, no missed voicemails.</p></div>
+  <div class="ncard card rv"><span class="num">01</span><h3>It’s yours</h3><p>Built for your business, set up the way you work. Not a one-size template you have to bend around.</p></div>
+  <div class="ncard card rv"><span class="num">02</span><h3>Fits how you already work</h3><p>We map your process first, then build around it. Your team keeps doing what they’re good at.</p></div>
+  <div class="ncard card rv"><span class="num">03</span><h3>Everything connected</h3><p>Calls, texts, forms, calendar and follow-ups in one flow, so nothing falls through the cracks.</p></div>
  </div>
  <p class="swipe fine">Swipe →</p>
 </div></section>
 
-<section id="trust"><div class="wrap">
- <div class="shead rv"><span class="eyebrow">Your shop, your rules</span><h2>Nothing goes live until you’ve heard it.</h2></div>
- <div class="trust">
-  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="3"/></svg></div><h3>You hear it first</h3><p>You call your demo and approve how it talks before any customer does.</p></div>
-  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><h3>Your number stays</h3><p>Calls you don’t pick up forward to the AI. Answer when you’re free like always.</p></div>
-  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Only your prices</h3><p>It quotes from the sheet you give us. If it’s not sure, it books a look-over.</p></div>
-  <div class="glass rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>You’re always in the loop</h3><p>Want to talk to the owner? It takes their number and texts you right away.</p></div>
- </div>
-</div></section>
-
-<section><div class="wrap">
- <div class="founder glass rv">
-  <div class="ph" aria-label="Photo placeholder">Your photo</div>
-  <div><span class="eyebrow">Why I built this</span>
-   <blockquote style="margin-top:14px">“I worked in a tint shop. I watched the phone ring out while we had film on the glass, and I knew every one of those was a job.”</blockquote>
-   <p>I’m Marquise, based in LA. I build these myself for tint and PPF shops, set them up around how your shop actually runs, and stay your point of contact after it’s live.</p></div>
- </div>
-</div></section>
-
-<section id="price"><div class="wrap">
- <div class="shead rv"><span class="eyebrow">Pricing</span><h2>Founding-shop prices.</h2><p class="lead">One saved ceramic or PPF job a month covers it.</p></div>
- <div class="prices">
-  <div class="price glass feat rv"><span class="flag tag">Most shops start here</span><h3>AI receptionist</h3><div class="amt">$997</div><div class="sub">setup, then $297 a month</div>
-   <ul><li>Answers every call, 24/7</li><li>Quotes from your price sheet</li><li>Books appointments and texts you</li><li>English and Spanish</li></ul><button class="btn" data-open data-plan="AI receptionist">Get my free demo</button></div>
-  <div class="price glass rv"><h3>AI receptionist + website</h3><div class="amt">$1,497</div><div class="sub">setup, then $297 a month</div>
-   <ul><li>Everything in AI receptionist</li><li>A clean site with prices, reviews and tap-to-call</li><li>Built from your Google page</li><li>For shops with no site or an old one</li></ul><button class="btn ghost" data-open data-plan="AI receptionist + website">Get my free demo</button></div>
+<section id="safe"><div class="wrap">
+ <div class="shead rv"><span class="eyebrow">Built safe</span><h2>Your business. Your data. Your call.</h2></div>
+ <div class="safe">
+  <div class="card rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><h3>Your data stays yours</h3><p>Your customer info is used to run your system, nothing else. We don’t sell it or share it.</p></div>
+  <div class="card rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="3"/></svg></div><h3>You approve it first</h3><p>You test every build yourself and sign off on how it talks before a single customer sees it.</p></div>
+  <div class="card rv"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>Tested before launch</h3><p>Every build is put through real scenarios first, and handing off to a human is always one step away.</p></div>
  </div>
 </div></section>
 
 <section style="padding-top:0"><div class="wrap">
- <div class="shead rv"><h2>Questions</h2></div>
- <div class="rv" style="margin-top:16px">
-  <details><summary>Will it sound like a robot?</summary><p>No. It talks like a friendly front desk, and you hear it yourself on the demo before you decide anything.</p></details>
-  <details><summary>What if it quotes the wrong price?</summary><p>It only quotes from the price sheet you give us, by car size and film. If it’s not sure, it books a look-over instead of guessing.</p></details>
-  <details><summary>Do I need a new phone number?</summary><p>No. Your number stays the same. Calls you don’t pick up get forwarded to the AI.</p></details>
-  <details><summary>What if the customer wants to talk to me?</summary><p>It takes their name and number and texts you right away so you can call back between cars.</p></details>
-  <details><summary>Is the demo really free?</summary><p>Yes. We build it with your shop name and services and send it to you. If it’s not for you, you don’t pay anything.</p></details>
- </div>
-</div></section>
-
-<section style="padding-top:0"><div class="wrap">
- <div class="final glass rv">
-  <span class="eyebrow">Free demo</span>
-  <h2 style="margin-top:14px">Find out how many calls you’re missing.</h2>
-  <p class="lead">Answer 4 quick questions. We build a demo with your shop’s name and text you the number to call.</p>
-  <div class="hero-cta"><button class="btn" data-open>Get my free demo</button><span class="fine">I build each one myself, so I only take on a few new shops at a time.</span></div>
+ <div class="final rv">
+  <span class="eyebrow">Free AI audit</span>
+  <h2>Find out what’s worth automating.</h2>
+  <p class="lead">We look at how your business runs today, where time and leads slip, and what a custom system would take over.</p>
+  <div class="hero-cta"><button class="btn" data-open>Book your free AI audit</button><span class="fine">We take on a limited number of builds each month.</span></div>
  </div>
 </div></section>
 </main>
 
 <footer><div class="wrap"><span>© <span id="yr"></span> Reekon Systems · <span id="city"></span></span><span><a href="" class="ig" style="text-decoration:none"></a> · <a href="" id="em" style="text-decoration:none"></a></span></div></footer>
-<div class="sticky" id="sticky"><button class="btn" data-open>Get my free demo</button></div>
+<div class="sticky" id="sticky"><button class="btn blue" data-open>Book your free AI audit</button></div>
 
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle" aria-hidden="true">
  <div class="mbox">
-  <div class="mhead"><div><span class="eyebrow">Free demo</span><h3 id="mtitle" style="margin-top:8px">Hear it answer for your shop</h3></div><button class="x" id="mclose" aria-label="Close">×</button></div>
-  <p class="fine">4 quick questions. We text you your demo, usually the same day.</p>
+  <div class="mhead"><div><span class="eyebrow">Free AI audit</span><h3 id="mtitle">Tell us about your business</h3></div><button class="x" id="mclose" aria-label="Close">×</button></div>
+  <p class="fine">A few short questions. We’ll reach out to set up your call.</p>
   <form id="f" novalidate>
-   <div class="lbl2">1. What does your shop do?</div>
+   <div class="lbl2">1. What’s eating the most time?</div>
    <div class="chips">
-    <label><input type="radio" name="type" value="Auto tint" checked><span>Auto tint</span></label>
-    <label><input type="radio" name="type" value="Tint + PPF/ceramic"><span>Tint + PPF / ceramic</span></label>
-    <label><input type="radio" name="type" value="Home & commercial film"><span>Home &amp; commercial</span></label>
+    <label><input type="radio" name="pain" value="Missed calls" checked><span>Missed calls</span></label>
+    <label><input type="radio" name="pain" value="Slow lead follow-up"><span>Slow follow-up</span></label>
+    <label><input type="radio" name="pain" value="Scheduling"><span>Scheduling</span></label>
+    <label><input type="radio" name="pain" value="Too much manual work"><span>Manual work</span></label>
    </div>
-   <label class="lbl2" for="miss">2. How many calls do you think you miss a day?</label>
-   <select id="miss" name="miss"><option value="Not sure">Not sure</option><option value="1-2">1–2</option><option value="3-5">3–5</option><option value="6+">6 or more</option></select>
-   <div class="lbl2">3. Your shop</div>
-   <input name="biz" placeholder="Shop name" autocomplete="organization" required aria-label="Shop name">
-   <input name="link" placeholder="City or Google Maps link (optional)" aria-label="City or Google Maps link">
-   <div class="lbl2">4. Where should we text the demo?</div>
+   <label class="lbl2" for="size">2. How big is your team?</label>
+   <select id="size" name="size"><option>Just me</option><option>2–5</option><option>6–20</option><option>20+</option></select>
+   <div class="lbl2">3. Your business</div>
+   <input name="biz" placeholder="Business name" autocomplete="organization" required aria-label="Business name">
+   <input name="link" placeholder="Website or city (optional)" aria-label="Website or city">
+   <div class="lbl2">4. How do we reach you?</div>
    <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
    <input name="phone" type="tel" placeholder="Best phone number" autocomplete="tel" required aria-label="Best phone number">
    <input name="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;min-height:0;opacity:0">
-   <input type="hidden" name="plan" value="">
-   <button class="btn" type="submit" style="margin-top:6px">Build my free demo</button>
-   <p class="fine" id="fs" role="status">No payment. No pressure.</p>
+   <button class="btn blue" type="submit" style="margin-top:6px">Book my free audit</button>
+   <p class="fine" id="fs" role="status">No cost. No pressure.</p>
   </form>
  </div>
 </div>
@@ -399,21 +316,10 @@ document.querySelectorAll(".ig").forEach(a=>{a.href=S.instagram;a.textContent=S.
 $("em").href="mailto:"+S.email;$("em").textContent=S.email;
 const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* hero: your video if set, else the sample call */
-const yt=String(S.video||"").match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/);
-if(yt){const f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+yt[1]+"?rel=0";f.title="Demo video";f.allow="accelerometer; encrypted-media; gyroscope; picture-in-picture";f.allowFullscreen=true;$("callwrap").replaceWith(f);}
-else{
- const CALLS=[
-  {t:"“How much for ceramic on my Civic?”",l:[["c","Hey, how much for ceramic tint on a 2022 Civic?"],["a","Ceramic on a sedan, all windows, is $399 with a lifetime warranty. Want the windshield heat film too?"],["c","Just the windows. Can I come Saturday?"],["a","I have Saturday at 10 or 1. Which works?"],["c","10’s good."],["done","✓ Booked · Sat 10:00 AM · Ceramic, all windows · texted to you"]]},
-  {t:"“What do you charge for PPF?”",l:[["c","What do you charge for PPF on a new Model Y?"],["a","Front end, that’s hood, fenders, bumper and mirrors, is $1,450. Full body is $5,200. Which are you thinking?"],["c","Front end. Is it self-healing?"],["a","Yes, light scratches heal with heat. I can get you in Tuesday at 9. Want it?"],["c","Book it."],["done","✓ Booked · Tue 9:00 AM · PPF front end · texted to you"]]}
- ];
- let ci=0;
- const play=()=>{const c=CALLS[ci%CALLS.length];ci++;$("c-title").textContent=c.t;const box=$("c-lines");box.innerHTML="";
-  c.l.forEach(([w,t],i)=>{const p=document.createElement("p");p.className="ln "+w;if(w!=="done"){const s=document.createElement("span");s.textContent=w==="a"?"AI":"Caller";p.append(s);}p.append(document.createTextNode(t));box.append(p);
-   if(reduce)p.classList.add("show");else setTimeout(()=>p.classList.add("show"),400+i*1100);});
-  if(!reduce)setTimeout(play,400+c.l.length*1100+4200);};
- play();
-}
+/* VSL: YouTube link or a direct video file */
+const v=String(S.video||"").trim(),yt=v.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/);
+if(yt){const f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+yt[1]+"?rel=0&modestbranding=1";f.title="Watch the video";f.allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen";f.allowFullscreen=true;$("vslph").replaceWith(f);}
+else if(/^https?:\/\/.+\.(mp4|webm|mov)(\?.*)?$/i.test(v)){const el=document.createElement("video");el.src=v;el.controls=true;el.playsInline=true;el.preload="metadata";$("vslph").replaceWith(el);}
 
 /* work carousel */
 const track=$("track"),cards=[...track.children];
@@ -438,24 +344,24 @@ ping("view");
 
 /* modal */
 const modal=$("modal");let lastFocus=null;
-const openM=plan=>{lastFocus=document.activeElement;modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.querySelector('[name="plan"]').value=plan||"";document.body.style.overflow="hidden";setTimeout(()=>modal.querySelector(".chips input").focus(),60);ping("cta")};
+const openM=()=>{lastFocus=document.activeElement;modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";setTimeout(()=>modal.querySelector(".chips input").focus(),60);ping("cta")};
 const closeM=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.style.overflow="";if(lastFocus)lastFocus.focus()};
-document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>openM(b.dataset.plan)));
+document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",openM));
 $("mclose").onclick=closeM;modal.addEventListener("click",e=>{if(e.target===modal)closeM()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))closeM()});
 
-/* form */
+/* form → your CRM */
 $("f").addEventListener("submit",async e=>{e.preventDefault();
  const f=e.target,d=Object.fromEntries(new FormData(f)),st=$("fs");
- if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your shop, name and phone.";st.style.color="var(--bad)";return}
+ if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your business, name and phone.";st.style.color="var(--bad)";return}
  st.style.color="";st.textContent="Sending…";
- const msg=["Free demo request (AI receptionist)","Shop: "+d.type,"Misses about "+d.miss+" calls a day",d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
+ const msg=["Free demo request (AI audit)","Biggest time drain: "+d.pain,"Team: "+d.size,d.link?"Site/city: "+d.link:""].filter(Boolean).join(" | ");
  const payload={name:d.name,biz:d.biz,phone:d.phone,msg,hp:d.hp,src:SRC};
- const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the number to call.";st.style.color="var(--ok)"};
+ const done=()=>{f.reset();st.textContent="Got it. We’ll reach out to set up your audit.";st.style.color="var(--ok)"};
  if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)});const j=await r.json().catch(()=>({}));if(r.ok){done();return}
   if(j&&j.error&&r.status<500){st.textContent=j.error;st.style.color="var(--bad)";return}}catch(_){}}
  if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(payload)});if(r.ok){done();return}}catch(_){}}
- location.href="mailto:"+S.email+"?subject="+encodeURIComponent("Free demo request: "+d.biz)+"&body="+encodeURIComponent(`Name: ${d.name}\nShop: ${d.biz}\nPhone: ${d.phone}\n\n${msg}`);
+ location.href="mailto:"+S.email+"?subject="+encodeURIComponent("AI audit request: "+d.biz)+"&body="+encodeURIComponent(`Name: ${d.name}\nBusiness: ${d.biz}\nPhone: ${d.phone}\n\n${msg}`);
  st.textContent="Your email app should open. If not, email "+S.email+".";
 });
 </script>
