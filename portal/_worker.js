@@ -3193,6 +3193,92 @@ async function api(request, env, url) {
       return parseJsonLoose(typeof r.response === 'string' ? r.response : JSON.stringify(r.response));
     } catch (e) { console.error('content ai', e); return null; }
   }
+  /* ---- Content > Post content: text posts per platform (write with AI, save, schedule, mark posted) ---- */
+  const POST_PLAT = { facebook: { name: 'Facebook', max: 3000, how: 'Facebook post for shop owners. Story or value first, short lines, a few line breaks, up to 2 emojis, ends with a soft ask like comment or DM "DEMO". 120 to 260 words.' },
+    instagram: { name: 'Instagram', max: 2200, how: 'Instagram caption (it goes under a photo). Strong first line hook, short lines, value, soft ask to DM "DEMO". 80 to 180 words. Add 5 to 8 relevant hashtags in the hashtags field, not in the post.' },
+    linkedin: { name: 'LinkedIn', max: 3000, how: 'LinkedIn post. Professional but human, one idea, short paragraphs, practical takeaways, numbered or arrow list is fine, no emojis or at most 1, soft close. 150 to 280 words.' },
+    x: { name: 'X', max: 280, how: 'Single X post, 280 characters max including spaces. Punchy, one idea, no hashtags.' },
+    threads: { name: 'Threads', max: 500, how: 'Threads post, 500 characters max. Conversational, one idea, can end with a question.' },
+    tiktok: { name: 'TikTok', max: 2200, how: 'TikTok text post / caption. Hook first line, short and casual, 40 to 120 words, soft ask, add 3 to 5 hashtags in the hashtags field.' } };
+  const POST_FALLBACK = [
+    "I used to work in a tint shop.\n\nThe thing I remember most isn't the film. It's the phone ringing while we had film on the glass.\n\nTint customers price shop. If nobody picks up, they don't leave a voicemail. They call the next shop, and whoever answers first usually gets the car.\n\n3 ways to stop losing those calls:\n1. Text back every missed call fast\n2. Have your price, ceramic vs regular, and timing answers ready\n3. Cover lunch and after work, when calls spike\n\nThat last one is why I build AI receptionists for tint, PPF and detail shops. If you want to hear one answer as your shop, DM me \"DEMO\".",
+    "Quick math for tint and PPF shop owners.\n\nMiss 2 calls a week that would've booked. Average ceramic job $400.\n2 x $400 x 52 weeks = $41,600 a year.\n\n(Example numbers. Plug in your own.)\n\nYou never see it, because a missed call doesn't show up as a lost sale.\n\nFree check: open last week's missed-call log and count the numbers you never called back.\n\nWant a system that answers and books those calls? Comment \"DEMO\".",
+    "Most tint shops lose the ceramic upsell before the car ever pulls in.\n\nYou're busy, someone asks \"how much to tint my car?\" and you give the cheapest price to get them in. Now that's the number in their head.\n\nAsk one question instead: \"Is heat the main thing for you, or privacy?\"\nHeat? Ceramic sells itself. New car? Mention PPF.\n\nAsking that every single time is the hard part when you're slammed. That's what AI receptionists are for. DM me \"DEMO\" to hear one.",
+  ];
+  const postRow = (r) => ({ id: r.id, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
+  async function postCal(row, platform, when, body) {
+    // keep one calendar reminder per scheduled post
+    let meta = {}; try { meta = JSON.parse(row && row.map || '{}') || {}; } catch { meta = {}; }
+    if (meta.cal) await env.DB.prepare('DELETE FROM cal_events WHERE id = ?').bind(meta.cal).run();
+    meta.cal = null;
+    if (when) {
+      const first = String(body || '').split('\n').find((x) => x.trim()) || 'post';
+      const r = await env.DB.prepare('INSERT INTO cal_events (user_id, title, kind, starts_at, ends_at, notes, created_at) VALUES (?,?,?,?,?,?,?)')
+        .bind(user.id, str('Post on ' + POST_PLAT[platform].name + ': ' + first, 120), 'event', when, null, str('Scheduled post. Open Content > Scheduled to copy it.', 200), now()).run();
+      meta.cal = r.meta.last_row_id;
+    }
+    return JSON.stringify(meta);
+  }
+  if (path === '/posts' && method === 'GET') {
+    need(user, 'admin');
+    const st = ['draft', 'scheduled', 'posted'].includes(url.searchParams.get('status')) ? url.searchParams.get('status') : '';
+    const pl = POST_PLAT[url.searchParams.get('platform')] ? url.searchParams.get('platform') : '';
+    const rows = (await env.DB.prepare(`SELECT * FROM content_items WHERE kind = 'textpost' ${st ? 'AND status = ?' : ''} ${pl ? 'AND platforms = ?' : ''} ORDER BY CASE WHEN status = 'scheduled' THEN COALESCE(day,'') END ASC, id DESC LIMIT 200`)
+      .bind(...[st, pl ? JSON.stringify([pl]) : ''].filter(Boolean)).all()).results.map(postRow);
+    const counts = Object.fromEntries((await env.DB.prepare("SELECT status, COUNT(*) AS n FROM content_items WHERE kind = 'textpost' GROUP BY status").all()).results.map((r) => [r.status, r.n]));
+    return json({ posts: rows, counts });
+  }
+  if (path === '/posts' && method === 'POST') {
+    need(user, 'admin');
+    const platform = POST_PLAT[body.platform] ? body.platform : bad('Pick a platform');
+    const text = str(body.body, 3000).trim(); if (!text) bad('The post is empty');
+    const status = ['draft', 'scheduled', 'posted'].includes(body.status) ? body.status : 'draft';
+    const when = status === 'scheduled' ? validIso(body.scheduled_at) : null;
+    if (status === 'scheduled' && !when) bad('Pick a date and time');
+    const meta = await postCal(null, platform, when, text);
+    const r = await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at, posted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(user.id, 'textpost', status, str(text.split('\n')[0], 120), text, JSON.stringify([platform]), when, meta, body.source === 'ai' ? 'ai' : 'manual', now(), status === 'posted' ? now() : null).run();
+    if (status === 'posted') await trkBump(env, user.id, { posts: 1 }).catch(() => {});
+    return json(postRow(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(r.meta.last_row_id).first()));
+  }
+  if ((m = path.match(/^\/posts\/(\d+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+    need(user, 'admin');
+    const row = await env.DB.prepare("SELECT * FROM content_items WHERE id = ? AND kind = 'textpost'").bind(+m[1]).first();
+    if (!row) throw new HttpError(404, 'Post not found');
+    const platform = postRow(row).platform;
+    if (method === 'DELETE') { await postCal(row, platform, null, ''); await env.DB.prepare('DELETE FROM content_items WHERE id = ?').bind(row.id).run(); return json({ ok: true }); }
+    const text = body.body !== undefined ? str(body.body, 3000).trim() || bad('The post is empty') : row.body;
+    const status = ['draft', 'scheduled', 'posted'].includes(body.status) ? body.status : row.status;
+    let when = row.day;
+    if (body.scheduled_at !== undefined) when = body.scheduled_at ? validIso(body.scheduled_at) || bad('Pick a date and time') : null;
+    if (status === 'scheduled' && !when) bad('Pick a date and time');
+    const meta = await postCal(row, platform, status === 'scheduled' ? when : null, text);
+    await env.DB.prepare('UPDATE content_items SET body = ?, title = ?, status = ?, day = ?, map = ?, posted_at = ? WHERE id = ?')
+      .bind(text, str(text.split('\n')[0], 120), status, status === 'draft' ? null : when, meta, status === 'posted' ? (row.posted_at || now()) : null, row.id).run();
+    if (status === 'posted' && row.status !== 'posted') await trkBump(env, user.id, { posts: 1 }).catch(() => {});
+    return json(postRow(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(row.id).first()));
+  }
+  if (path === '/posts/write' && method === 'POST') {
+    need(user, 'admin');
+    const platform = POST_PLAT[body.platform] ? body.platform : bad('Pick a platform');
+    const P = POST_PLAT[platform], ask = str(body.ask, 800).trim();
+    const recent = (await env.DB.prepare("SELECT title FROM content_items WHERE kind = 'textpost' ORDER BY id DESC LIMIT 8").all()).results.map((r) => r.title).filter(Boolean);
+    const sys = 'You write social media text posts for Marquise, founder of Reekon Systems in Los Angeles. He used to work in a window tint shop and saw the phone ring out while the crew had film on the glass. ' +
+      'Now he builds AI systems for window tint, PPF (paint protection film), ceramic coating and auto detailing shops: AI receptionists that answer every call 24/7, quote from the shop\'s price sheet and book the appointment, missed-call text-back, speed-to-lead follow-up, booking and reminders, and custom CRMs. ' +
+      'Audience: tint, PPF and detail shop owners. Pain points: missed calls mid-install, price shoppers calling 3 or 4 shops, after-hours calls, rushed quotes that lose the ceramic upsell, no-shows, slow follow-up, owner stuck on the phone. ' +
+      'Rules: lead with value and pain points, not selling. Teach something practical. At most one short soft call to action at the end (like DM or comment "DEMO"). Never invent clients, results, testimonials or stats; if you use numbers, mark them as an example. ' +
+      'Voice: real, direct, plain words, short lines. Never use em dashes or en dashes. ' +
+      'Platform: ' + P.how + ' ' +
+      'Reply ONLY with JSON {"post": string, "hashtags": [strings without #]}.';
+    const usr = (ask ? 'Write this post: ' + ask : 'Write a fresh post based on his business. Pick a new angle.') + (recent.length ? '\nDo not repeat these recent openings: ' + recent.join(' | ') : '');
+    const j = await c3AI(sys, usr, 900);
+    let text = j && typeof j.post === 'string' ? j.post.replace(/[—–]/g, ',').trim() : '';
+    const tags = j && Array.isArray(j.hashtags) ? j.hashtags.map((x) => String(x).replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8) : [];
+    let ai = true;
+    if (!text) { ai = false; text = POST_FALLBACK[Math.floor(Math.random() * POST_FALLBACK.length)]; }
+    if (text.length > P.max) text = text.slice(0, P.max - 1).replace(/\s+\S*$/, '') + '…';
+    return json({ post: text, hashtags: tags, ai, max: P.max });
+  }
   if (path === '/content3' && method === 'GET') {
     need(user, 'admin');
     const today = ptParts().date;

@@ -306,6 +306,8 @@
       h('nav', { class: 'cm-nav', onclick: (e) => { if (e.target.closest('a')) closeMenu(); } },
         h('a', { href: '#/home', class: 'cm-link' + (page === 'home' ? ' on' : ''), 'aria-current': page === 'home' ? 'page' : null }, icon('home'), h('span', null, 'Home')),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList),
+        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Content'),
+          h('a', { href: '#/content/post', class: 'cm-link' + (page === 'content' ? ' on' : ''), 'aria-current': page === 'content' ? 'page' : null }, icon('spark'), h('span', null, 'Post content'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
           h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
@@ -430,6 +432,125 @@
       h('div', { class: 'hx-row hx-r2' }, socCard, feedCard),
     ]);
   }
+  /* ===== Content > Post content ===== */
+  const PC_PLAT = [['facebook', 'Facebook', 'Stories and value posts for shop owners', 'f'], ['instagram', 'Instagram', 'Captions for your photo posts', 'ig'], ['linkedin', 'LinkedIn', 'Professional posts and newsletter ideas', 'in'],
+    ['x', 'X', 'Short, punchy posts (280 characters)', 'x'], ['threads', 'Threads', 'Conversational posts (500 characters)', '@'], ['tiktok', 'TikTok', 'Text posts and captions', 'tt']];
+  const PC_MAX = { facebook: 3000, instagram: 2200, linkedin: 3000, x: 280, threads: 500, tiktok: 2200 };
+  const PC_OPEN = { facebook: 'https://www.facebook.com/', instagram: 'https://www.instagram.com/', linkedin: 'https://www.linkedin.com/feed/', x: 'https://x.com/compose/post', threads: 'https://www.threads.net/', tiktok: 'https://www.tiktok.com/' };
+  const pcName = (k) => (PC_PLAT.find((p) => p[0] === k) || [k, k])[1];
+  const pcBadge = (k) => h('span', { class: 'pc-badge p-' + k }, (PC_PLAT.find((p) => p[0] === k) || [0, 0, 0, '?'])[3]);
+  const pcWhen = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const pcCopy = async (text) => { try { await navigator.clipboard.writeText(text); toast('Copied ✓'); } catch { toast('Copy failed. Press and hold the text to copy.', true); } };
+  const pcHead = (kicker, title, sub, back) => h('div', { class: 'cm-head pc-head' }, back ? h('a', { class: 'pc-back', href: back }, icon('chev'), 'Back') : null, h('span', { class: 'eyebrow' }, kicker), h('h1', null, title), sub ? h('p', { class: 'pc-sub' }, sub) : null);
+  async function viewPostContent() {
+    const parts = location.hash.replace(/^#\/?/, '').split('/');   // content / post|scheduled / platform / type
+    const where = parts[1] || 'post', plat = parts[2], type = parts[3];
+    if (where === 'scheduled') return viewPostScheduled(plat);
+    if (!plat) {
+      const r = await api('GET', '/posts?status=scheduled').catch(() => ({ posts: [], counts: {} }));
+      const row = (k, t, d, href, extra) => h('a', { class: 'pc-row', href }, k, h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), extra || null, h('i', { class: 'pc-go' }, icon('chev')));
+      return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick where you want to post.'),
+        h('div', { class: 'pc-list' }, PC_PLAT.map(([k, t, d]) => row(pcBadge(k), t, d, '#/content/post/' + k))),
+        h('div', { class: 'pc-sep' }, 'Planned'),
+        h('div', { class: 'pc-list' }, row(h('span', { class: 'pc-badge sch' }, icon('calendar')), 'Scheduled content', 'Text posts you’ve scheduled, for every platform', '#/content/scheduled',
+          (r.counts.scheduled ? h('em', { class: 'pc-count' }, String(r.counts.scheduled)) : null)))]);
+    }
+    if (!PC_MAX[plat]) { location.hash = '#/content/post'; return; }
+    if (!type) {
+      const kind = (k, t, d, on) => on ? h('a', { class: 'pc-row', href: '#/content/post/' + plat + '/' + k }, h('span', { class: 'pc-badge sch' }, icon(k === 'text' ? 'script' : 'spark')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), h('i', { class: 'pc-go' }, icon('chev')))
+        : h('div', { class: 'pc-row off', 'aria-disabled': 'true' }, h('span', { class: 'pc-badge sch' }, icon('spark')), h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)), h('em', { class: 'pc-soon' }, 'Soon'));
+      return crmShell('content:post', [pcHead(pcName(plat), 'What kind of content?', null, '#/content/post'),
+        h('div', { class: 'pc-list' }, kind('text', 'Text post', 'Written post, ready to copy and post', true), kind('photo', 'Photo post', 'Image with a caption'), kind('carousel', 'Carousel', 'Swipeable slides'), kind('video', 'Video script', 'Short-form video')),
+        h('div', { class: 'pc-sep' }, 'Planned'),
+        h('div', { class: 'pc-list' }, h('a', { class: 'pc-row', href: '#/content/scheduled/' + plat }, h('span', { class: 'pc-badge sch' }, icon('calendar')), h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled ' + pcName(plat) + ' posts'), h('small', null, 'Text posts waiting to go out')), h('i', { class: 'pc-go' }, icon('chev'))))]);
+    }
+    if (type !== 'text') { location.hash = '#/content/post/' + plat; return; }
+    return viewTextComposer(plat);
+  }
+  async function viewTextComposer(plat) {
+    const max = PC_MAX[plat];
+    const ask = h('textarea', { rows: 3, maxlength: 800, placeholder: 'Optional: what should it be about? e.g. "why price shoppers never leave voicemails" or "a post about no-shows for detail shops"' });
+    const out = h('div', { class: 'pc-out', hidden: true });
+    const editor = h('textarea', { class: 'pc-editor', rows: 14, maxlength: max, 'aria-label': 'Your post' });
+    const count = h('small', { class: 'pc-cnt' });
+    const tagsEl = h('div', { class: 'pc-tags' });
+    const recount = () => { count.textContent = editor.value.length + ' / ' + max; count.classList.toggle('over', editor.value.length > max); };
+    editor.oninput = recount;
+    let lastSource = 'manual';
+    const gen = async (btn, useAsk) => {
+      btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'Writing…';
+      try {
+        const r = await api('POST', '/posts/write', { platform: plat, ask: useAsk ? ask.value.trim() : '' });
+        editor.value = r.post + (r.hashtags && r.hashtags.length ? '\n\n' + r.hashtags.map((x) => '#' + x).join(' ') : '');
+        tagsEl.replaceChildren(r.ai ? null : h('p', { class: 'dim small' }, 'The AI writer is busy, so here’s one of your saved posts. Try again in a minute for a new one.'));
+        lastSource = 'ai'; out.hidden = false; recount(); out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) { fail(e); }
+      btn.disabled = false; btn.textContent = t0;
+    };
+    const genAuto = h('button', { class: 'btn primary pc-big', onclick: (e) => gen(e.currentTarget, false) }, icon('spark'), 'Write one for me');
+    const genAsk = h('button', { class: 'btn', onclick: (e) => { if (!ask.value.trim()) { toast('Type what you want first, or tap Write one for me', true); ask.focus(); return; } gen(e.currentTarget, true); } }, 'Write this');
+    const when = h('input', { type: 'datetime-local', class: 'pc-when', 'aria-label': 'Post date and time' });
+    const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(11, 30, 0, 0); when.value = toLocalInput(d);
+    const save = async (status, btn) => {
+      if (!editor.value.trim()) { toast('The post is empty', true); return; }
+      btn.disabled = true;
+      try {
+        await api('POST', '/posts', { platform: plat, body: editor.value, status, scheduled_at: status === 'scheduled' ? new Date(when.value).toISOString() : null, source: lastSource });
+        toast(status === 'scheduled' ? 'Scheduled ✓ It’s on your calendar too.' : status === 'posted' ? 'Marked as posted ✓' : 'Saved to drafts ✓');
+        viewTextComposer(plat);
+      } catch (e) { fail(e); btn.disabled = false; }
+    };
+    const schedBox = h('div', { class: 'pc-sched', hidden: true }, h('label', { class: 'lbl' }, 'When do you want to post it?'), when,
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: (e) => save('scheduled', e.currentTarget) }, icon('calendar'), 'Schedule it'), h('button', { class: 'btn ghost', onclick: () => { schedBox.hidden = true; } }, 'Cancel')));
+    out.append(h('div', { class: 'pc-card' }, h('div', { class: 'pc-card-h' }, h('span', { class: 'pc-card-t' }, pcBadge(plat), 'Your ' + pcName(plat) + ' post'), count), editor, tagsEl,
+      plat === 'instagram' ? h('p', { class: 'dim small' }, 'Instagram needs a photo. Use this as the caption.') : null,
+      h('div', { class: 'pc-acts' },
+        h('button', { class: 'btn primary', onclick: () => pcCopy(editor.value) }, icon('copy'), 'Copy'),
+        h('a', { class: 'btn', href: PC_OPEN[plat], target: '_blank', rel: 'noopener' }, 'Open ' + pcName(plat)),
+        h('button', { class: 'btn', onclick: () => { schedBox.hidden = false; when.focus(); } }, icon('calendar'), 'Schedule'),
+        h('button', { class: 'btn', onclick: (e) => save('draft', e.currentTarget) }, 'Save draft'),
+        h('button', { class: 'btn ok', onclick: (e) => save('posted', e.currentTarget) }, '✓ I posted it'),
+        h('button', { class: 'btn ghost', onclick: (e) => gen(e.currentTarget, !!ask.value.trim()) }, '↻ New version')),
+      schedBox));
+    const r = await api('GET', '/posts?platform=' + plat).catch(() => ({ posts: [] }));
+    const mine = r.posts.filter((p) => p.status !== 'posted').slice(0, 10), done = r.posts.filter((p) => p.status === 'posted').slice(0, 5);
+    crmShell('content:post', [pcHead(pcName(plat) + ' · Text post', 'Write a ' + pcName(plat) + ' post', 'Let it write one from what it knows about your business, or tell it exactly what you want.', '#/content/post/' + plat),
+      h('div', { class: 'pc-card pc-start' }, genAuto, h('div', { class: 'pc-or' }, h('span', null, 'or ask for something specific')), ask, h('div', { class: 'row' }, genAsk)),
+      out,
+      mine.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Drafts and scheduled'), h('div', { class: 'pc-items' }, mine.map((p) => pcItem(p, () => viewTextComposer(plat))))) : null,
+      done.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Recently posted'), h('div', { class: 'pc-items' }, done.map((p) => pcItem(p, () => viewTextComposer(plat))))) : null]);
+  }
+  function pcItem(p, redraw) {
+    const body = h('p', { class: 'pc-item-b' }, p.body);
+    const edit = h('textarea', { class: 'pc-editor', rows: 8, hidden: true, maxlength: PC_MAX[p.platform] || 3000 }); edit.value = p.body;
+    const when = h('input', { type: 'datetime-local', class: 'pc-when', hidden: true }); when.value = p.scheduled_at ? toLocalInput(new Date(p.scheduled_at)) : toLocalInput(new Date(Date.now() + 864e5));
+    const patch = async (data, msg) => { try { await api('PATCH', '/posts/' + p.id, data); toast(msg); redraw(); } catch (e) { fail(e); } };
+    const st = p.status === 'scheduled' ? h('span', { class: 'pc-st sch' }, icon('calendar'), pcWhen(p.scheduled_at)) : p.status === 'posted' ? h('span', { class: 'pc-st ok' }, '✓ Posted ' + (p.posted_at ? new Date(p.posted_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '')) : h('span', { class: 'pc-st' }, 'Draft');
+    const saveEdit = h('button', { class: 'btn small primary', hidden: true, onclick: () => patch({ body: edit.value }, 'Saved ✓') }, 'Save');
+    const saveWhen = h('button', { class: 'btn small primary', hidden: true, onclick: () => patch({ status: 'scheduled', scheduled_at: new Date(when.value).toISOString() }, 'Scheduled ✓') }, 'Set time');
+    return h('article', { class: 'pc-item' },
+      h('div', { class: 'pc-item-h' }, h('span', { class: 'pc-card-t' }, pcBadge(p.platform), pcName(p.platform)), st),
+      body, edit, when,
+      h('div', { class: 'pc-acts' },
+        h('button', { class: 'btn small primary', onclick: () => pcCopy(p.body) }, icon('copy'), 'Copy'),
+        p.status !== 'posted' ? h('button', { class: 'btn small ok', onclick: () => patch({ status: 'posted' }, 'Marked as posted ✓') }, '✓ Posted') : null,
+        h('button', { class: 'btn small', onclick: () => { const on = edit.hidden; edit.hidden = !on; body.hidden = on; saveEdit.hidden = !on; } }, 'Edit'), saveEdit,
+        p.status !== 'posted' ? h('button', { class: 'btn small', onclick: () => { when.hidden = !when.hidden; saveWhen.hidden = when.hidden; } }, p.status === 'scheduled' ? 'Change time' : 'Schedule') : null, saveWhen,
+        p.status === 'scheduled' ? h('button', { class: 'btn small ghost', onclick: () => patch({ status: 'draft' }, 'Moved to drafts') }, 'Unschedule') : null,
+        h('button', { class: 'btn small ghost danger-t', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to delete'; return; } try { await api('DELETE', '/posts/' + p.id); toast('Deleted'); redraw(); } catch (x) { fail(x); } } }, 'Delete')));
+  }
+  async function viewPostScheduled(plat) {
+    if (plat && !PC_MAX[plat]) plat = '';
+    const r = await api('GET', '/posts?status=scheduled' + (plat ? '&platform=' + plat : '')).catch(() => ({ posts: [] }));
+    const posts = r.posts.slice().sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    const byDay = {}; posts.forEach((p) => { const k = new Date(p.scheduled_at).toDateString(); (byDay[k] = byDay[k] || []).push(p); });
+    const chip = (k, t) => h('a', { class: 'cx-chip' + ((plat || '') === k ? ' on' : ''), href: '#/content/scheduled' + (k ? '/' + k : '') }, k ? pcBadge(k) : null, t);
+    const redraw = () => viewPostScheduled(plat);
+    crmShell('content:post', [pcHead('Content', 'Scheduled content', 'Your scheduled text posts. Each one is also on your calendar. When it’s time, copy it, post it, and tap Posted.', plat ? '#/content/post/' + plat : '#/content/post'),
+      h('div', { class: 'cx-filters pc-filters' }, chip('', 'All'), PC_PLAT.map(([k, t]) => chip(k, t))),
+      posts.length ? Object.entries(byDay).map(([d, list]) => h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, new Date(d).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), h('div', { class: 'pc-items' }, list.map((p) => pcItem(p, redraw)))))
+        : h('div', { class: 'cm-placeholder' }, h('span', { class: 'cm-ph-ic' }, icon('calendar')), h('b', null, 'Nothing scheduled' + (plat ? ' for ' + pcName(plat) : '')), h('p', null, 'Write a text post and tap Schedule.'), h('a', { class: 'btn primary', href: '#/content/post' + (plat ? '/' + plat + '/text' : ''), style: 'margin-top:10px' }, 'Write a post'))]);
+  }
   function viewLeadSection(k) {
     const sec = LEAD_SECTIONS.find((x) => x[0] === k);
     if (!sec) { location.hash = '#/leads/email'; return; }
@@ -501,6 +622,7 @@
         if (route === 'home') return await viewHome2();
         if (route === 'finder') return await viewFinder();
         if (route === 'calendar') return await viewCalendar();
+        if (route === 'content') return await viewPostContent();
         if (route === 'leads') {
           LV.q = '';
           if (arg === 'sales') return await viewDeals();
