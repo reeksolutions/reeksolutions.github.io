@@ -92,7 +92,7 @@ const SCHEMA = [
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
 const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT', lane: 'TEXT', facebook: 'TEXT', xhandle: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT', lane: 'TEXT', facebook: 'TEXT', xhandle: 'TEXT', lat: 'REAL', lng: 'REAL' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -200,6 +200,16 @@ async function ensureSchema(env) {
   // niche v4: auto body and collision shops (+ auto repair as overflow). Resets the finder's search types and progress.
   // niche v5: local businesses with no website or few reviews (groomers, landscapers, painters, detailers, body shops); the offer is AI websites
   // niche v6: locksmiths + mobile phone repair (no website / few reviews)
+  // niche v7 (Nov 18 2026): window tint + PPF / ceramic shops, selling voice AI. Locked in for good.
+  if ((await getSetting(env, 'niche_v7')) !== '1') {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'window tint and ppf')"),
+      env.DB.prepare("UPDATE settings SET value = json_remove(value, '$.niches', '$.max_reviews', '$.low_review_only', '$.any_site') WHERE key = 'auto_finder' AND json_valid(value)"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'auto_finder_state'"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'call_script'"),
+      ...['niche_v3', 'niche_v4', 'niche_v5', 'niche_v6', 'niche_v7'].map((k) => env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')").bind(k)),
+    ]);
+  }
   if ((await getSetting(env, 'niche_v6')) !== '1') {
     await env.DB.batch([
       env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('focus_niche', 'locksmith and phone repair')"),
@@ -262,47 +272,43 @@ const DEFAULT_SCRIPT = [
   { kind: 'step', title: 'Opener', body:
 `Hey, is this {owner_first}?
 
-[If yes] Hey {owner_first}, it's {rep_first}, I'm local here in LA. Quick heads up, I record my calls for training, that cool? … I'll be quick. Got 30 seconds?
+[If yes] Hey {owner_first}, it's {rep_first}. I'm local here in LA, I used to work in a tint shop. Quick heads up, I record my calls for training, that cool? … Got 30 seconds? I'll be quick.
 
-[If gatekeeper] Hey! Quick one: who owns {business}? … Is {owner_first} around?` },
+[If someone else] Hey! Quick one: who runs the shop? … Is {owner_first} around, or is he in the bay right now?` },
   { kind: 'step', title: 'The hook', body:
-`I was looking up {business} on Google and noticed you don't have a website. [or: only a few reviews]
+`So when I worked at the shop, the phone would ring while we had film on the glass, gloves wet, and nobody could grab it. And most of those calls were "how much for ceramic on my car?"
 
-[Locksmiths: When you're out on a lockout and the phone rings, who picks up? Somebody locked out calls the next locksmith in about ten seconds.]
+If nobody picks up, they just call the next tint shop on Google. That's a $300 to $800 job gone, and on a PPF call it's thousands.
 
-So when somebody searches for a {category} near them, they find your competitors first and call them.
+[Let them react. Ask:] When you're in the middle of an install, who's answering your phone?` },
+  { kind: 'step', title: 'The pitch (AI receptionist)', body:
+`That's why I'm calling. I built an AI receptionist for tint shops. It picks up every call, even mid-install or after you close. It quotes by the car, explains the shades and ceramic vs regular, and books them right on your calendar. Then it texts you the details.
 
-[Let them react. Ask:] How are most of your customers finding you right now?` },
-  { kind: 'step', title: 'The pitch (AI website)', body:
-`Here's why I'm calling. I already built a website for {business}. It shows your services, your area and your reviews, and it has an AI assistant that answers questions and books customers for you, even at night.
-
-Can I text you the link so you can see it? Takes 30 seconds.
+I already set one up for {business}. Want to call it right now and hear it? Takes a minute.
 
 [Demo link] {demo_link}` },
   { kind: 'step', title: 'The close', body:
-`[After they look] What do you think?
+`[After they try it] Pretty crazy, right? What did you think?
 
-If you like it, I can have it live this week. It's {price} to set up, then a small monthly fee for hosting and changes. If you want, I can lock it in right now and send you the payment link.
+For founding shops it's $997 to set up, then $297 a month. One saved ceramic or PPF job pays for it. I can have it answering your calls this week. Want me to lock it in and send the payment link?
 
-[Not ready → book a callback: "I'll call you tomorrow at [time] after you've had a look."]` },
+[Not ready → book a callback: "I'll call you tomorrow at [time] after you've thought about it."]` },
   { kind: 'objection', title: '"How much?"', body:
-`Setup is {price}, then a small monthly fee for hosting, updates and the AI assistant. One new customer from Google usually pays for it.` },
-  { kind: 'objection', title: '"I get customers from Instagram / word of mouth"', body:
-`That's great, keep that. The website catches the people who search Google and never see your Instagram. It just adds a door, it doesn't replace one.` },
-  { kind: 'objection', title: '"I already tried a website"', body:
-`Totally fair. What happened with it? … This one's different: it's built for your phone, it shows your reviews, and the AI answers questions and books people for you.` },
+`$997 to set up, then $297 a month. That's less than one ceramic job. If it catches even one call a week you'd have missed, it's paid for itself four times over.` },
+  { kind: 'objection', title: '"I answer my own phone"', body:
+`I believe you. But when you're laying film you can't, right? I was there. Those are the calls that go to the next shop. This only picks up when you can't.` },
+  { kind: 'objection', title: '"Customers want a real person"', body:
+`Totally. That's why it sounds human and you set what it says. And if someone wants you, it takes their number and texts you right away so you can call back.` },
+  { kind: 'objection', title: '"It\'ll quote wrong prices"', body:
+`You give me your price sheet, by car size and film, and it only quotes your prices. Anything it's not sure about, it books a look-over instead of guessing.` },
   { kind: 'objection', title: '"Just send me info"', body:
-`Even better, I'll send you the actual site I built. What's the best number to text? I'll call you back at [time] to see what you think.` },
+`Even better, I'll send you the demo so you can call it yourself. What's the best number to text? I'll check back at [time] to see what you think.` },
   { kind: 'objection', title: '"I\'m busy"', body:
-`Totally get it. I'll text you the link now. When's a good time for a 2-minute call back, later today or tomorrow morning?
+`I know, I've been in the bay. I'll text you the demo now. When's a good time for a 2-minute call back, after you close today or tomorrow morning?
 
 [Tap Callback and set the time.]` },
   { kind: 'objection', title: '"Not interested"', body:
-`No problem at all. Is it the timing, or you just don't need one? … [If timing → offer a callback. If no need → thank them, tap Not interested.]` },
-  { kind: 'step', title: 'Voicemail', body:
-`Hey {owner_first}, it's {rep_first} here in LA. I noticed {business} doesn't have a website, so I built you one. I'll text you the link so you can take a look. Talk soon!
-
-[Then tap Voicemail, and text the demo link.]` },
+`No problem. Is it the price, or you just don't miss calls? … [If price → offer a callback. If no need → thank them, tap Not interested.]` },
 ];
 
 /* -------- personal tracker -------- */
@@ -363,14 +369,15 @@ function trkScore(t, goal, postedPlatforms) {
   ];
   return { score: parts.reduce((a, x) => a + x.pts, 0), parts };
 }
-const FOCUS_DEFAULT = 'locksmith and phone repair';
+const FOCUS_DEFAULT = 'window tint and ppf';
 async function focusTerms(env) {
   const raw = (await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT;
   const base = String(raw).toLowerCase().trim();
   if (!base) return [];
   const terms = new Set([base, base.replace(/\s+/g, '')]);
   if (/backyard|hardscape|landscap|paver|turf|outdoor living/.test(base)) ['backyard', 'hardscape', 'landscap', 'paver', 'artificial turf', 'artificial grass', 'turf', 'retaining wall', 'pergola', 'patio builder', 'patio cover', 'fence', 'concrete', 'decking', 'outdoor living', 'outdoor kitchen', 'drainage'].forEach((t) => terms.add(t));
-  if (/locksmith|phone repair/.test(base)) { terms.clear(); ['locksmith', 'lock & key', 'lock and key', 'lockout', 'locks', 'car key', 'key duplicat', 'phone repair', 'phone fix', 'fix my phone', 'phones', 'cell phone', 'cellphone', 'iphone', 'screen repair', 'device repair', 'electronics repair'].forEach((t) => terms.add(t)); }
+  if (/tint|ppf|paint protection|window film|clear bra/.test(base)) { terms.clear(); ['tint', 'window film', 'ppf', 'paint protection', 'clear bra', 'ceramic coat', 'ceramic pro', 'xpel', 'wrap', 'restyl', 'auto spa', 'solar film', 'auto glass film'].forEach((t) => terms.add(t)); }
+  else if (/locksmith|phone repair/.test(base)) { terms.clear(); ['locksmith', 'lock & key', 'lock and key', 'lockout', 'locks', 'car key', 'key duplicat', 'phone repair', 'phone fix', 'fix my phone', 'phones', 'cell phone', 'cellphone', 'iphone', 'screen repair', 'device repair', 'electronics repair'].forEach((t) => terms.add(t)); }
   else if (/local service/.test(base)) { terms.clear(); ['groom', 'pet salon', 'dog wash', 'landscap', 'lawn', 'gardener', 'painting', 'painter', 'detailing', 'detailer', 'car wash', 'auto body', 'collision', 'body shop'].forEach((t) => terms.add(t)); }
   else if (/auto ?body|collision|body shop|auto repair/.test(base)) { terms.clear(); ['auto body', 'autobody', 'collision', 'body shop', 'body & paint', 'paint and body', 'auto repair', 'auto service', 'car repair', 'mechanic'].forEach((t) => terms.add(t)); }
   else if (/roof|landscap|remodel|home service/.test(base)) { terms.clear(); ['roof', 'landscap', 'lawn care', 'hardscape', 'remodel', 'renovation', 'general contractor', 'kitchen and bath', 'home improvement', 'construction'].forEach((t) => terms.add(t)); }
@@ -609,6 +616,7 @@ async function tomtomSearch(env, what, where, offset) {
       nationalPhoneNumber: x.poi.phone ? usPhone(x.poi.phone) : '', websiteUri: site, rating: null, userRatingCount: null,
       googleMapsUri: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(x.poi.name + ' ' + (a.freeformAddress || '')),
       primaryTypeDisplayName: { text: ((x.poi.categories || [])[0] || '').replace(/\b\w/g, (c) => c.toUpperCase()) },
+      location: x.position ? { latitude: x.position.lat, longitude: x.position.lon } : null,
     };
   });
   const total = (j.summary && j.summary.totalResults) || 0;
@@ -674,7 +682,7 @@ async function enrichInstagram(env, limit = 20) {
 // Local testing only (FINDER_FAKE=1): a Google-shaped answer.
 function fakePlaces(page) {
   const mk = (i, name, site, rating, n, phone, type) => ({ id: 'fake' + i + (page ? 'b' : ''), displayName: { text: name + (page ? ' II' : '') }, formattedAddress: (100 + i) + ' W Manchester Blvd, Inglewood, CA 90301, USA', shortFormattedAddress: (100 + i) + ' W Manchester Blvd, Inglewood',
-    nationalPhoneNumber: phone, websiteUri: site, rating, userRatingCount: n, googleMapsUri: 'https://maps.google.com/?cid=' + i, primaryTypeDisplayName: { text: type }, businessStatus: 'OPERATIONAL' });
+    nationalPhoneNumber: phone, websiteUri: site, rating, userRatingCount: n, googleMapsUri: 'https://maps.google.com/?cid=' + i, primaryTypeDisplayName: { text: type }, businessStatus: 'OPERATIONAL', location: { latitude: 33.96 - i * 0.004, longitude: -118.35 + i * 0.005 } });
   const places = [
     mk(1, 'Kings Cutz', undefined, 4.9, 14, '(310) 555-0141', 'Barber shop'),
     mk(2, 'Big Al Barbers', 'https://www.instagram.com/bigal', 4.6, 38, '(310) 555-0142', 'Barber shop'),
@@ -687,6 +695,7 @@ function fakePlaces(page) {
 }
 
 /* ---- shared lead import (CSV upload + scraper/n8n endpoint) ---- */
+const geoNum = (v, max) => { const n = +v; return v != null && v !== '' && Number.isFinite(n) && Math.abs(n) <= max && n !== 0 ? Math.round(n * 1e6) / 1e6 : null; };
 async function importRows(env, { batchId, rows, startStatus, assign, skipWithSite, source }) {
   rows = Array.isArray(rows) ? rows.slice(0, 500) : [];
   startStatus = startStatus === 'new' ? 'new' : 'demo_needed';
@@ -727,10 +736,11 @@ async function importRows(env, { batchId, rows, startStatus, assign, skipWithSit
     if (em) seenEmail.add(em);
     const rep = loads ? pickRep(loads) : fixedRep;
     stmts.push(env.DB.prepare(
-      `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source,place_id,reviews)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?,?,?)`
+      `INSERT INTO leads (batch_id,business,owner,phone,phone_norm,city,category,link,status,assigned_to,created_at,updated_at,email,website,address,rating,heat,source,place_id,reviews,lat,lng)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'cold',?,?,?,?,?)`
     ).bind(batchId, business, str(r.owner, 120), str(r.phone, 40), pn, str(r.city, 80), str(r.category, 80), cleanUrl(r.link), startStatus, rep, t, t, em || null, site || null, str(r.address, 200) || null, str(r.rating, 20) || null, source || 'csv',
-      str(r.place_id, 200) || null, r.reviews != null && r.reviews !== '' && Number.isFinite(+r.reviews) ? Math.round(+r.reviews) : null));
+      str(r.place_id, 200) || null, r.reviews != null && r.reviews !== '' && Number.isFinite(+r.reviews) ? Math.round(+r.reviews) : null,
+      geoNum(r.lat, 90), geoNum(r.lng, 180)));
     inserted++;
   }
   for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
@@ -798,7 +808,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
   const r = env.FINDER_FAKE === '1' ? fakePlaces(pageToken) : await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,nextPageToken' },
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.googleMapsUri,places.primaryTypeDisplayName,places.businessStatus,places.location,nextPageToken' },
     body: JSON.stringify({ textQuery: what + ' in ' + where, pageSize: 20, ...(pageToken ? { pageToken } : {}) }),
   });
   await env.DB.prepare('INSERT INTO finder_log (user_id, query, results, created_at, provider) VALUES (?,?,?,?,?)').bind(actorId, what + ' | ' + where, 0, now(), 'google').run();
@@ -828,6 +838,7 @@ async function finderSearch(env, actorId, what, where, pageToken, siteChecks = 2
       reviews: p.userRatingCount == null ? null : p.userRatingCount, link: p.googleMapsUri || '', website: site,
       site_status: !site ? 'none' : NOT_A_SITE.test(site) ? 'social' : 'site',
       in_crm: (pn && inCrm.has(pn)) || idSeen.has(p.id), dnc: !!(pn && dnc.has(pn)),
+      lat: p.location ? p.location.latitude : null, lng: p.location ? p.location.longitude : null,
     };
   });
   // double-check "no website" ones: try the obvious domain names
@@ -842,7 +853,8 @@ const HOME_NICHES = ['roofing contractor', 'roof repair', 'roofer', 'landscaper'
 const AUTO_NICHES = ['auto body shop', 'collision repair', 'collision center', 'auto body and paint', 'body shop', 'auto repair shop', 'auto mechanic', 'car repair'];
 const LOCAL_NICHES = ['dog groomer', 'mobile dog grooming', 'pet groomer', 'landscaper', 'lawn care service', 'house painter', 'painting contractor', 'mobile detailing', 'auto detailing', 'auto body shop'];
 const LOCK_PHONE_NICHES = ['locksmith', 'mobile locksmith', 'emergency locksmith', 'car locksmith', 'cell phone repair', 'iphone repair', 'phone screen repair', 'mobile phone repair'];
-const AUTO_DEFAULTS = { enabled: false, niches: LOCK_PHONE_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 50, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
+const TINT_NICHES = ['window tinting', 'window tint shop', 'car window tint', 'ceramic window tint', 'paint protection film', 'ppf installer', 'ceramic coating', 'clear bra', 'residential window tinting', 'commercial window tinting'];
+const AUTO_DEFAULTS = { enabled: false, niches: TINT_NICHES, cities: ['Los Angeles, CA', 'Beverly Hills, CA', 'Santa Monica, CA', 'West Hollywood, CA', 'Culver City, CA', 'Pasadena, CA', 'Glendale, CA', 'Burbank, CA', 'Sherman Oaks, CA', 'Encino, CA', 'Woodland Hills, CA', 'Torrance, CA', 'Manhattan Beach, CA', 'Long Beach, CA', 'Irvine, CA'], per_night: 60, max_reviews: 50, include_social: true, any_site: false, low_review_only: true, target_ready: 200, expand: true, purge_nonfocus: false };
 async function autoConfig(env) {
   let c = {}; try { c = JSON.parse((await getSetting(env, 'auto_finder')) || '{}'); } catch { c = {}; }
   return { ...AUTO_DEFAULTS, ...c };
@@ -933,7 +945,7 @@ async function autoStep(env, { manual } = {}) {
       if (!b) { const r = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind(name, 1, now()).run(); b = { id: r.meta.last_row_id }; }
       const city = pick.where.split(',')[0].trim();
       const rows = keep.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city, category: p.category, rating: p.rating == null ? '' : String(p.rating),
-        link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
+        link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews, lat: p.lat, lng: p.lng }));
       const res = await importRows(env, { batchId: b.id, rows, startStatus: cfg.any_site || lowRev ? 'new' : 'demo_needed', assign: 'auto', skipWithSite: false, source: 'finder' });
       run.added = res.inserted || 0;
     }
@@ -1431,7 +1443,7 @@ const LEAD_PRIO = `(${REV_TIER_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1
 const REV_BUSY_SQL = 'CASE WHEN l.reviews IS NULL THEN 5 WHEN l.reviews >= 100 THEN 0 WHEN l.reviews >= 50 THEN 1 WHEN l.reviews >= 25 THEN 2 WHEN l.reviews >= 10 THEN 3 ELSE 4 END';
 const LEAD_PRIO_BUSY = `(${REV_BUSY_SQL}) * 2 + CASE WHEN ${NOSITE_SQL} THEN 0 ELSE 1 END`;
 const isMedFocus = async (env) => /med(ical|i)?\s*spa|aesthetic/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
-const isLowRevFocus = async (env) => (await isMedFocus(env)) || /local service|locksmith|phone repair/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
+const isLowRevFocus = async (env) => (await isMedFocus(env)) || /local service|locksmith|phone repair|tint|ppf/i.test(String((await getSetting(env, 'focus_niche')) ?? FOCUS_DEFAULT));
 const leadPrio = async (env) => ((await isLowRevFocus(env)) ? LEAD_PRIO : LEAD_PRIO_BUSY);
 const maxReviews = async (env) => { if (!(await isLowRevFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
@@ -1645,13 +1657,52 @@ async function api(request, env, url) {
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
               l.attempts, l.last_call_at, l.demo_url, l.demo_sent, l.assigned_to, u.name AS rep_name,
               l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at, l.tags, l.next_action_at, l.next_action,
-              l.rating, l.reviews, l.link, l.place_id, l.website, l.address, l.lane, l.facebook, l.instagram, l.xhandle, (${fx.sql}) AS focus
+              l.rating, l.reviews, l.link, l.place_id, l.website, l.address, l.lane, l.facebook, l.instagram, l.xhandle, l.lat, l.lng, l.call_notes, (${fx.sql}) AS focus
        FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${w} ${order} LIMIT ? OFFSET ?`
     ).bind(...fx.args, ...args, ...orderArgs, limit + 1, offset).all();
     const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first();
     return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
   }
 
+  if (path === '/leads/geo' && method === 'POST') {
+    // fill in map pins for leads that don't have them yet (Google place lookup, capped per day)
+    need(user, 'admin', 'rep');
+    const ids = (Array.isArray(body.ids) ? body.ids : []).map((x) => +x).filter((x) => Number.isInteger(x) && x > 0).slice(0, 25);
+    if (!ids.length) return json({ pins: [] });
+    const rows = (await env.DB.prepare(`SELECT id, business, address, city, place_id, assigned_to FROM leads WHERE id IN (${ids.map(() => '?').join(',')}) AND lat IS NULL`).bind(...ids).all()).results
+      .filter((r) => user.role === 'admin' || r.assigned_to === user.id);
+    const day = ptParts().date; let used = 0;
+    try { const g = JSON.parse((await getSetting(env, 'geo_day')) || '{}'); used = g.day === day ? +g.n || 0 : 0; } catch { used = 0; }
+    const pins = []; let calls = 0;
+    for (const r of rows) {
+      if (used + calls >= 300) break;
+      let lat = null, lng = null;
+      if (env.FINDER_FAKE === '1') { lat = 33.9 + (r.id % 17) * 0.006; lng = -118.4 + (r.id % 13) * 0.008; }
+      else if (env.GOOGLE_PLACES_KEY) {
+        try {
+          calls++;
+          if (r.place_id && !String(r.place_id).startsWith('tt:')) {
+            const res = await fetch('https://places.googleapis.com/v1/places/' + encodeURIComponent(r.place_id), { headers: { 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY, 'X-Goog-FieldMask': 'location' }, signal: AbortSignal.timeout(6000) });
+            const j = await res.json().catch(() => ({}));
+            if (j.location) { lat = j.location.latitude; lng = j.location.longitude; }
+          } else if (r.address || r.city) {
+            const res = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', signal: AbortSignal.timeout(6000),
+              headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY, 'X-Goog-FieldMask': 'places.location' },
+              body: JSON.stringify({ textQuery: r.business + ' ' + (r.address || r.city), pageSize: 1 }) });
+            const j = await res.json().catch(() => ({}));
+            const loc = j.places && j.places[0] && j.places[0].location;
+            if (loc) { lat = loc.latitude; lng = loc.longitude; }
+          }
+        } catch { /* skip this one */ }
+      }
+      lat = geoNum(lat, 90); lng = geoNum(lng, 180);
+      // 0,0 marks "looked, nothing found" so we don't pay to look again
+      await env.DB.prepare('UPDATE leads SET lat = ?, lng = ? WHERE id = ?').bind(lat == null ? 0 : lat, lng == null ? 0 : lng, r.id).run();
+      if (lat != null && lng != null) pins.push({ id: r.id, lat, lng });
+    }
+    if (calls) await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('geo_day', ?)").bind(JSON.stringify({ day, n: used + calls })).run();
+    return json({ pins, ready: !!env.GOOGLE_PLACES_KEY || env.FINDER_FAKE === '1' });
+  }
   if (path === '/leads/lanes' && method === 'GET') {
     need(user, 'admin', 'rep');
     const out = {};
@@ -2961,7 +3012,7 @@ async function api(request, env, url) {
     if (!list.length) bad('Pick some businesses first');
     const name = str(body.batch, 100) || 'Lead Finder · ' + new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric' });
     const b = await env.DB.prepare('INSERT INTO batches (name, created_by, created_at) VALUES (?,?,?)').bind(name, user.id, now()).run();
-    const rows = list.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city: p.city || '', category: p.category, rating: p.rating == null ? '' : String(p.rating), link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews }));
+    const rows = list.map((p) => ({ business: p.business, phone: p.phone, address: p.address, city: p.city || '', category: p.category, rating: p.rating == null ? '' : String(p.rating), link: p.link, website: p.website, place_id: p.place_id, reviews: p.reviews, lat: p.lat, lng: p.lng }));
     const res = await importRows(env, { batchId: b.meta.last_row_id, rows, startStatus: body.start_status, assign: body.assign || 'auto', skipWithSite: false, source: 'finder' });
     return json({ ...res, batch_id: b.meta.last_row_id, batch: name });
   }
@@ -5129,6 +5180,20 @@ const KIT_PHONEREPAIR = {
   ],
   ideas: ['How much to fix an iPhone 15 screen?', 'Can you fix it today?', 'Do you need an appointment?', 'My phone won\'t charge'],
 };
+const KIT_TINT = {
+  type: 'window tint shop', visit: 'free quote', customer: 'customer',
+  tagline: 'Ceramic tint and PPF in {city}, done clean.',
+  services: [
+    { name: 'Ceramic window tint', unit: 'project', lo: 299, hi: 799, q: 'What year, make and model is the car, and do you want the whole car or just the front two?', blurb: 'Blocks the heat, not the view. Lifetime warranty.' },
+    { name: 'Standard window tint', unit: 'project', lo: 169, hi: 399, q: 'What car is it, and how dark are you thinking?', blurb: 'Clean, bubble-free tint at a fair price.' },
+    { name: 'Windshield heat film', unit: 'project', lo: 149, hi: 399, q: 'What car is it, and do you want a clear heat film or a visor strip?', blurb: 'Clear film that keeps the cabin cool.' },
+    { name: 'Paint protection film (PPF)', unit: 'project', lo: 900, hi: 6500, q: 'What car is it, and are you thinking front end, track pack, or full body?', blurb: 'Self-healing film that stops rock chips and scratches.' },
+    { name: 'Ceramic coating', unit: 'project', lo: 600, hi: 2500, q: 'What car is it, and is the paint new or does it need correction first?', blurb: 'Deep gloss and easy washes for years.' },
+    { name: 'Home and office window film', unit: 'project', lo: 500, hi: 6000, q: 'Is it a home or a business, and about how many windows?', blurb: 'Cut the heat and glare, keep the view.' },
+  ],
+  ideas: ['How much for ceramic tint on my Civic?', 'Can I come in today?', 'What percent is legal in California?', 'How much for PPF on the front end?'],
+};
+const TINT_RE = /\btint|window film|\bppf\b|paint protection|clear bra|ceramic coat|xpel/i;
 const LOCK_RE = /locksmith|\block(s|out|smith)?\b|\bkeys?\b|rekey|safe ?(&|and) ?lock/i;
 const PHONE_RE = /\bphones?\b|\bcell\b|cellular|iphone|screen repair|device repair|electronics repair|wireless|mobile repair|tech repair|ubreakifix/i;
 const KIT_AUTOBODY = {
@@ -5186,6 +5251,7 @@ function kitProfileClean(o, type) {
 }
 // Ask Workers AI for a believable service menu for any local business type. Falls back to a plain generic menu.
 async function kitProfileAI(env, type, business, city) {
+  if (TINT_RE.test(type)) return kitProfileClean(KIT_TINT, 'window tint shop');
   if (LOCK_RE.test(type)) return kitProfileClean(KIT_LOCKSMITH, 'locksmith');
   if (PHONE_RE.test(type)) return kitProfileClean(KIT_PHONEREPAIR, 'phone repair shop');
   if (AUTOBODY_RE.test(type)) return kitProfileClean(KIT_AUTOBODY, 'auto body shop');
@@ -5214,7 +5280,7 @@ async function kitProfileAI(env, type, business, city) {
 // which kind of demo does this business get?
 function kitNicheFor(category, business) {
   const t = String(category || '') + ' ' + String(business || '');
-  if (LOCK_RE.test(t) || PHONE_RE.test(t) || AUTOBODY_RE.test(t) || ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
+  if (TINT_RE.test(t) || LOCK_RE.test(t) || PHONE_RE.test(t) || AUTOBODY_RE.test(t) || ROOF_RE.test(t) || TILE_RE.test(t) || REMODEL_RE.test(t) || JUNK_RE.test(t)) return 'custom';
   if (LANDSCAPE_RE.test(t) && !/paver|hardscape|turf install/i.test(t)) return 'custom';
   if (isMedCat(t)) return 'medspa';
   if (CONTRACTOR_RE.test(t)) return 'contractor';
@@ -5789,7 +5855,7 @@ async function kitAdmin(env, user, path, method, body, url) {
     const medFocus = await isMedFocus(env);
     if (!body.niche) body.niche = leadId ? kitNicheFor(leadCat, body.business) : (medFocus ? 'medspa' : kitNicheFor('', body.business) === 'contractor' ? 'contractor' : 'custom');
     if (body.niche === 'medspa' && !medFocus) body.niche = 'custom';
-    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || oneLine(leadCat, 60).trim() || (LOCK_RE.test(oneLine(body.business, 80)) ? 'locksmith' : PHONE_RE.test(oneLine(body.business, 80)) ? 'phone repair shop' : AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : '') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
+    if (body.niche === 'custom') body._profile = await kitProfileAI(env, bizType || (TINT_RE.test(oneLine(body.business, 80)) || TINT_RE.test(String(leadCat || '')) ? 'window tint shop' : '') || oneLine(leadCat, 60).trim() || (TINT_RE.test(oneLine(body.business, 80)) ? 'window tint shop' : LOCK_RE.test(oneLine(body.business, 80)) ? 'locksmith' : PHONE_RE.test(oneLine(body.business, 80)) ? 'phone repair shop' : AUTOBODY_RE.test(oneLine(body.business, 80)) ? 'auto body shop' : TILE_RE.test(oneLine(body.business, 80)) ? 'tile contractor' : REMODEL_RE.test(oneLine(body.business, 80)) ? 'remodeling contractor' : LANDSCAPE_RE.test(oneLine(body.business, 80)) ? 'landscaping company' : '') || oneLine(body.business, 60), oneLine(body.business, 80), oneLine(body.city, 40) || 'Los Angeles');
     const data = cleanKit(body, null);
     if (google) data.google = google;
     const slug = kitSlug(data.business), t = now();

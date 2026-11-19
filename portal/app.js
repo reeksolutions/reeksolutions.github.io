@@ -487,38 +487,120 @@
     if (l.status === 'callback' && l.callback_at) return 'Callback ' + new Date(l.callback_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     return STATUS[l.status] || l.status;
   };
+  // map library, loaded the first time the Leads page opens
+  let leafletP = null;
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (leafletP) return leafletP;
+    leafletP = new Promise((res, rej) => {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/vendor/leaflet/leaflet.css'; document.head.append(css);
+      const js = document.createElement('script'); js.src = '/vendor/leaflet/leaflet.js'; js.onload = () => res(window.L); js.onerror = () => { leafletP = null; rej(new Error('Map failed to load')); }; document.head.append(js);
+    });
+    return leafletP;
+  }
+  const hasPin = (l) => l.lat != null && l.lng != null && !(+l.lat === 0 && +l.lng === 0);
   async function viewLeads() {
     const lane = LANE_NAME[LV.lane] ? LV.lane : 'new';
     const social = LANES.social.some(([k]) => k === lane);
     const q = LV.q || '';
     const [counts, list] = await Promise.all([api('GET', '/leads/lanes').catch(() => ({})), api('GET', '/leads?limit=150&lane2=' + lane + (q ? '&q=' + encodeURIComponent(q) : ''))]);
+    const leads = list.leads;
     const chip = ([k, l]) => h('button', { type: 'button', class: 'ln-chip' + (k === lane ? ' on' : ''), onclick: () => { LV.lane = k; lvSave(); viewLeads(); } }, l, h('span', { class: 'ln-n' }, counts[k] || 0));
     const search = h('input', { type: 'search', class: 'ln-search', placeholder: 'Search this list', value: q });
     let st; search.oninput = () => { clearTimeout(st); st = setTimeout(() => { LV.q = search.value.trim(); viewLeads().then(() => { const s2 = document.querySelector('.ln-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }); }, 350); };
-    const rows = list.leads.map((l) => {
-      const tr = h('tr', { class: 'ln-row', onclick: (e) => { if (e.target.closest('button,a')) return; location.hash = '#/lead/' + l.id; } },
-        h('td', null, h('b', null, l.business), h('small', null, [l.category, l.city, l.rating ? l.rating + '★' + (l.reviews != null ? ' (' + l.reviews + ')' : '') : '', !l.website ? 'No website' : ''].filter(Boolean).join(' · '))),
-        h('td', { class: 'ln-ph' }, social ? (lane === 'email' ? (l.email || '—') : (l.phone || '—')) : (l.phone ? h('a', { href: 'tel:' + String(l.phone).replace(/[^\d+]/g, ''), onclick: (e) => e.stopPropagation() }, l.phone) : '—')),
-        h('td', null, h('span', { class: 'pill s-' + l.status }, STAGE(l))),
-        social ? h('td', null, h('button', { class: 'btn small primary', onclick: () => laneMessage(l, lane, () => viewLeads()) }, 'Message')) : null);
-      return tr;
-    });
-    const table = rows.length ? h('div', { class: 'ln-wrap' }, h('table', { class: 'ln-table' },
-      h('thead', null, h('tr', null, h('th', null, 'Business'), h('th', null, social && lane === 'email' ? 'Email' : '#'), h('th', null, 'Stage'), social ? h('th', null, '') : null)), h('tbody', null, rows)))
+
+    const mapEl = h('div', { class: 'mp-map', role: 'region', 'aria-label': 'Map of these leads' }, h('div', { class: 'mp-map-msg' }, 'Loading map…'));
+    const markers = new Map(); let map = null, selId = null;
+    const cards = new Map();
+    const tel = (p) => 'tel:' + String(p).replace(/[^\d+]/g, '');
+    const note = (l) => l.call_notes || l.next_action || '';
+    function select(id, fromMap) {
+      selId = id;
+      cards.forEach((c, k) => c.classList.toggle('on', k === id));
+      markers.forEach((m, k) => { const el = m.getElement && m.getElement(); if (el) el.classList.toggle('on', k === id); if (k === id) m.setZIndexOffset(1000); else m.setZIndexOffset(0); });
+      const l = leads.find((x) => x.id === id);
+      const m = markers.get(id);
+      if (fromMap) { const c = cards.get(id); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      else if (m && map) { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 14), { duration: 0.6 }); m.openPopup(); }
+      else if (l && !hasPin(l)) toast('No map pin for ' + l.business + ' yet.');
+    }
+    const cardFor = (l, i) => {
+      const sub = [l.rating ? '★ ' + l.rating : '', l.reviews != null ? l.reviews + (l.reviews === 1 ? ' review' : ' reviews') : '', l.city].filter(Boolean).join(' · ');
+      const n = note(l);
+      const c = h('article', { class: 'mp-card', tabindex: '0', 'data-id': l.id, onclick: (e) => { if (e.target.closest('a,button')) return; select(l.id); }, onkeydown: (e) => { if (e.key === 'Enter' && !e.target.closest('a,button')) select(l.id); } },
+        h('span', { class: 'mp-num' }, String(i + 1)),
+        h('div', { class: 'mp-body' },
+          h('b', { class: 'mp-name' }, l.business),
+          sub ? h('div', { class: 'mp-meta' }, sub) : null,
+          h('div', { class: 'mp-tags' }, h('span', { class: 'pill s-' + l.status }, STAGE(l)),
+            !String(l.website || '').trim() ? h('span', { class: 'mp-tag' }, 'No website') : null,
+            l.category ? h('span', { class: 'mp-tag dim' }, l.category) : null),
+          n ? h('p', { class: 'mp-note' }, n) : null,
+          h('div', { class: 'mp-acts' },
+            social ? h('button', { class: 'btn small primary', onclick: () => laneMessage(l, lane, () => viewLeads()) }, 'Message')
+              : l.phone ? h('a', { class: 'btn small primary', href: tel(l.phone) }, icon('phone'), l.phone) : null,
+            h('a', { class: 'btn small', href: '#/lead/' + l.id }, 'Open'),
+            l.link ? h('a', { class: 'btn small ghost', href: l.link, target: '_blank', rel: 'noopener' }, 'Google') : null)));
+      cards.set(l.id, c);
+      return c;
+    };
+    const listEl = leads.length ? h('div', { class: 'mp-list' }, leads.map(cardFor))
       : h('div', { class: 'ln-empty' }, h('b', null, q ? 'Nothing matches that search.' : social ? 'No ' + LANE_NAME[lane] + ' leads yet.' : { new: 'No new leads right now.', old: 'No old leads yet.', callback: 'No callbacks yet.', noanswer: 'No "no answer" leads right now.' }[lane]),
-        h('p', { class: 'dim small' }, social ? 'Tap Add lead to drop in someone you found.' : lane === 'new' ? 'Run the Lead Finder to pull local businesses with no website.' : 'Leads land here as you call.'),
+        h('p', { class: 'dim small' }, social ? 'Tap Add lead to drop in someone you found.' : lane === 'new' ? 'Run the Lead Finder to pull tint & PPF shops.' : 'Leads land here as you call.'),
         social ? h('button', { class: 'btn primary', onclick: () => addSocialLead(lane, viewLeads) }, '+ Add lead') : lane === 'new' ? h('a', { class: 'btn primary', href: '#/finder' }, 'Open Lead Finder') : null);
     const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
     shell('leads', [
-      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Leads'), h('h1', null, 'Leads')),
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Tint & PPF shops'), h('h1', null, 'Leads')),
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => addSocialLead(social ? lane : 'ig', () => viewLeads()) }, '+ Add lead'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing'))),
       h('section', { class: 'panel ln-lanes' },
         h('div', { class: 'ln-group' }, h('small', null, 'Cold call'), h('div', { class: 'ln-chips' }, LANES.cold.map(chip))),
         h('div', { class: 'ln-group' }, h('small', null, 'Socials'), h('div', { class: 'ln-chips' }, LANES.social.map(chip)))),
-      h('section', { class: 'panel ln-card' }, h('div', { class: 'hm-head' }, h('h3', null, LANE_NAME[lane] + (social ? ' leads' : '')), search),
-        !social ? h('p', { class: 'dim small', style: 'margin:0' }, 'Only businesses with no website or few reviews.') : null,
-        table, list.more ? h('p', { class: 'dim small' }, 'Showing the first 150. Search to find more.') : null),
+      h('div', { class: 'mp' },
+        mapEl,
+        h('section', { class: 'panel mp-side' },
+          h('div', { class: 'mp-head' }, h('div', null, h('h3', null, LANE_NAME[lane] + (social ? ' leads' : '')), h('small', { class: 'dim' }, leads.length + (list.more ? '+' : '') + (leads.length === 1 ? ' lead' : ' leads') + (!social ? ' · no website or few reviews' : ''))), search),
+          listEl, list.more ? h('p', { class: 'dim small' }, 'Showing the first 150. Search to find more.') : null)),
     ]);
+
+    // ---- map ----
+    let L;
+    try { L = await loadLeaflet(); } catch (e) { mapEl.replaceChildren(h('div', { class: 'mp-map-msg' }, 'Map couldn’t load. The list still works.')); return; }
+    if (!mapEl.isConnected) return;
+    mapEl.replaceChildren();
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    map = L.map(mapEl, { zoomControl: true, attributionControl: true, scrollWheelZoom: true }).setView([33.97, -118.33], 11);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/' + (light ? 'light_all' : 'dark_all') + '/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' }).addTo(map);
+    const addPin = (l) => {
+      if (!hasPin(l) || markers.has(l.id)) return;
+      const i = leads.indexOf(l);
+      const icon2 = L.divIcon({ className: 'mp-pin', html: '<span>' + (i + 1) + '</span>', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] });
+      const m = L.marker([+l.lat, +l.lng], { icon: icon2, title: l.business, keyboard: true }).addTo(map);
+      const pop = document.createElement('div'); pop.className = 'mp-pop';
+      const nb = document.createElement('b'); nb.textContent = l.business; pop.append(nb);
+      const meta = [l.rating ? '★ ' + l.rating : '', l.reviews != null ? l.reviews + ' reviews' : ''].filter(Boolean).join(' · ');
+      if (meta) { const s = document.createElement('small'); s.textContent = meta; pop.append(s); }
+      const row = document.createElement('div'); row.className = 'mp-pop-acts';
+      if (l.phone && !social) { const a = document.createElement('a'); a.href = tel(l.phone); a.className = 'btn small primary'; a.textContent = 'Call'; row.append(a); }
+      const o = document.createElement('a'); o.href = '#/lead/' + l.id; o.className = 'btn small'; o.textContent = 'Open'; row.append(o);
+      pop.append(row);
+      m.bindPopup(pop, { closeButton: false, offset: [0, 0] });
+      m.on('click', () => select(l.id, true));
+      markers.set(l.id, m);
+    };
+    const fit = () => { const pts = [...markers.values()].map((m) => m.getLatLng()); if (pts.length === 1) map.setView(pts[0], 14); else if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 14 }); };
+    leads.forEach(addPin); fit();
+    setTimeout(() => map && map.invalidateSize(), 60);
+    // leads without a pin yet: look them up (25 at a time) and drop them on the map
+    const missing = leads.filter((l) => l.lat == null || l.lng == null).map((l) => l.id).slice(0, 25);
+    if (missing.length) {
+      try {
+        const r = await api('POST', '/leads/geo', { ids: missing });
+        (r.pins || []).forEach((p) => { const l = leads.find((x) => x.id === p.id); if (l) { l.lat = p.lat; l.lng = p.lng; addPin(l); } });
+        if ((r.pins || []).length && mapEl.isConnected) fit();
+      } catch { /* map just shows what it has */ }
+    }
+    if (!markers.size && mapEl.isConnected) mapEl.append(h('div', { class: 'mp-map-msg over' }, leads.length ? 'No map pins for these leads yet.' : 'Pins show up here when you have leads.'));
   }
   async function viewLeadsAll() {
     const isAdmin = S.me.role === 'admin';
