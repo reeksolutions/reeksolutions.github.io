@@ -18,14 +18,14 @@ window.SITE = {
   portal: "https://reeksolutions-github-io.reekbusiness04.workers.dev"
 };
 </script>
-<title>Reekon Systems | Websites for Locksmiths &amp; Phone Repair Shops</title>
-<meta name="description" content="Websites for locksmiths and phone repair shops in Los Angeles. Built from your Google listing, live in about a week. See a free demo before you pay. Founding price $497.">
+<title>Reekon Systems | AI Receptionist for Tint &amp; PPF Shops</title>
+<meta name="description" content="An AI receptionist for window tint and PPF shops in Los Angeles. Answers every call, quotes from your price sheet and books the appointment while you work. Free demo.">
 <meta name="theme-color" content="#06070a">
 <link rel="canonical" href="https://reeksolutions.github.io/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Reekon Systems">
-<meta property="og:title" content="No website? Your next customer is calling the shop that has one.">
-<meta property="og:description" content="Websites for locksmiths and phone repair shops. Free demo built from your Google listing. Founding price $497.">
+<meta property="og:title" content="Film on the glass, phone ringing? Let AI pick up.">
+<meta property="og:description" content="AI receptionist for tint and PPF shops. Answers every call, quotes your prices, books the slot. Free demo.">
 <meta property="og:url" content="https://reeksolutions.github.io/">
 <meta property="og:image" content="https://reeksolutions.github.io/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -156,89 +156,101 @@ footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);
 .rv.in{opacity:1;transform:none}
 @media(max-width:860px){.hero{grid-template-columns:1fr}.g3,.g2,.g4,.steps{grid-template-columns:1fr}section{padding:52px 0}.sticky{display:block}body{padding-bottom:84px}.nav-cta{display:none}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}.phone{animation:none}.rv{opacity:1;transform:none;transition:none}}
+/* call mockup */
+.call{height:100%;border-radius:33px;overflow:hidden;background:linear-gradient(180deg,#10131c,#07080c);display:flex;flex-direction:column;padding:18px 14px 14px;gap:12px}
+.call-top{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);font-weight:600}
+.call-top .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.call-top .timer{margin-left:auto;font-family:"JetBrains Mono",monospace;color:var(--ink)}
+.call-who{display:flex;flex-direction:column;align-items:center;padding:6px 0 4px;border-bottom:1px solid var(--line)}
+.call-who b{font-size:16px}.call-who small{color:var(--dim);font-size:11.5px}
+.lines{display:flex;flex-direction:column;gap:8px;flex:1;overflow:hidden}
+.ln{font-size:12.5px;line-height:1.38;padding:9px 11px;border-radius:14px;max-width:88%;margin:0}
+.ln span{display:block;font:600 9.5px "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
+.ln.c{background:rgba(255,255,255,.07);align-self:flex-end;border-bottom-right-radius:4px}
+.ln.a{background:rgba(91,140,255,.18);border:1px solid rgba(91,140,255,.35);align-self:flex-start;border-bottom-left-radius:4px}
+.booked{background:var(--pop);color:var(--pop-ink);font-weight:700;font-size:12px;padding:10px 12px;border-radius:12px;line-height:1.3}
 </style>
 </head>
 <body>
 <div class="wrap">
-<nav><a class="logo" href="#top"><i></i><span>Reekon <em>Systems</em></span></a><a class="btn sm pop nav-cta" href="#start">Get my free demo</a></nav>
+<nav><a class="logo" href="#top"><i></i><span>Reekon <em>Systems</em></span></a><a class="btn sm pop nav-cta" href="#start">Hear my free demo</a></nav>
 
 <header class="hero" id="top">
  <div>
-  <div class="mono pop">Websites for locksmiths &amp; phone repair · LA</div>
-  <h1 style="margin-top:14px">No website? Your next customer is calling <span class="mix">the shop that has one.</span></h1>
-  <p class="lead">Locked out or holding a cracked phone, people search “near me” and call the first shop that looks legit. We build you that site, with tap-to-call, your Google reviews and your prices, live in about a week.</p>
-  <div class="cta-row"><a class="btn pop" href="#start">See my free demo site</a><a class="btn ghost txt" href="#start" hidden>Text me</a><a class="btn ghost" href="#price">Pricing</a></div>
-  <div class="pills"><span class="pill">Free demo <b>before</b> you pay</span><span class="pill">Built from your Google page</span><span class="pill">Live in ~7 days</span></div>
+  <div class="mono pop">AI receptionist for tint &amp; PPF shops · LA</div>
+  <h1 style="margin-top:14px">Film on the glass, phone ringing? <span class="mix">Let AI pick up.</span></h1>
+  <p class="lead">Every “how much for ceramic?” call you can’t grab goes to the next tint shop on Google. Our AI receptionist answers every call, quotes from your price sheet and books the slot while you work.</p>
+  <div class="cta-row"><a class="btn pop" href="#start">Hear a demo for my shop</a><a class="btn ghost txt" href="#start" hidden>Text me</a><a class="btn ghost" href="#price">Pricing</a></div>
+  <div class="pills"><span class="pill">Answers <b>every</b> call, 24/7</span><span class="pill">Quotes your prices</span><span class="pill">Built by a guy who worked in a tint shop</span></div>
  </div>
  <div class="demo">
-  <div class="switch" role="group" aria-label="Pick a sample"><button type="button" aria-pressed="true" data-k="lock">Locksmith</button><button type="button" aria-pressed="false" data-k="phone">Phone repair</button></div>
-  <div class="phone" aria-label="Sample website on a phone">
-   <div class="scr" id="scr">
-    <div class="bar"><span id="m-name" style="all:unset">Keystone Lock &amp; Key</span><span>Call now</span></div>
-    <div class="ph"><svg id="m-ic" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></svg><div class="badge" id="m-badge">★ 4.8 · Google reviews</div></div>
-    <div class="tx"><h4 id="m-h">Locked out? We’re there in 30 min.</h4><p id="m-p">24/7 lockouts, car keys and rekeys across Inglewood &amp; South LA.</p></div>
-    <div class="bt"><i>Call now</i><i>Text us</i></div>
-    <ul id="m-list"></ul>
-    <div class="call" id="m-call">Tap to call · open 24/7</div>
+  <div class="switch" role="group" aria-label="Pick a sample call"><button type="button" aria-pressed="true" data-k="tint">Ceramic tint call</button><button type="button" aria-pressed="false" data-k="ppf">PPF call</button></div>
+  <div class="phone" aria-label="Sample call handled by the AI receptionist">
+   <div class="call">
+    <div class="call-top"><span class="dot"></span><span id="c-shop">Southside Tint Co.</span><span class="timer" id="c-time">0:42</span></div>
+    <div class="call-who"><b>AI receptionist</b><small>answering for the shop</small></div>
+    <div class="lines" id="c-lines"></div>
+    <div class="booked" id="c-booked"></div>
    </div>
   </div>
-  <div class="sample">Sample design with a made-up shop name. Yours uses your real info.</div>
+  <div class="sample">Sample call with a made-up shop. Yours uses your shop name and your prices.</div>
  </div>
 </header>
 
 <section id="pain" class="rv">
  <div class="mono">What happens now</div>
- <h2 style="margin-top:12px">Customers are looking for you. They just can’t find much.</h2>
- <p class="lead">A Google listing with no website gives people nothing to go on. So they tap the next shop.</p>
+ <h2 style="margin-top:12px">The calls you miss are the ones that would’ve paid.</h2>
+ <p class="lead">Tint customers price shop. If nobody answers, they don’t leave a voicemail. They call the next shop.</p>
  <div class="grid g3">
-  <div class="card bad"><div class="n">01 · The search</div><h3>“Locksmith near me”</h3><p>They’re stressed and in a hurry. They pick the shop with a real website, clear prices and a big call button.</p></div>
-  <div class="card bad"><div class="n">02 · The doubt</div><h3>No prices, no proof</h3><p>Can’t see what a screen fix or a lockout costs, or that you’re legit? They keep scrolling.</p></div>
-  <div class="card bad"><div class="n">03 · The miss</div><h3>Gone to the next shop</h3><p>You never know it happened. No missed call, no message. Just a job someone else got.</p></div>
+  <div class="card bad"><div class="n">01 · Mid-install</div><h3>Gloves wet, film on the glass</h3><p>You can’t stop a windshield to grab the phone. That call rings out.</p></div>
+  <div class="card bad"><div class="n">02 · Price shoppers</div><h3>They call three shops</h3><p>“How much for ceramic on my Civic?” The first shop that answers usually gets the car.</p></div>
+  <div class="card bad"><div class="n">03 · After hours</div><h3>Nobody picks up at 7 PM</h3><p>People call after work. Your shop’s closed, so they book somewhere that answers.</p></div>
  </div>
- <div class="math"><span>1 lost job a week</span><span>×</span><span>$150</span><span>=</span><b>$7,800 a year</b></div>
- <p class="fine">Example numbers to show the math. One extra job a month covers the founding price.</p>
+ <div class="math"><span>2 missed ceramic jobs a week</span><span>×</span><span>$400</span><span>=</span><b>$41,600 a year</b></div>
+ <p class="fine">Example numbers to show the math. One saved PPF job can pay for a year.</p>
 </section>
 
 <section class="rv">
- <div class="mono">What you get</div>
- <h2 style="margin-top:12px">A site that turns searches into calls.</h2>
+ <div class="mono">What it does</div>
+ <h2 style="margin-top:12px">Like a front desk that never puts the phone down.</h2>
  <div class="grid g2">
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><div><h3>Tap-to-call and tap-to-text</h3><p>Big buttons on every screen. One tap and they’re talking to you.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></div><div><h3>Your real Google reviews &amp; photos</h3><p>Pulled from your Google page so people see you’re legit right away.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><div><h3>Services and price ranges</h3><p>Lockouts, rekeys, car keys, screens, batteries, charging ports, whatever you do.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/></svg></div><div><h3>Hours, service area and map</h3><p>Set up so Google understands where you work and links it to your listing.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div><div><h3>Made for phones first</h3><p>Fast and clean on a phone, because that’s where your customers are.</p></div></div>
-  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></div><div><h3>Changes by text</h3><p>New price or new hours? Text us and it gets updated.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></div><div><h3>Answers every call</h3><p>Picks up when you can’t: mid-install, at lunch, after close. Sounds natural, not robotic.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><h3>Quotes from your price sheet</h3><p>By car size and film: standard, ceramic, windshield, PPF, coating. Only your prices, never a guess.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div><div><h3>Books the appointment</h3><p>Gets the car, the service and a time that works, then puts it on your calendar.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><h3>Texts you the details</h3><p>Name, number, car and what they want, the second the call ends.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/></svg></div><div><h3>Handles the same questions all day</h3><p>Shades, ceramic vs. regular, how long it takes, warranty, where you’re located.</p></div></div>
+  <div class="card feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5h7M7.5 3v2c0 4-2 7-4 8M5 9c1 2 3 3.5 6 4M13 20l4-9 4 9M14.5 17h5"/></svg></div><div><h3>English or Spanish</h3><p>Answers in whatever language your customer calls in.</p></div></div>
  </div>
 </section>
 
 <section class="rv">
  <div class="mono">How it works</div>
- <h2 style="margin-top:12px">See it first. Pay only if you love it.</h2>
+ <h2 style="margin-top:12px">Call your own demo before you pay a dollar.</h2>
  <div class="steps">
-  <div class="step"><h3>Send your shop name</h3><p>Fill out the form or DM us. We find your Google page ourselves.</p></div>
-  <div class="step"><h3>Get your free demo</h3><p>We build a demo from your real Google info and send you the link, usually within a day.</p></div>
-  <div class="step"><h3>Go live this week</h3><p>Like it? We add your changes, connect your domain and launch.</p></div>
+  <div class="step"><h3>Send your shop name</h3><p>Fill out the form or DM us. We pull your info from Google.</p></div>
+  <div class="step"><h3>Call your free demo</h3><p>We build one with your shop’s name and services. Call it and ask it anything a customer would.</p></div>
+  <div class="step"><h3>Live this week</h3><p>We load your price sheet, set it to pick up when you don’t, and you’re covered.</p></div>
  </div>
 </section>
 
 <section id="price" class="rv">
  <div class="mono">Pricing</div>
- <h2 style="margin-top:12px">Founding-client prices for LA shops.</h2>
- <p class="lead">One-time setup, plus a small monthly plan for hosting and changes. We tell you the monthly before you start.</p>
+ <h2 style="margin-top:12px">Founding-shop prices.</h2>
+ <p class="lead">One saved ceramic or PPF job a month covers it.</p>
  <div class="grid g2" style="margin-top:36px">
-  <div class="card price">
-   <h3>Website</h3>
-   <div class="amt"><b>$497</b><s>$997</s></div><div class="sub">one-time setup</div>
-   <ul><li>Custom site built from your Google page</li><li>Tap-to-call, tap-to-text, reviews, prices</li><li>Google-ready setup and map</li><li>Live in about 7 days</li></ul>
-   <a class="btn ghost" href="#start" data-plan="Website">Start with a free demo</a>
-  </div>
   <div class="card price best">
-   <span class="flag">Never miss a call</span>
-   <h3>Website + AI receptionist</h3>
-   <div class="amt"><b>$1,497</b><s>$2,997</s></div><div class="sub">one-time setup</div>
-   <ul><li>Everything in Website</li><li>AI answers your calls 24/7, even mid-job</li><li>Texts back missed calls in seconds</li><li>Takes the address, the job and a callback number for you</li></ul>
-   <a class="btn pop" href="#start" data-plan="Website + AI">Start with a free demo</a>
+   <span class="flag">Most shops start here</span>
+   <h3>AI receptionist</h3>
+   <div class="amt"><b>$997</b></div><div class="sub">setup, then $297 a month</div>
+   <ul><li>Answers every call, 24/7</li><li>Quotes from your price sheet</li><li>Books appointments and texts you the details</li><li>English and Spanish</li></ul>
+   <a class="btn pop" href="#start" data-plan="AI receptionist">Hear my free demo</a>
+  </div>
+  <div class="card price">
+   <h3>AI receptionist + website</h3>
+   <div class="amt"><b>$1,497</b></div><div class="sub">setup, then $297 a month</div>
+   <ul><li>Everything in AI receptionist</li><li>A clean site with your prices, reviews and tap-to-call</li><li>Built from your Google page</li><li>Great if you have no site or an old one</li></ul>
+   <a class="btn ghost" href="#start" data-plan="AI receptionist + website">Hear my free demo</a>
   </div>
  </div>
 </section>
@@ -246,17 +258,17 @@ footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);
 <section id="start" class="rv">
  <div class="formcard grid g2" style="margin-top:0;align-items:start">
   <div>
-   <div class="mono pop">Free demo site</div>
-   <h2 style="margin-top:12px">See your website before you spend a dollar.</h2>
-   <p class="lead" style="margin-top:16px">Tell us your shop. We build a demo from your Google page and text you the link.</p>
+   <div class="mono pop">Free demo</div>
+   <h2 style="margin-top:12px">Hear it answer for your shop.</h2>
+   <p class="lead" style="margin-top:16px">Tell us your shop. We build a demo with your name and services and text you the number to call.</p>
    <p class="fine" style="margin-top:20px">Rather DM? Message <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
   </div>
   <form id="f" novalidate>
-   <div class="lbl">What kind of shop?</div>
+   <div class="lbl">What does your shop do?</div>
    <div class="chips">
-    <label><input type="radio" name="type" value="Locksmith" checked><span>Locksmith</span></label>
-    <label><input type="radio" name="type" value="Phone repair"><span>Phone repair</span></label>
-    <label><input type="radio" name="type" value="Other"><span>Other</span></label>
+    <label><input type="radio" name="type" value="Auto tint" checked><span>Auto tint</span></label>
+    <label><input type="radio" name="type" value="Tint + PPF/ceramic"><span>Tint + PPF / ceramic</span></label>
+    <label><input type="radio" name="type" value="Home & commercial film"><span>Home &amp; commercial</span></label>
    </div>
    <input name="name" placeholder="Your name" autocomplete="name" required aria-label="Your name">
    <input name="biz" placeholder="Shop name" autocomplete="organization" required aria-label="Shop name">
@@ -273,25 +285,25 @@ footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);
 <section class="rv">
  <h2>Questions</h2>
  <div style="margin-top:20px">
-  <details><summary>Is the demo really free?</summary><p>Yes. We build it from your Google page and send you the link. If you don’t want it, you don’t pay anything.</p></details>
-  <details><summary>I already have Facebook or Instagram. Why a website?</summary><p>Keep them. But when someone searches Google for a locksmith or phone repair, a website with your prices and a call button is what makes them pick you. Your socials can link to it too.</p></details>
-  <details><summary>How fast can it be live?</summary><p>The demo usually comes within a day. After you say yes, most sites go live in about a week.</p></details>
-  <details><summary>Will it get me to the top of Google?</summary><p>We set it up the way Google likes and connect it to your Google listing. Rankings take time and nobody honest can promise #1, but having a real site gives you a much better shot than not having one.</p></details>
-  <details><summary>What’s the AI receptionist?</summary><p>An AI voice that picks up when you can’t, like when you’re under a dashboard or mid-repair. It answers questions, takes the job details and texts you. You decide what it says.</p></details>
-  <details><summary>What does the monthly plan cover?</summary><p>Hosting, keeping the site running, and changes you text us. We give you the exact amount before you start, with no surprises.</p></details>
+  <details><summary>Will it sound like a robot?</summary><p>No. It talks like a friendly front desk, and you hear it yourself on the demo before you decide anything.</p></details>
+  <details><summary>What if it quotes the wrong price?</summary><p>It only quotes from the price sheet you give us, by car size and film. If it’s not sure, it books a look-over instead of guessing.</p></details>
+  <details><summary>What if the customer wants to talk to me?</summary><p>It takes their name and number and texts you right away so you can call back between cars.</p></details>
+  <details><summary>Do I need a new phone number?</summary><p>No. Your number stays the same. Calls you don’t pick up get forwarded to the AI, so you can still answer when you’re free.</p></details>
+  <details><summary>Does it speak Spanish?</summary><p>Yes. It answers in English or Spanish, depending on how the customer talks.</p></details>
+  <details><summary>Is the demo really free?</summary><p>Yes. We build it with your shop name and services and send it to you. If it’s not for you, you don’t pay anything.</p></details>
  </div>
 </section>
 
 <section class="final rv">
- <h2>Your competitors’ sites are getting your calls tonight.</h2>
- <p class="lead" style="margin-inline:auto">Get your free demo and see what yours would look like.</p>
- <div class="cta-row" style="justify-content:center"><a class="btn pop" href="#start">See my free demo site</a></div>
+ <h2>Tonight, someone’s calling about ceramic tint.</h2>
+ <p class="lead" style="margin-inline:auto">Make sure your shop is the one that answers.</p>
+ <div class="cta-row" style="justify-content:center"><a class="btn pop" href="#start">Hear a demo for my shop</a></div>
  <p class="fine">Or DM <a href="" class="ig" style="color:var(--acc2)"></a> on Instagram.</p>
 </section>
 
 <footer><span>© <span id="yr"></span> Reekon Systems · <span id="city"></span></span><span><a href="" id="em" style="text-decoration:none"></a></span></footer>
 </div>
-<div class="sticky"><a class="btn pop" href="#start">Get my free demo site</a></div>
+<div class="sticky"><a class="btn pop" href="#start">Hear my free demo</a></div>
 <script>
 const S=window.SITE,$=id=>document.getElementById(id);
 $("yr").textContent=new Date().getFullYear();$("city").textContent=S.city;
@@ -300,20 +312,19 @@ $("em").href="mailto:"+S.email;$("em").textContent=S.email;
 const digits=String(S.phone||"").replace(/\D/g,"");
 if(digits.length>=10)document.querySelectorAll(".txt").forEach(a=>{a.hidden=false;a.href="sms:+1"+digits.slice(-10);a.textContent="Text me";});
 
-/* sample site switcher (made-up shops) */
-const KEY='<circle cx="22" cy="32" r="10"/><path d="M32 32h24M48 32v8M54 32v6"/>';
-const PH='<rect x="20" y="8" width="24" height="48" rx="5"/><path d="M28 50h8M26 16l12 14M38 18l-6 8"/>';
-const M={
- lock:{name:"Keystone Lock &amp; Key",ic:KEY,h:"Locked out? We’re there in 30 min.",p:"24/7 lockouts, car keys and rekeys across Inglewood &amp; South LA.",sk:"#1d3557",hero:"linear-gradient(135deg,#1d3557,#457b9d)",badge:"★ 4.8 · Google reviews",call:"Tap to call · open 24/7",list:[["Home lockout","from $85"],["Car key replacement","from $149"],["Rekey locks","from $25/lock"]]},
- phone:{name:"Fix-It Phone Lab",ic:PH,h:"Cracked screen? Fixed in 45 min.",p:"iPhone &amp; Samsung screens, batteries and charging ports. Walk-ins welcome.",sk:"#2b2d42",hero:"linear-gradient(135deg,#2b2d42,#5b8cff)",badge:"★ 4.9 · Google reviews",call:"Tap to call · walk-ins till 8 PM",list:[["Screen repair","from $79"],["Battery swap","from $59"],["Charging port","from $49"]]}
+/* sample calls (made-up shop) */
+const C={
+ tint:{time:"0:48",lines:[["c","Hey, how much for ceramic tint on a 2022 Civic?"],["a","Great choice. Ceramic on a sedan, all windows, is $399 with a lifetime warranty. Want the front windshield heat film too?"],["c","Just the windows. Can I come Saturday?"],["a","I have Saturday at 10 AM or 1 PM. Which works?"],["c","10 is good."]],booked:"Booked · Sat 10:00 AM · 2022 Civic · Ceramic, all windows"},
+ ppf:{time:"1:05",lines:[["c","What do you charge for PPF on a new Model Y?"],["a","Front end, that’s full hood, fenders, bumper and mirrors, is $1,450. Full body is $5,200. Which are you thinking?"],["c","Front end. Is it self-healing?"],["a","Yes, light scratches heal with heat. I can get you in Tuesday at 9 AM, it takes the day. Want it?"],["c","Yeah, book it."]],booked:"Booked · Tue 9:00 AM · Model Y · PPF front end"}
 };
-function show(k){const m=M[k],s=$("scr");s.style.setProperty("--sk",m.sk);s.style.setProperty("--shero",m.hero);
- $("m-name").innerHTML=m.name;$("m-ic").innerHTML=m.ic;$("m-h").textContent=m.h;$("m-p").innerHTML=m.p;$("m-badge").textContent=m.badge;$("m-call").textContent=m.call;
- $("m-list").innerHTML=m.list.map(([a,b])=>`<li>${a}<b>${b}</b></li>`).join("");
+let cur="tint",auto=true;
+function show(k){cur=k;const c=C[k];$("c-time").textContent=c.time;
+ $("c-lines").innerHTML=c.lines.map(([w,t])=>`<p class="ln ${w}"><span>${w==="a"?"AI":"Caller"}</span>${t}</p>`).join("");
+ $("c-booked").textContent="✓ "+c.booked;
  document.querySelectorAll(".switch button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));}
 document.querySelectorAll(".switch button").forEach(b=>b.addEventListener("click",()=>{show(b.dataset.k);auto=false}));
-let auto=true;show("lock");
-if(!matchMedia("(prefers-reduced-motion: reduce)").matches)setInterval(()=>{if(auto)show(document.querySelector('.switch [aria-pressed="true"]').dataset.k==="lock"?"phone":"lock")},4500);
+show("tint");
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches)setInterval(()=>{if(auto)show(cur==="tint"?"ppf":"tint")},6000);
 
 /* reveal on scroll */
 const io="IntersectionObserver" in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12}):null;
@@ -328,9 +339,9 @@ $("f").addEventListener("submit",async e=>{e.preventDefault();
  const f=e.target,d=Object.fromEntries(new FormData(f)),st=$("fs");
  if(!d.name.trim()||!d.biz.trim()||!d.phone.trim()){st.textContent="Please fill in your name, shop and phone.";st.style.color="var(--bad)";return}
  st.style.color="";st.textContent="Sending…";
- const msg=["Free demo request","Type: "+d.type,d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
+ const msg=["Free demo request (AI receptionist)","Shop: "+d.type,d.plan?"Interested in: "+d.plan:"",d.link?"Google/city: "+d.link:""].filter(Boolean).join(" | ");
  const payload={name:d.name,biz:d.biz,phone:d.phone,msg,hp:d.hp,src:SRC};
- const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the link.";};
+ const done=()=>{f.reset();st.textContent="Got it. We’re building your demo and will text you the number to call.";};
  if(S.portal){try{const r=await fetch(S.portal+"/site/inquiry",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(payload)});const j=await r.json().catch(()=>({}));if(r.ok){done();return}
   if(j&&j.error&&r.status<500){st.textContent=j.error;st.style.color="var(--bad)";return}}catch(_){}}
  if(S.formEndpoint){try{const r=await fetch(S.formEndpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(payload)});if(r.ok){done();return}}catch(_){}}

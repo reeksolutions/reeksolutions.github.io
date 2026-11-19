@@ -5034,7 +5034,7 @@ async function handleSite(request, env, url) {
     const all = await env.DB.prepare("SELECT COUNT(*) AS n FROM site_events WHERE day = ? AND kind = 'lead'").bind(day).first();
     if (mine.n >= 3 || all.n >= 60) return out({ error: 'We already have your request. We will call you today.' }, 429);
     const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
-    const action = /demo request/i.test(msg) ? 'Asked for a free demo website on your landing page. Build the demo and text them the link today.' : 'Asked for a free audit on your website. Call them back today.';
+    const action = /demo request/i.test(msg) ? 'Asked for a free demo on your landing page. Build their demo in Demo Studio and text it to them today.' : 'Asked for a free audit on your website. Call them back today.';
     const have = await env.DB.prepare('SELECT id FROM leads WHERE phone_norm = ? LIMIT 1').bind(pn).first();
     let leadId;
     if (have) {
