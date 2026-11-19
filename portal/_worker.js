@@ -92,7 +92,7 @@ const SCHEMA = [
 const DEAL_COLUMNS = { package: 'TEXT', created_by: 'INTEGER', mrr_cents: 'INTEGER NOT NULL DEFAULT 0' };
 const TRACKER_COLUMNS = { texts: 'INTEGER NOT NULL DEFAULT 0', dms: 'INTEGER NOT NULL DEFAULT 0', posts: 'INTEGER NOT NULL DEFAULT 0', refs: 'INTEGER NOT NULL DEFAULT 0' };
 // Stage 3 columns added to leads (only if missing — never drops data).
-const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT' };
+const LEAD_COLUMNS = { email_step: 'INTEGER', email_status: 'TEXT', email_next_at: 'TEXT', email_last_at: 'TEXT', place_id: 'TEXT', reviews: 'INTEGER', tags: 'TEXT', next_action_at: 'TEXT', next_action: 'TEXT', source: 'TEXT', email: 'TEXT', website: 'TEXT', address: 'TEXT', rating: 'TEXT', heat: "TEXT DEFAULT 'cold'", emailed_at: 'TEXT', demo_views: 'INTEGER NOT NULL DEFAULT 0', demo_viewed_at: 'TEXT', call_notes: 'TEXT', instagram: 'TEXT', ig_checked_at: 'TEXT', lane: 'TEXT', facebook: 'TEXT', xhandle: 'TEXT' };
 
 // Stage 4 columns added to users: a daily goal (calls/day for reps, demos/day for devs).
 const USER_COLUMNS = { daily_goal: 'INTEGER NOT NULL DEFAULT 0' };
@@ -1285,10 +1285,25 @@ async function handleIngest(request, env) {
 // shared lead filters (list + export)
 // leads outside the niche that nobody has worked stay out of the list and board (search or ?all=1 still finds them)
 function hideNonFocus(w, args, fx, p) {
-  if (p.get('all') === '1' || p.get('q')) return { w, args };
+  if (p.get('all') === '1' || p.get('q') || SOCIAL_LANES.includes(p.get('lane2'))) return { w, args };
   const c = `(l.status NOT IN ('new','demo_needed','demo_ready') OR ${fx.sql})`;
   return { w: w ? w + ' AND ' + c : 'WHERE ' + c, args: args.concat(fx.args) };
 }
+const LAST_OUT = "(SELECT c.outcome FROM calls c WHERE c.lead_id = l.id AND c.outcome NOT IN ('emailed','texted','dmed') ORDER BY c.id DESC LIMIT 1)";
+const COLD_BASE = "COALESCE(l.lane,'') = '' AND (COALESCE(TRIM(l.website),'') = '' OR COALESCE(l.reviews,0) <= 50)";
+function laneSql(k) {
+  return ({
+    new: `${COLD_BASE} AND l.status IN ('new','demo_needed','demo_ready') AND COALESCE(l.attempts,0) = 0`,
+    noanswer: `${COLD_BASE} AND l.status NOT IN ('callback','booked','call2','won','lost','not_interested') AND ${LAST_OUT} IN ('no_answer','voicemail')`,
+    callback: `${COLD_BASE} AND l.status = 'callback'`,
+    old: `${COLD_BASE} AND COALESCE(l.attempts,0) > 0 AND l.status != 'callback' AND COALESCE(${LAST_OUT},'') NOT IN ('no_answer','voicemail')`,
+    email: "(l.lane = 'email' OR COALESCE(TRIM(l.email),'') != '') AND l.status NOT IN ('won','lost')",
+    fb: "(l.lane = 'fb' OR COALESCE(TRIM(l.facebook),'') != '') AND l.status NOT IN ('won','lost')",
+    ig: "(l.lane = 'ig' OR COALESCE(TRIM(l.instagram),'') != '') AND l.status NOT IN ('won','lost')",
+    x: "(l.lane = 'x' OR COALESCE(TRIM(l.xhandle),'') != '') AND l.status NOT IN ('won','lost')",
+  })[k] || '';
+}
+const SOCIAL_LANES = ['email', 'fb', 'ig', 'x'];
 function leadFilter(p, user) {
   const where = [], args = [];
   if (user.role === 'rep') { where.push('l.assigned_to = ?', "l.status != 'dnc'"); args.push(user.id); }
@@ -1315,6 +1330,8 @@ function leadFilter(p, user) {
   if (p.get('contact') === 'phone') where.push("l.phone_norm IS NOT NULL AND l.phone_norm != ''");
   if (p.get('contact') === 'unemailed') where.push("l.email IS NOT NULL AND l.email != '' AND l.emailed_at IS NULL");
   // follow-up lanes after a dialing session
+  // Leads page lanes (Marquise's sketch): cold call = new / old / callback / no answer, socials = email / fb / ig / x
+  const LANE = laneSql(p.get('lane2')); if (LANE) where.push(LANE);
   if (p.get('contact') === 'to_dm') where.push("COALESCE(l.attempts,0) > 0 AND l.status NOT IN ('won','lost','booked','call2') AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome IN ('dmed','texted','emailed'))");
   if (p.get('contact') === 'dmed') where.push("EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome IN ('dmed','texted')) AND l.status NOT IN ('won','lost')");
   if (p.get('contact') === 'has_email') where.push("l.email IS NOT NULL AND l.email != '' AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id AND c.outcome = 'emailed') AND l.status NOT IN ('won','lost')");
@@ -1613,13 +1630,43 @@ async function api(request, env, url) {
       `SELECT l.id, l.business, l.owner, l.phone, l.city, l.category, l.status, l.callback_at, l.booked_at,
               l.attempts, l.last_call_at, l.demo_url, l.demo_sent, l.assigned_to, u.name AS rep_name,
               l.email, COALESCE(l.heat,'cold') AS heat, l.emailed_at, l.demo_views, l.demo_viewed_at, l.tags, l.next_action_at, l.next_action,
-              l.rating, l.reviews, l.link, l.place_id, l.website, l.address, (${fx.sql}) AS focus
+              l.rating, l.reviews, l.link, l.place_id, l.website, l.address, l.lane, l.facebook, l.instagram, l.xhandle, (${fx.sql}) AS focus
        FROM leads l LEFT JOIN users u ON u.id = l.assigned_to ${w} ${order} LIMIT ? OFFSET ?`
     ).bind(...fx.args, ...args, ...orderArgs, limit + 1, offset).all();
     const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first();
     return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
   }
 
+  if (path === '/leads/lanes' && method === 'GET') {
+    need(user, 'admin', 'rep');
+    const out = {};
+    for (const k of ['new', 'old', 'callback', 'noanswer', 'email', 'fb', 'ig', 'x']) {
+      const p = new URLSearchParams(); p.set('lane2', k);
+      let { w, args } = leadFilter(p, user);
+      ({ w, args } = hideNonFocus(w, args, focusSql(await focusTerms(env)), p));
+      out[k] = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads l ${w}`).bind(...args).first()).n;
+    }
+    return json(out);
+  }
+  if (path === '/leads/social' && method === 'POST') {
+    // email / Facebook / Instagram / X leads you find by hand get dropped in here
+    need(user, 'admin', 'rep');
+    const lane = SOCIAL_LANES.includes(body.lane) ? body.lane : bad('Pick Email, Facebook, Instagram or X');
+    const business = str(body.business, 120); if (!business) bad('Business name is required');
+    const handle = str(body.handle, 200).trim();
+    let ig = null, fb = null, xh = null;
+    const urlish = (h, base) => (/^https?:\/\//i.test(h) ? h : base + h.replace(/^@/, ''));
+    if (lane === 'ig' && handle) ig = cleanUrl(urlish(handle.replace(/^(www\.)?instagram\.com\//i, ''), 'https://instagram.com/'));
+    if (lane === 'fb' && handle) fb = cleanUrl(urlish(handle.replace(/^(www\.)?facebook\.com\//i, ''), 'https://facebook.com/'));
+    if (lane === 'x' && handle) xh = cleanUrl(urlish(handle.replace(/^(www\.)?(x|twitter)\.com\//i, ''), 'https://x.com/'));
+    const email = str(body.email, 160).trim().toLowerCase() || null;
+    if (lane === 'email' && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email || '')) bad('Add a real email address');
+    const pn = normPhone(str(body.phone, 40)) || null;
+    const t = now();
+    const r = await env.DB.prepare(`INSERT INTO leads (business, owner, phone, phone_norm, city, category, status, assigned_to, created_at, updated_at, email, instagram, facebook, xhandle, lane, source, heat, call_notes)
+      VALUES (?,?,?,?,?,?,'new',?,?,?,?,?,?,?,?,?, 'warm', ?)`).bind(business, str(body.owner, 80) || null, str(body.phone, 40) || null, pn, str(body.city, 60) || null, str(body.category, 60) || null, user.id, t, t, email, ig, fb, xh, lane, lane, str(body.notes, 500) || null).run();
+    return json({ id: r.meta.last_row_id });
+  }
   if (path === '/leads/board' && method === 'GET') {
     need(user, 'admin', 'rep');
     const p = new URLSearchParams(url.searchParams); p.set('status', 'all_board');
@@ -1694,6 +1741,8 @@ async function api(request, env, url) {
       sets.push('next_action_at = ?'); args.push(v);
     }
     if (body.next_action !== undefined) { sets.push('next_action = ?'); args.push(str(body.next_action, 140) || null); }
+    if (body.facebook !== undefined) { let v = str(body.facebook, 200).trim(); if (v && !/^https?:\/\//i.test(v)) v = 'https://facebook.com/' + v.replace(/^@/, ''); sets.push('facebook = ?'); args.push(v ? cleanUrl(v) : null); }
+    if (body.xhandle !== undefined) { let v = str(body.xhandle, 200).trim(); if (v && !/^https?:\/\//i.test(v)) v = 'https://x.com/' + v.replace(/^@/, ''); sets.push('xhandle = ?'); args.push(v ? cleanUrl(v) : null); }
     if (body.instagram !== undefined) {
       let v = str(body.instagram, 200).trim();
       if (v) { v = v.replace(/^@/, ''); const m = v.match(/instagram\.com\/([A-Za-z0-9._]+)/i); v = m ? m[1] : v; if (!/^[A-Za-z0-9._]{1,30}$/.test(v)) bad('That does not look like an Instagram handle'); v = 'https://instagram.com/' + v; }

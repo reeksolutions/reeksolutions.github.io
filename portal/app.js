@@ -337,7 +337,7 @@
     }
     if (!S.me) return renderAuth();
     const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
-    const extra = { admin: ['overview', 'lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
+    const extra = { admin: ['overview', 'allleads', 'lab', 'leads', 'sell', 'create', 'crew', 'more', 'calendar', 'rebrief', 'cards', 'settings', 'content', 'tracker', 'recordings', 'studio', 'emailbot', 'account', 'lead', 'upload', 'batches', 'users', 'script', 'demo', 'callbacks', 'deals', 'rep', 'integrations', 'demos', 'finder'], rep: ['lead', 'demo', 'account', 'studio', 'recordings'], dev: ['lead', 'demo'] }[S.me.role] || [];
     const allowed = tabsFor(S.me.role).map((t) => t[0]).concat(extra);
     if (!allowed.includes(route)) { location.hash = '#/' + home(); return; }
     try {
@@ -363,6 +363,7 @@
         case 'sell': case 'create': case 'crew': return viewCategory(route);
         case 'script': return await viewScript();
         case 'leads': return await viewLeads();
+        case 'allleads': return await viewLeadsAll();
         case 'lead': return await viewLead(+arg);
         case 'callbacks': return await viewCallbacks();
         case 'calendar': return await viewCalendar();
@@ -429,7 +430,97 @@
   const STAGE_NAME = Object.fromEntries(STAGES);
   const HEAT_DOT = (k) => h('i', { class: 'hdot ' + (k || 'cold'), title: (HEAT_LABEL[k || 'cold'] || '').replace(/^\S+\s/, '') });
 
+  /* ================= Leads (Marquise's sketch): cold call lanes + socials lanes, simple table ================= */
+  const LANES = { cold: [['new', 'New'], ['old', 'Old'], ['callback', 'Callback'], ['noanswer', 'No answer']], social: [['email', 'Email'], ['fb', 'Facebook'], ['ig', 'Instagram'], ['x', 'X']] };
+  const LANE_NAME = Object.fromEntries([...LANES.cold, ...LANES.social]);
+  const LV = (() => { try { return JSON.parse(localStorage.getItem('rs_lanes') || '{}'); } catch { return {}; } })();
+  const lvSave = () => { try { localStorage.setItem('rs_lanes', JSON.stringify({ lane: LV.lane })); } catch { /* ok */ } };
+  // the message for each lead and each kind of demo; DMs are short, emails have a subject
+  function laneMsg(lane, L, kind, link, me1) {
+    const biz = L.business, first = L.owner ? String(L.owner).split(/\s+/)[0] : '';
+    const what = { demo: 'a free demo', site: 'a website', voice: 'an AI receptionist that answers your calls' }[kind];
+    const line = { demo: 'It shows the website and the AI receptionist I set up for you.', site: 'It has your services, your Google rating and a call button, and it works great on phones.', voice: 'Call it and talk to it like a customer. It answers in your business name and books the job.' }[kind];
+    if (lane === 'email') return { subject: kind === 'voice' ? 'I built ' + biz + ' an AI receptionist' : 'I built a website for ' + biz, body: 'Hi' + (first ? ' ' + first : '') + ',\n\nI\'m ' + me1 + ', I\'m local here in LA. I noticed ' + biz + (kind === 'voice' ? ' could be missing calls while you\'re busy' : ' doesn\'t have a website') + ', so I built you ' + what + '.\n\n' + line + '\n\nTake a look: ' + link + '\n\nIf you like it, reply here and I\'ll get it live for you this week.\n\n' + me1 };
+    return { body: 'Hey' + (first ? ' ' + first : '') + '! I\'m ' + me1 + ', local in LA. I built ' + biz + ' ' + what + ', no strings. ' + line + ' Here it is: ' + link };
+  }
+  async function laneMessage(L, lane, after) {
+    const me1 = String(S.me.name || 'Marquise').split(/\s+/)[0];
+    sheet((box, close) => {
+      const out = h('div', { class: 'lm-out' });
+      const pick = (kind) => async () => {
+        out.replaceChildren(h('p', { class: 'dim small' }, 'Getting the link…'));
+        try {
+          let link = L.demo_url;
+          if (!link) { const r = await api('POST', '/quickdemo', { lead_id: L.id }); link = r.link; L.demo_url = link; }
+          const url = link + (kind === 'site' ? '#site' : kind === 'voice' ? '#voice' : '');
+          const m = laneMsg(lane, L, kind, url, me1);
+          const full = (m.subject ? 'Subject: ' + m.subject + '\n\n' : '') + m.body;
+          try { await navigator.clipboard.writeText(m.subject ? m.body : full); } catch { /* shown below */ }
+          const openHref = lane === 'email' ? 'mailto:' + encodeURIComponent(L.email || '') + '?subject=' + encodeURIComponent(m.subject) + '&body=' + encodeURIComponent(m.body) : lane === 'ig' ? L.instagram : lane === 'fb' ? L.facebook : lane === 'x' ? L.xhandle : null;
+          const sent = h('button', { class: 'btn primary chk' }, h('span', { class: 'chk-box' }), lane === 'email' ? 'I sent the email' : 'I sent the DM');
+          sent.onclick = async () => { sent.classList.add('picked'); sent.disabled = true; try { await api('POST', '/leads/' + L.id + '/calls', { outcome: lane === 'email' ? 'emailed' : 'dmed' }); toast('Logged ✓'); close(true); after && after(); } catch (e) { fail(e); sent.classList.remove('picked'); sent.disabled = false; } };
+          out.replaceChildren(h('p', { class: 'dim small' }, 'Copied. Paste it, send it, then tap the check.'), h('pre', { class: 'lm-pre' }, full),
+            h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px' }, h('button', { class: 'btn', onclick: () => c3Copy(m.subject ? m.body : full) }, 'Copy again'),
+              openHref ? h('a', { class: 'btn', href: openHref, target: lane === 'email' ? '_self' : '_blank', rel: 'noopener' }, lane === 'email' ? 'Open email app' : 'Open their ' + LANE_NAME[lane]) : null, sent));
+        } catch (e) { out.replaceChildren(); fail(e); }
+      };
+      box.append(h('h2', null, L.business), h('p', { class: 'sub' }, 'What do you want to send?'),
+        h('div', { class: 'lm-kinds' }, [['demo', 'Demo', 'Website + AI receptionist'], ['site', 'Website', 'Their website preview'], ['voice', 'Voice AI demo', 'They call it and hear it']].map(([k, t, d]) => h('button', { class: 'lm-kind', onclick: pick(k) }, h('b', null, t), h('small', null, d)))),
+        out, h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Close')));
+    });
+  }
+  function addSocialLead(lane, after) {
+    sheet((box, close) => {
+      const f = {}; const inp = (k, label, ph, type) => { f[k] = h('input', { type: type || 'text', placeholder: ph || '' }); return h('div', { class: 'field' }, h('label', null, label), f[k]); };
+      const laneSel = h('select', null, LANES.social.map(([k, l]) => { const o = h('option', { value: k }, l); if (k === lane) o.selected = true; return o; }));
+      box.append(h('h2', null, 'Add a lead'), h('p', { class: 'sub' }, 'Someone you found on social media or by email.'),
+        h('div', { class: 'field' }, h('label', null, 'Where'), laneSel),
+        inp('business', 'Business name', 'Pawfect Grooming'), inp('owner', 'Owner name (optional)', ''), inp('handle', 'Their page link or @handle', '@pawfectgrooming'), inp('email', 'Email', 'owner@business.com', 'email'), inp('phone', 'Phone (optional)', '', 'tel'), inp('city', 'City (optional)', 'Inglewood'), inp('category', 'Type of business (optional)', 'Dog groomer'),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => close(null) }, 'Cancel'), h('button', { class: 'btn primary', onclick: async (e) => {
+          e.currentTarget.disabled = true; const btn = e.currentTarget;
+          try { const body = { lane: laneSel.value }; Object.keys(f).forEach((k) => { body[k] = f[k].value.trim(); }); await api('POST', '/leads/social', body); toast('Added'); close(true); LV.lane = laneSel.value; lvSave(); after && after(); }
+          catch (x) { fail(x); btn.disabled = false; }
+        } }, 'Add lead')));
+    });
+  }
+  const STAGE = (l) => {
+    if (l.status === 'callback' && l.callback_at) return 'Callback ' + new Date(l.callback_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    return STATUS[l.status] || l.status;
+  };
   async function viewLeads() {
+    const lane = LANE_NAME[LV.lane] ? LV.lane : 'new';
+    const social = LANES.social.some(([k]) => k === lane);
+    const q = LV.q || '';
+    const [counts, list] = await Promise.all([api('GET', '/leads/lanes'), api('GET', '/leads?limit=150&lane2=' + lane + (q ? '&q=' + encodeURIComponent(q) : ''))]);
+    const chip = ([k, l]) => h('button', { type: 'button', class: 'ln-chip' + (k === lane ? ' on' : ''), onclick: () => { LV.lane = k; lvSave(); viewLeads(); } }, l, h('span', { class: 'ln-n' }, counts[k] || 0));
+    const search = h('input', { type: 'search', class: 'ln-search', placeholder: 'Search this list', value: q });
+    let st; search.oninput = () => { clearTimeout(st); st = setTimeout(() => { LV.q = search.value.trim(); viewLeads().then(() => { const s2 = document.querySelector('.ln-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }); }, 350); };
+    const rows = list.leads.map((l) => {
+      const tr = h('tr', { class: 'ln-row', onclick: (e) => { if (e.target.closest('button,a')) return; location.hash = '#/lead/' + l.id; } },
+        h('td', null, h('b', null, l.business), h('small', null, [l.category, l.city, l.rating ? l.rating + '★' + (l.reviews != null ? ' (' + l.reviews + ')' : '') : '', !l.website ? 'No website' : ''].filter(Boolean).join(' · '))),
+        h('td', { class: 'ln-ph' }, social ? (lane === 'email' ? (l.email || '—') : (l.phone || '—')) : (l.phone ? h('a', { href: 'tel:' + String(l.phone).replace(/[^\d+]/g, ''), onclick: (e) => e.stopPropagation() }, l.phone) : '—')),
+        h('td', null, h('span', { class: 'pill s-' + l.status }, STAGE(l))),
+        social ? h('td', null, h('button', { class: 'btn small primary', onclick: () => laneMessage(l, lane, () => viewLeads()) }, 'Message')) : null);
+      return tr;
+    });
+    const table = rows.length ? h('div', { class: 'ln-wrap' }, h('table', { class: 'ln-table' },
+      h('thead', null, h('tr', null, h('th', null, 'Business'), h('th', null, social && lane === 'email' ? 'Email' : '#'), h('th', null, 'Stage'), social ? h('th', null, '') : null)), h('tbody', null, rows)))
+      : h('div', { class: 'ln-empty' }, h('b', null, q ? 'Nothing matches that search.' : social ? 'No ' + LANE_NAME[lane] + ' leads yet.' : { new: 'No new leads right now.', old: 'No old leads yet.', callback: 'No callbacks yet.', noanswer: 'No "no answer" leads right now.' }[lane]),
+        h('p', { class: 'dim small' }, social ? 'Tap Add lead to drop in someone you found.' : lane === 'new' ? 'Run the Lead Finder to pull local businesses with no website.' : 'Leads land here as you call.'),
+        social ? h('button', { class: 'btn primary', onclick: () => addSocialLead(lane, viewLeads) }, '+ Add lead') : lane === 'new' ? h('a', { class: 'btn primary', href: '#/finder' }, 'Open Lead Finder') : null);
+    const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
+    shell('leads', [
+      h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, 'Leads'), h('h1', null, 'Leads')),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => addSocialLead(social ? lane : 'ig', () => viewLeads()) }, '+ Add lead'), h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing'))),
+      h('section', { class: 'panel ln-lanes' },
+        h('div', { class: 'ln-group' }, h('small', null, 'Cold call'), h('div', { class: 'ln-chips' }, LANES.cold.map(chip))),
+        h('div', { class: 'ln-group' }, h('small', null, 'Socials'), h('div', { class: 'ln-chips' }, LANES.social.map(chip)))),
+      h('section', { class: 'panel ln-card' }, h('div', { class: 'hm-head' }, h('h3', null, LANE_NAME[lane] + (social ? ' leads' : '')), search),
+        !social ? h('p', { class: 'dim small', style: 'margin:0' }, 'Only businesses with no website or few reviews.') : null,
+        table, list.more ? h('p', { class: 'dim small' }, 'Showing the first 150. Search to find more.') : null),
+    ]);
+  }
+  async function viewLeadsAll() {
     const isAdmin = S.me.role === 'admin';
     const opts = await getOptions(true);
     const F = S.leadFilters;
@@ -452,11 +543,11 @@
       h('input', { id: 'lead-search', type: 'search', placeholder: 'Search leads', value: F.q, oninput: (e) => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value; load(); }, 300); } }));
     const QUICK = [['All', {}], ['No website', { site: 'none' }], ['Low reviews', { lowrev: '1' }], ['Hot', { heat: 'hot' }], ['Due now', { due: '1' }], ['To DM', { contact: 'to_dm' }], ['DM\'d', { contact: 'dmed' }], ['Has email', { contact: 'has_email' }]];
     const sameQ = (f) => ['heat', 'due', 'contact', 'site', 'lowrev'].every((k) => String(F[k] || '') === String(f[k] || ''));
-    const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '', site: '', lowrev: '' }, f); viewLeads(); } }, l)));
+    const quick = h('div', { class: 'qtabs', role: 'tablist' }, QUICK.map(([l, f]) => h('button', { role: 'tab', class: sameQ(f) ? 'on' : null, onclick: () => { Object.assign(F, { heat: '', due: '', contact: '', site: '', lowrev: '' }, f); viewLeadsAll(); } }, l)));
     const activeCount = ['rep', 'batch', 'city', 'tag', 'source', 'heat', 'contact', 'site', 'lowrev'].filter((k) => F[k]).length + (mode === 'table' && F.status !== 'open' ? 1 : 0);
     const filterBtn = h('button', { class: 'tbtn' + (activeCount ? ' set' : ''), onclick: () => filterSheet() }, 'Filters' + (activeCount ? ' · ' + activeCount : ''));
     const seg = h('div', { class: 'vtoggle', role: 'group', 'aria-label': 'View' }, [['board', 'Board'], ['list', 'List'], ['table', 'Table']].map(([k, l]) =>
-      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode3', k); viewLeads(); } }, l)));
+      h('button', { class: mode === k ? 'on' : null, 'aria-pressed': String(mode === k), onclick: () => { lsSet('rs_leads_mode3', k); viewLeadsAll(); } }, l)));
 
     async function filterSheet() {
       const sel = (id, label, key, first, items) => {
@@ -476,7 +567,7 @@
         isAdmin ? sel('f-source', 'Source', 'source', [['', 'Anywhere']], [['finder', 'Lead Finder / auto bot'], ['api', 'Scraper / n8n'], ['csv', 'CSV upload']]) : null,
         isAdmin && opts.batches.length ? sel('f-batch', 'Upload', 'batch', [['', 'All uploads']], opts.batches.map((b) => [String(b.id), b.name])) : null,
         h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { Object.assign(F, BLANK, { q: F.q }); close(true); } }, 'Clear all'), h('button', { class: 'btn primary', onclick: () => close(true) }, 'Show leads'))));
-      if (done) viewLeads();
+      if (done) viewLeadsAll();
     }
 
     // ---- board ----
@@ -489,7 +580,7 @@
         const col = h('div', { class: 'bcol', 'data-stage': st.key },
           h('div', { class: 'bhead' }, h('b', null, st.label), h('span', null, st.count.toLocaleString())),
           h('div', { class: 'bcards' }, st.leads.length ? st.leads.map(boardCard) : h('div', { class: 'bempty' }, 'Drop leads here')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeadsAll(); } }, 'See all ' + st.count.toLocaleString() + ' →') : null);
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('over'); });
         col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
         col.addEventListener('drop', (e) => { e.preventDefault(); col.classList.remove('over'); const id = +e.dataTransfer.getData('text/plain'); if (id) moveLead(id, st.key); });
@@ -518,7 +609,7 @@
           h('b', null, LBL[st.key] || st.label), h('span', { class: 'lcount' }, st.count.toLocaleString()), h('i', { class: 'chev' }, '▾'));
         const cards = st.leads.map((l) => { const c = boardCard(l); c.removeAttribute('draggable'); if (mover && mover === l.id) c.classList.add('just-moved'); return c; });
         sec.append(head, h('div', { class: 'lstage-b' }, cards.length ? cards : h('div', { class: 'bempty' }, 'Nobody here yet')),
-          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeads(); } }, 'See all ' + st.count.toLocaleString()) : '');
+          st.count > st.leads.length ? h('button', { class: 'bmore', onclick: () => { lsSet('rs_leads_mode3', 'table'); F.status = st.key === 'new' ? 'new,demo_needed,demo_ready' : st.key; viewLeadsAll(); } }, 'See all ' + st.count.toLocaleString()) : '');
         return sec;
       });
       body.replaceChildren(h('div', { class: 'lstages' }, secs));
