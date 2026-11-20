@@ -175,6 +175,7 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE finder_log ADD COLUMN provider TEXT').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   try { await env.DB.prepare('ALTER TABLE content_items ADD COLUMN stats TEXT').run(); } catch { /* already there */ }
+  try { await env.DB.prepare('ALTER TABLE content_items ADD COLUMN ext_id TEXT').run(); } catch { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE cal_events ADD COLUMN done INTEGER NOT NULL DEFAULT 0').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
@@ -1462,7 +1463,7 @@ const leadPrio = async (env) => ((await isLowRevFocus(env)) ? LEAD_PRIO : LEAD_P
 const maxReviews = async (env) => { if (!(await isLowRevFocus(env))) return 5000; const v = parseInt(await getSetting(env, 'max_reviews'), 10); return v > 0 ? Math.min(v, 5000) : 50; };
 
 /* ---------------- API routes ---------------- */
-async function api(request, env, url) {
+async function api(request, env, url, ctx) {
   const path = url.pathname.replace(/^\/api/, '');
   const method = request.method;
 
@@ -3291,6 +3292,26 @@ async function api(request, env, url) {
     await env.DB.prepare("UPDATE content_items SET stats = ?, status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").bind(JSON.stringify(st), now(), row.id).run();
     return json({ ok: true, stats: st, score: postScore(st) });
   }
+  if (path === '/meta/status' && method === 'GET') {
+    need(user, 'admin');
+    let cfg = null; try { cfg = JSON.parse((await getSetting(env, 'meta_conn')) || 'null'); } catch { cfg = null; }
+    const stale = cfg && (!cfg.last || Date.now() - Date.parse(cfg.last.at) > 6 * 3600e3);
+    if (stale && ctx && ctx.waitUntil) ctx.waitUntil(metaSync(env).catch((e) => console.error('meta sync', e)));
+    return json({ connected: !!(cfg && cfg.pages && cfg.pages.length), pages: cfg && cfg.pages ? cfg.pages.map((p) => ({ name: p.name, ig: p.ig ? p.ig.username : null })) : [], last: cfg && cfg.last || null });
+  }
+  if (path === '/meta/connect' && method === 'POST') {
+    need(user, 'admin');
+    const token = str(body.token, 600).trim().replace(/\s+/g, ''); if (token.length < 40) bad('Paste the whole token. It is a long string of letters and numbers.');
+    let r; try { r = await metaGet('me/accounts?limit=25&fields=id,name,access_token,instagram_business_account{id,username}', token); }
+    catch (e) { bad('Meta did not accept that token: ' + String(e.message).slice(0, 160)); }
+    const pages = (r.data || []).filter((p) => p.access_token).map((p) => ({ id: p.id, name: p.name, token: p.access_token, ig: p.instagram_business_account ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username || '' } : null }));
+    if (!pages.length) bad('That token works, but it can not see any Facebook Page. When you generate it, pick your Page and add the pages_show_list permission.');
+    await setSetting(env, 'meta_conn', JSON.stringify({ pages, at: now() }));
+    const last = await metaSync(env);
+    return json({ pages: pages.map((p) => ({ name: p.name, ig: p.ig ? p.ig.username : null })), last });
+  }
+  if (path === '/meta/sync' && method === 'POST') { need(user, 'admin'); return json(await metaSync(env)); }
+  if (path === '/meta' && method === 'DELETE') { need(user, 'admin'); await env.DB.prepare("DELETE FROM settings WHERE key = 'meta_conn'").run(); return json({ ok: true }); }
   if (path === '/posts/insights' && method === 'GET') {
     need(user, 'admin');
     const rows = (await env.DB.prepare("SELECT * FROM content_items WHERE kind IN ('textpost','video') AND status = 'posted' ORDER BY id DESC LIMIT 300").all()).results.map(postRow);
@@ -6284,6 +6305,44 @@ async function seedTodos1119(env) {
       .bind(admin.id, title, 'todo', '2026-11-19T' + t + ':00.000Z', null, notes, now()).run();
   }
 }
+/* ---- Meta (Facebook Page + Instagram business) stats sync ---- */
+const META_V = 'v23.0';
+async function metaGet(pathQ, token) {
+  const r = await fetch('https://graph.facebook.com/' + META_V + '/' + pathQ + (pathQ.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(token));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) { const e = new Error((j.error && j.error.message) || ('Meta said ' + r.status)); e.meta = true; throw e; }
+  return j;
+}
+async function metaSync(env) {
+  let cfg = null; try { cfg = JSON.parse((await getSetting(env, 'meta_conn')) || 'null'); } catch { cfg = null; }
+  if (!cfg || !Array.isArray(cfg.pages) || !cfg.pages.length) return { skipped: true };
+  const admin = await env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1").first();
+  let added = 0, updated = 0; const errors = [];
+  const upsert = async (ext, platform, text, when, st, link) => {
+    if (!text || !text.trim()) return;
+    const ex = await env.DB.prepare('SELECT id, stats FROM content_items WHERE ext_id = ?').bind(ext).first();
+    if (ex) { let old = {}; try { old = JSON.parse(ex.stats || '{}') || {}; } catch { old = {}; } st.leads = old.leads || 0; if (!st.views) st.views = old.views || 0;
+      await env.DB.prepare('UPDATE content_items SET stats = ? WHERE id = ?').bind(JSON.stringify(st), ex.id).run(); updated++; return; }
+    await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at, posted_at, stats, ext_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(admin ? admin.id : 1, 'textpost', 'posted', text.split('\n')[0].slice(0, 90), text.slice(0, 5000), JSON.stringify([platform]), null, JSON.stringify({ link: link || '' }), 'meta', now(), when || now(), JSON.stringify(st), ext).run(); added++;
+  };
+  for (const pg of cfg.pages) {
+    try {
+      const r = await metaGet(pg.id + '/posts?limit=25&fields=id,message,created_time,permalink_url,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)', pg.token);
+      for (const x of r.data || []) await upsert('fb:' + x.id, 'facebook', x.message || '', x.created_time ? new Date(x.created_time).toISOString() : null,
+        { reactions: (x.reactions && x.reactions.summary && x.reactions.summary.total_count) || 0, comments: (x.comments && x.comments.summary && x.comments.summary.total_count) || 0, shares: (x.shares && x.shares.count) || 0, views: 0, leads: 0, at: now(), auto: 1 }, x.permalink_url);
+    } catch (e) { errors.push(pg.name + ': ' + String(e.message).slice(0, 140)); }
+    if (pg.ig && pg.ig.id) {
+      try {
+        const r = await metaGet(pg.ig.id + '/media?limit=25&fields=id,caption,timestamp,permalink,like_count,comments_count', pg.token);
+        for (const x of r.data || []) await upsert('ig:' + x.id, 'instagram', x.caption || '', x.timestamp ? new Date(x.timestamp).toISOString() : null,
+          { reactions: x.like_count || 0, comments: x.comments_count || 0, shares: 0, views: 0, leads: 0, at: now(), auto: 1 }, x.permalink);
+      } catch (e) { errors.push('@' + (pg.ig.username || 'instagram') + ': ' + String(e.message).slice(0, 140)); }
+    }
+  }
+  cfg.last = { at: now(), added, updated, errors }; await setSetting(env, 'meta_conn', JSON.stringify(cfg));
+  return cfg.last;
+}
 const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Frame-Options': 'DENY',
@@ -6303,6 +6362,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (event.cron === '5 15 * * *') {
       try { await ensureSchema(env); await sendDigest(env); } catch (e) { console.error('digest', e); }
+      try { await metaSync(env); } catch (e) { console.error('meta sync', e); }
       return;
     }
     try {
@@ -6407,7 +6467,7 @@ export default {
       try {
         if (!env.DB) throw new HttpError(500, 'Database not connected. Add the D1 binding named DB in Cloudflare, then redeploy.');
         await ensureSchema(env);
-        return withHeaders(await api(request, env, url));
+        return withHeaders(await api(request, env, url, ctx));
       } catch (e) {
         if (e instanceof HttpError) return withHeaders(json({ error: e.message }, e.status));
         console.error(e);

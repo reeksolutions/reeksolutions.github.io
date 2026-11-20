@@ -506,10 +506,10 @@
         h('div', { class: 'pc-tile-top' }, pcBadge(k), h('i', { class: 'pc-go' }, icon('chev'))),
         h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)),
         h('div', { class: 'pc-foot' }, stats(k)));
-      const ins = await api('GET', '/posts/insights').catch(() => null);
+      const [ins, meta] = await Promise.all([api('GET', '/posts/insights').catch(() => null), api('GET', '/meta/status').catch(() => null)]);
       const missing = r.posts.filter((x) => x.status === 'posted' && !x.stats);
       return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick a platform, then write a text post or make a video.'),
-        strip, pcInsights(ins, missing, () => viewPostContent()),
+        strip, pcInsights(ins, missing, () => viewPostContent(), meta),
         h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(k, t, d))),
         h('a', { class: 'pc-banner', href: '#/content/scheduled' }, h('span', { class: 'pc-badge sch' }, icon('calendar')),
           h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled content'), h('small', null, 'Everything waiting to go out, for every platform. Each one is on your calendar too.')),
@@ -927,7 +927,35 @@
     function edit() { box.replaceChildren(pcStatForm(p.stats, async (v, b) => { b.disabled = true; try { const r = await api('POST', '/posts/' + p.id + '/stats', v); p.stats = r.stats; p.score = r.score; toast('Saved ✓ The AI will learn from this one.'); show(); } catch (e) { fail(e); b.disabled = false; } }, show)); }
     show(); return box;
   }
-  function pcInsights(ins, missing, redraw) {
+  function pcMeta(meta, redraw) {
+    const box = h('div', { class: 'pc-meta' });
+    if (meta && meta.connected) {
+      const last = meta.last;
+      box.append(h('div', { class: 'pc-meta-on' }, h('span', { class: 'pc-meta-dot' }), h('span', { class: 'pc-meta-t' }, h('b', null, 'Auto stats on'), h('small', null, meta.pages.map((p) => p.name + (p.ig ? ' + @' + p.ig : '')).join(', ') + (last ? ' · synced ' + new Date(last.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''))),
+        h('button', { type: 'button', class: 'btn small', onclick: async (e) => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Syncing…'; try { const r = await api('POST', '/meta/sync'); toast('Synced ✓ ' + (r.added || 0) + ' new, ' + (r.updated || 0) + ' updated'); redraw(); } catch (x) { fail(x); b.disabled = false; b.textContent = 'Sync now'; } } }, 'Sync now'),
+        h('button', { type: 'button', class: 'btn small ghost', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again'; return; } try { await api('DELETE', '/meta'); toast('Disconnected'); redraw(); } catch (x) { fail(x); } } }, 'Disconnect')));
+      if (last && last.errors && last.errors.length) box.append(h('p', { class: 'pc-meta-err' }, 'Meta said: ' + last.errors[0]));
+      return box;
+    }
+    const panel = h('div', { class: 'pc-meta-panel', hidden: true });
+    const tok = h('textarea', { rows: 3, placeholder: 'Paste your access token here', autocomplete: 'off', spellcheck: false });
+    panel.append(
+      h('p', null, 'This pulls likes, comments and shares from posts on your ', h('b', null, 'Facebook Page'), ' and ', h('b', null, 'Instagram business or creator account'), '. Posts on your personal profile still get logged by hand.'),
+      h('ol', { class: 'pc-meta-steps' },
+        h('li', null, 'Go to ', h('b', null, 'developers.facebook.com'), ', tap ', h('b', null, 'My Apps → Create app'), '. Pick ', h('b', null, 'Other'), ', then ', h('b', null, 'Business'), ', and connect it to your Meta Business portfolio.'),
+        h('li', null, 'Open ', h('b', null, 'Tools → Graph API Explorer'), ' and choose your new app. Under Permissions add: ', h('code', null, 'pages_show_list'), ' ', h('code', null, 'pages_read_engagement'), ' ', h('code', null, 'read_insights'), ' ', h('code', null, 'instagram_basic'), ' ', h('code', null, 'instagram_manage_insights'), ' ', h('code', null, 'business_management'), '.'),
+        h('li', null, 'Tap ', h('b', null, 'Generate Access Token'), ' and pick your Page and Instagram account when it asks.'),
+        h('li', null, 'Tap the ⓘ next to the token → ', h('b', null, 'Open in Access Token Tool'), ' → ', h('b', null, 'Extend Access Token'), '. Copy the new long token.'),
+        h('li', null, 'Paste it below and tap Connect. Your Page token is saved, so you only do this once.')),
+      tok,
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary small', onclick: async (e) => { const b = e.currentTarget; if (!tok.value.trim()) { toast('Paste the token first', true); tok.focus(); return; } b.disabled = true; b.textContent = 'Connecting…';
+        try { const r = await api('POST', '/meta/connect', { token: tok.value.trim() }); toast('Connected ✓ ' + r.pages.map((p) => p.name).join(', ') + ' · ' + ((r.last && r.last.added) || 0) + ' posts pulled in'); redraw(); }
+        catch (x) { fail(x); b.disabled = false; b.textContent = 'Connect'; } } }, 'Connect'), h('button', { type: 'button', class: 'btn small ghost', onclick: () => { panel.hidden = true; } }, 'Cancel')),
+      h('p', { class: 'dim small' }, 'Meta sometimes renames these buttons. If something looks different, send me a screenshot.'));
+    box.append(h('button', { type: 'button', class: 'pc-meta-cta', onclick: () => { panel.hidden = !panel.hidden; } }, pcBadge('facebook'), h('span', { class: 'pc-meta-t' }, h('b', null, 'Connect your Facebook Page + Instagram'), h('small', null, 'Stats come in on their own every day')), icon('chev')), panel);
+    return box;
+  }
+  function pcInsights(ins, missing, redraw, meta) {
     const card = h('div', { class: 'pc-card pc-ins' });
     const logBox = h('div', { class: 'pc-log', hidden: true });
     const plat = h('select', { class: 'pc-sel', 'aria-label': 'Platform' }, PC_PLAT.map(([k, t]) => h('option', { value: k }, t)));
@@ -944,7 +972,7 @@
       h('div', { class: 'pc-acts' },
         h('button', { type: 'button', class: 'btn small primary', onclick: () => { logBox.hidden = !logBox.hidden; if (!logBox.hidden) txt.focus(); } }, '+ Log a post you made'),
         missing.length ? h('button', { type: 'button', class: 'btn small', onclick: () => { missBox.hidden = !missBox.hidden; } }, 'Add results (' + missing.length + ' waiting)') : null),
-      logBox, missBox);
+      logBox, missBox, pcMeta(meta, redraw));
     return card;
   }
   function pcItem(p, redraw) {
