@@ -176,6 +176,7 @@ async function ensureSchema(env) {
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   try { await env.DB.prepare('ALTER TABLE content_items ADD COLUMN stats TEXT').run(); } catch { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE content_items ADD COLUMN ext_id TEXT').run(); } catch { /* already there */ }
+  try { await env.DB.prepare('ALTER TABLE leads ADD COLUMN social_steps TEXT').run(); } catch { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE cal_events ADD COLUMN done INTEGER NOT NULL DEFAULT 0').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
@@ -1840,6 +1841,23 @@ async function api(request, env, url, ctx) {
   }
 
   /* ---- tags + next action (admin and the lead's rep) ---- */
+  if ((m = path.match(/^\/leads\/(\d+)\/social$/)) && method === 'POST') {
+    // simple checklist for social leads: DM'd, answered, interested, audit booked, closed
+    need(user, 'admin', 'rep');
+    const lead = await loadLead(env, user, +m[1]);
+    let st = {}; try { st = JSON.parse(lead.social_steps || '{}') || {}; } catch { st = {}; }
+    const step = body.step, v = body.value;
+    if (!['dm', 'answered', 'interest', 'audit', 'closed'].includes(step)) bad('Unknown step');
+    if (step === 'interest') st.interest = v === 'yes' || v === 'no' ? v : null;
+    else st[step] = v ? (st[step] || now()) : null;
+    let status = lead.status, booked = lead.booked_at;
+    if (step === 'interest') status = v === 'no' ? 'not_interested' : (lead.status === 'not_interested' ? 'new' : lead.status);
+    if (step === 'audit') { status = v ? 'booked' : (st.closed ? 'won' : (st.interest === 'no' ? 'not_interested' : 'new')); booked = v ? (booked || now()) : null; }
+    if (step === 'closed') status = v ? 'won' : (st.audit ? 'booked' : (st.interest === 'no' ? 'not_interested' : 'new'));
+    if (step === 'interest' && v === 'yes') await env.DB.prepare("UPDATE leads SET heat = 'hot' WHERE id = ?").bind(lead.id).run();
+    await env.DB.prepare('UPDATE leads SET social_steps = ?, status = ?, booked_at = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(st), status, booked, now(), lead.id).run();
+    return json({ steps: st, status });
+  }
   if ((m = path.match(/^\/leads\/(\d+)\/meta$/)) && method === 'POST') {
     need(user, 'admin', 'rep');
     const lead = await loadLead(env, user, +m[1]);

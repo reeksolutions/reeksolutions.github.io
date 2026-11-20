@@ -1556,12 +1556,58 @@
     e.preventDefault(); openLeadDrawer(+m[1]);
   });
 
+  /* ---- social leads (Facebook / Instagram / X): one simple checklist straight down + notes ---- */
+  function viewSocialLead(L, D) {
+    const PL = { fb: ['facebook', 'Facebook', L.facebook], ig: ['instagram', 'Instagram', L.instagram], x: ['x', 'X', L.xhandle] }[L.lane];
+    let st = {}; try { st = JSON.parse(L.social_steps || '{}') || {}; } catch { st = {}; }
+    const when = (t) => t ? new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    const list = h('ol', { class: 'sl-steps' });
+    const save = async (step, value, btn) => {
+      if (btn) btn.disabled = true;
+      try {
+        if (step === 'dm' && value && !st.dm) await api('POST', '/leads/' + L.id + '/calls', { outcome: 'dmed' }).catch(() => null);
+        const r = await api('POST', '/leads/' + L.id + '/social', { step, value }); st = r.steps; L.status = r.status; if (D) D.dirty = true; draw();
+      } catch (e) { fail(e); if (btn) btn.disabled = false; }
+    };
+    const yesNo = (step, q, yes, no) => {
+      const on = !!st[step];
+      return h('li', { class: 'sl-step' + (on ? ' done' : '') }, h('span', { class: 'sl-dot' }, on ? '✓' : ''),
+        h('div', { class: 'sl-body' }, h('b', null, q), on ? h('small', null, yes + ' · ' + when(st[step])) : h('small', { class: 'dim' }, 'Not yet')),
+        h('div', { class: 'sl-btns' }, h('button', { type: 'button', class: 'sl-b' + (on ? ' on' : ''), onclick: (e) => !on && save(step, true, e.currentTarget) }, 'Yes'), h('button', { type: 'button', class: 'sl-b' + (!on ? ' on off' : ''), onclick: (e) => on && save(step, false, e.currentTarget) }, no)));
+    };
+    function draw() {
+      const iv = st.interest;
+      list.replaceChildren(
+        yesNo('dm', 'DM’d?', 'Sent', 'No'),
+        yesNo('answered', 'Answered?', 'Replied', 'No'),
+        h('li', { class: 'sl-step' + (iv ? ' done' + (iv === 'no' ? ' neg' : '') : '') }, h('span', { class: 'sl-dot' }, iv === 'yes' ? '✓' : iv === 'no' ? '✕' : ''),
+          h('div', { class: 'sl-body' }, h('b', null, 'Interested?'), h('small', { class: iv ? '' : 'dim' }, iv === 'yes' ? 'Interested' : iv === 'no' ? 'Not interested' : 'Not sure yet')),
+          h('div', { class: 'sl-btns' }, h('button', { type: 'button', class: 'sl-b' + (iv === 'yes' ? ' on' : ''), onclick: (e) => save('interest', iv === 'yes' ? null : 'yes', e.currentTarget) }, 'Interested'), h('button', { type: 'button', class: 'sl-b' + (iv === 'no' ? ' on neg' : ''), onclick: (e) => save('interest', iv === 'no' ? null : 'no', e.currentTarget) }, 'Not interested'))),
+        yesNo('audit', 'Audit booked', 'Booked', 'No'),
+        yesNo('closed', 'Closed', 'Won', 'No'));
+    }
+    draw();
+    const notes = h('textarea', { class: 'sl-notes', rows: 7, placeholder: 'What they said, what they need, when to follow up…' }); notes.value = L.call_notes || '';
+    const ns = h('small', { class: 'dim' }, 'Saves as you type');
+    let nt = null, pend = false;
+    const flush = async () => { clearTimeout(nt); if (!pend) return; pend = false; try { await api('POST', '/leads/' + L.id + '/meta', { call_notes: notes.value }); ns.textContent = 'Saved ✓'; } catch { pend = true; ns.textContent = 'Not saved, check your connection'; } };
+    notes.addEventListener('input', () => { pend = true; ns.textContent = 'Typing…'; clearTimeout(nt); nt = setTimeout(flush, 700); });
+    notes.addEventListener('blur', flush);
+    const page = [h('div', { class: 'sl-head' }, h('span', { class: 'pc-badge p-' + PL[0] }, (PC_PLAT.find((p) => p[0] === PL[0]) || [0, 0, 0, '?'])[3]),
+        h('div', { class: 'sl-who' }, h('h2', null, L.business || 'Lead'), h('small', { class: 'dim' }, [PL[1] + ' lead', L.category, L.city].filter(Boolean).join(' · '))),
+        PL[2] ? h('a', { class: 'btn small', href: PL[2], target: '_blank', rel: 'noopener' }, 'Open profile ↗') : null),
+      list,
+      h('div', { class: 'sl-notebox' }, h('div', { class: 'sl-nh' }, h('b', null, 'Notes'), ns), notes)];
+    if (D) { D.body.replaceChildren(...page); D.body.scrollTop = 0; }
+    else shell('leads:social', [h('div', { class: 'sl-page' }, ...page)]);
+  }
   async function viewLead(id, opts) {
     const D = opts && opts.drawer;
     const openLead = (x) => { if (D) openLeadDrawer(x); else location.hash = '#/lead/' + x; };
     const isAdmin = S.me.role === 'admin';
     const [{ lead: L, calls, notes, deals = [], demo = null, dials = [], event = null }, script, dialer] = await Promise.all([api('GET', '/leads/' + id), S.me.role === 'dev' ? null : getScript(), S.me.role === 'dev' ? null : getDialer()]);
     const reload = () => { if (D) D.dirty = true; return viewLead(id, opts); };
+    if (['fb', 'ig', 'x'].includes(L.lane) && (S.me.role === 'admin' || S.me.role === 'rep')) return viewSocialLead(L, D);
     const closed = ['won', 'lost', 'dnc'].includes(L.status);
 
     const seller = S.me.role === 'admin' || S.me.role === 'rep';
