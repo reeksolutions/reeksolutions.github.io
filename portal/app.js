@@ -1289,10 +1289,17 @@
       : h('div', { class: 'ln-empty' }, h('b', null, q ? 'Nothing matches that search.' : social ? 'No ' + LANE_NAME[lane] + ' leads yet.' : { new: 'No new leads right now.', old: 'No old leads yet.', callback: 'No callbacks yet.', noanswer: 'No "no answer" leads right now.' }[lane]),
         h('p', { class: 'dim small' }, lane === 'sms' ? 'Called leads that didn’t pick up show here so you can text them. You can also add someone.' : social ? 'Tap Add lead to drop in someone you found.' : lane === 'new' ? 'Run the Lead Finder to pull tint & PPF shops.' : 'Leads land here as you call.'),
         social ? h('button', { class: 'btn primary', onclick: () => addSocialLead(lane, () => viewLeads(mode)) }, '+ Add lead') : lane === 'new' ? h('a', { class: 'btn primary', href: '#/finder' }, 'Open Lead Finder') : null);
+    const dialN = (counts.new || 0) + (counts.noanswer || 0) + (counts.callback || 0);
+    const expLink = (k, t, n) => h('a', { class: 'exp-opt', href: '/api/leads/export?lane2=' + k + (q ? '&q=' + encodeURIComponent(q) : ''), download: '', onclick: () => setTimeout(() => toast('Downloading… then import it into your dialer'), 50) }, h('b', null, t), h('small', null, n + (n === 1 ? ' lead' : ' leads') + ' in this list'));
+    const expPanel = h('section', { class: 'panel exp-panel', hidden: true },
+      h('div', { class: 'exp-h' }, h('b', null, 'Export leads for your dialer'), h('small', { class: 'dim' }, 'Downloads a CSV file that PhoneBurner and most dialers can import. Callbacks come first, and only leads with a phone number are included.')),
+      h('div', { class: 'exp-opts' }, expLink(lane, 'This list: ' + LANE_NAME[lane], counts[lane] || 0), expLink('dial', 'Everyone to call (new, no answer, callbacks)', dialN)),
+      h('p', { class: 'dim small' }, 'In PhoneBurner: Contacts → Import → upload the file → match the columns (they’re already named First Name, Company, Phone…). Each row has a CRM link in Notes so you can log the call here after.'));
     const startDialing = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('GET', '/leads/next'); if (r.id) location.hash = '#/lead/' + r.id; else { toast('No dialable leads left. Run the Lead Finder.', true); b.disabled = false; } } catch (x) { fail(x); b.disabled = false; } };
     shell('leads:' + mode, [
       h('div', { class: 'page-head' }, h('div', null, h('p', { class: 'kicker' }, MD.kicker), h('h1', null, MD.title)),
-        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => addSocialLead(social ? lane : 'ig', () => viewLeads(mode)) }, '+ Add lead'), mode === 'calls' ? h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing') : null)),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => addSocialLead(social ? lane : 'ig', () => viewLeads(mode)) }, '+ Add lead'), mode === 'calls' ? h('button', { class: 'btn', onclick: () => { expPanel.hidden = !expPanel.hidden; } }, '⬇ Export for dialer') : null, mode === 'calls' ? h('button', { class: 'btn primary', onclick: startDialing }, icon('phone'), 'Start dialing') : null)),
+      mode === 'calls' ? expPanel : null,
       h('section', { class: 'panel ln-lanes' },
         MD.groups.map(([g, ls]) => h('div', { class: 'ln-group' }, h('small', null, g), h('div', { class: 'ln-chips' }, ls.map(chip))))),
       h('section', { class: 'panel lt-panel' },

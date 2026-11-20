@@ -2289,3 +2289,9 @@ html.crm2 #toast{left:calc(50% + 128px)}
 .pc-meta-on .pc-meta-t{flex:1;min-width:180px}
 .pc-meta-dot{width:10px;height:10px;border-radius:50%;background:#34d399;box-shadow:0 0 0 4px rgba(52,211,153,.15);flex:none}
 .pc-meta-err{font-size:12.5px;color:#fca5a5;margin:0}
+.exp-panel{display:flex;flex-direction:column;gap:12px}
+.exp-h{display:flex;flex-direction:column;gap:3px}
+.exp-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.exp-opt{display:flex;flex-direction:column;gap:3px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(167,139,250,.06);text-decoration:none;color:var(--ink);transition:border-color .15s}
+.exp-opt:hover{border-color:var(--accent)}
+.exp-opt b{font-size:14.5px}.exp-opt small{color:var(--muted);font-size:12.5px}

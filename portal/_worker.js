@@ -1679,6 +1679,34 @@ async function api(request, env, url, ctx) {
     return json({ leads: results.slice(0, limit).map((l) => ({ ...l, tags: tagsFromDb(l.tags) })), more: results.length > limit, total: total.n });
   }
 
+  if (path === '/leads/export' && method === 'GET') {
+    // CSV for a power dialer (PhoneBurner and similar): one row per callable lead in the chosen list
+    need(user, 'admin', 'rep');
+    const p = new URLSearchParams(url.searchParams); const which = p.get('lane2') || 'new';
+    if (which === 'dial') p.delete('lane2');
+    let { w, args } = leadFilter(p, user);
+    const fx = focusSql(await focusTerms(env));
+    ({ w, args } = hideNonFocus(w, args, fx, p));
+    const add = (sql) => { w = (w ? w + ' AND ' : 'WHERE ') + sql; };
+    if (which === 'dial') add('((' + laneSql('new') + ') OR (' + laneSql('noanswer') + ') OR (' + laneSql('callback') + '))');
+    add("COALESCE(l.phone_norm,'') != ''");
+    const { results } = await env.DB.prepare(
+      `SELECT l.id, l.business, l.owner, l.phone, l.email, l.address, l.city, l.category, l.rating, l.reviews, l.website, l.status, l.callback_at, l.call_notes, l.attempts
+       FROM leads l ${w} ORDER BY CASE l.status WHEN 'callback' THEN 0 ELSE 1 END, COALESCE(l.attempts,0), l.id DESC LIMIT 2000`).bind(...args).all();
+    const q = (v) => { const t = String(v == null ? '' : v).replace(/\r?\n/g, ' ').trim(); return /[",]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const rows = [['First Name', 'Last Name', 'Company', 'Phone', 'Email', 'Address', 'City', 'State', 'Zip', 'Website', 'Notes']];
+    for (const l of results) {
+      const own = String(l.owner || '').trim().split(/\s+/).filter(Boolean);
+      const addr = String(l.address || '');
+      const m = addr.match(/,\s*([^,]+?),\s*([A-Z]{2})\s*(\d{5})?/);
+      const notes = [l.category, l.rating ? l.rating + ' stars' + (l.reviews != null ? ' (' + l.reviews + ' reviews)' : '') : l.reviews != null ? l.reviews + ' reviews' : '',
+        String(l.website || '').trim() ? '' : 'No website', l.status === 'callback' ? 'CALLBACK' + (l.callback_at ? ' ' + String(l.callback_at).slice(0, 16).replace('T', ' ') : '') : '',
+        l.attempts ? l.attempts + ' prior attempts' : '', l.call_notes ? 'Notes: ' + String(l.call_notes).slice(0, 200) : '', 'CRM: ' + url.origin + '/#/lead/' + l.id].filter(Boolean).join(' | ');
+      rows.push([own[0] || 'Owner', own.slice(1).join(' '), l.business, l.phone, l.email, addr.split(',')[0] || '', (m && m[1]) || l.city || '', (m && m[2]) || '', (m && m[3]) || '', l.website, notes]);
+    }
+    const name = 'reekon-dialer-' + which + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    return new Response('﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="' + name + '"', 'Cache-Control': 'no-store' } });
+  }
   if (path === '/leads/geo' && method === 'POST') {
     // fill in map pins for leads that don't have them yet (Google place lookup, capped per day)
     need(user, 'admin', 'rep');
