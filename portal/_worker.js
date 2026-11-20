@@ -3299,6 +3299,98 @@ async function api(request, env, url) {
   }
   const VIDEO_TYPES = { webmap: 'a web map that explains a system he can build for the shop, node by node (problem, why, cost, fix, result)', pricing: 'a pricing comparison: what shops pay now (software, answering service, front desk, lost jobs) vs a custom AI system, with clearly labeled example numbers',
     painpoint: 'a pain point breakdown: one daily frustration tint, PPF or detail shop owners deal with, why it happens, what it costs, and the fix', automation: 'a tedious task breakdown: one repetitive task shops do by hand and exactly how an AI system automates it step by step' };
+  /* ---- Content > Web maps: describe it, AI plans a detailed map, the app draws it ---- */
+  const WM_EX = {
+    compare: { kind: 'compare', kicker: 'The real cost of running your business', title: 'What you pay now vs.', highlight: 'your own AI', root: 'Monthly expenses', left_title: 'Tools + people', right_title: 'One custom system',
+      costs: [['Front desk staff (part-time)', 1800], ['After-hours answering', 350], ['CRM software', 150], ['Booking software', 60], ['Review management', 300], ['Text marketing tool', 100], ['Email follow-up tool', 80], ['Website chat widget', 50], ['Admin hours (20 hrs)', 400]].map(([item, monthly]) => ({ item, monthly })),
+      systems: [['AI receptionist 24/7', 'replaces front desk + answering', 1200], ['Your own custom CRM', 'replaces CRM + booking', 1000], ['Auto reviews + texts', 'replaces review + text tools', 400], ['Auto lead follow-up', 'replaces email tool + chat', 400]].map(([name, replaces, setup]) => ({ name, replaces, setup })),
+      running: [['AI call minutes', 200], ['Text messages', 80], ['Hosting + data', 50], ['Support + updates', 167]].map(([item, monthly]) => ({ item, monthly })), note: 'Example numbers. Every business is different.' },
+    flow: { kind: 'flow', kicker: 'How an AI receptionist works', title: 'Every call,', highlight: 'handled', note: 'Example flow. Built around how your business runs.', nodes: [
+      { id: 'a', tag: 'Step 1', label: 'Incoming call', sub: 'day, night or mid-job', lane: 'center', kind: 'start', from: [] },
+      { id: 'b', label: 'AI picks up on ring one', sub: 'sounds natural, knows your business', lane: 'center', kind: 'step', from: ['a'] },
+      { id: 'g', tag: 'Filter', label: 'Spam check', sub: 'robocalls, sales pitches, wrong numbers', lane: 'center', kind: 'gate', from: ['b'] },
+      { id: 'sp', tag: 'Spam', label: 'Flagged in seconds', lane: 'left', kind: 'bad', from: ['g'] },
+      { id: 'nl', tag: 'New lead', label: 'Wants a quote or booking', lane: 'center', kind: 'step', from: ['g'] },
+      { id: 'ex', tag: 'Customer', label: 'Has a question or change', lane: 'right', kind: 'step', from: ['g'] },
+      { id: 'bl', label: 'Hangs up + blocks it', sub: 'your phone never rings', lane: 'left', kind: 'bad', from: ['sp'] },
+      { id: 'q', tag: 'Qualify', label: 'Asks the right questions', sub: 'service, timeline, budget, location', lane: 'center', kind: 'step', from: ['nl'] },
+      { id: 'an', label: 'Answers or reschedules', sub: 'hours, pricing, appointment changes', lane: 'right', kind: 'step', from: ['ex'] },
+      { id: 'nf', tag: 'Not a fit', label: 'Polite answer, saved', sub: 'follow-up text later', lane: 'left', kind: 'bad', from: ['q'] },
+      { id: 'gf', tag: 'Good fit', label: 'Books on your calendar', sub: 'right on the call', lane: 'center', kind: 'good', from: ['q'] },
+      { id: 'ur', tag: 'Urgent', label: 'Transfers live to you', sub: 'only when it matters', lane: 'right', kind: 'step', from: ['an'] },
+      { id: 'cf', label: 'Confirmation + reminders', sub: 'texts so they actually show up', lane: 'center', kind: 'step', from: ['gf'] },
+      { id: 'f', label: 'You get a summary text', sub: 'every call logged in your CRM', lane: 'center', kind: 'final', from: ['cf', 'nf', 'ur'] }] },
+  };
+  const WM_SCRIPT = { compare: ['Real quick, let’s talk about what it actually costs to run your business every month.', 'Most owners are paying for all of this on the left and never add it up.', 'Add it all up and you’re close to forty grand a year just to answer phones and keep track of customers.', 'Now look at the right side. One system, built for your business.', 'You pay to set it up once, then a small monthly fee to keep it running.', 'That’s over thirty thousand dollars back in year one. These are example numbers, every business is different.', 'Comment “numbers” and I’ll break down yours.'],
+    flow: ['Here’s what happens when someone calls your business and you’ve got an AI receptionist.', 'It picks up on the first ring, even if you’re in the middle of a job.', 'First thing it does is check for spam. Robocalls and sales pitches get blocked, so your phone never rings for them.', 'If it’s a new lead, it asks the right questions, and if they’re a good fit, it books them right on your calendar.', 'If it’s an existing customer, it answers their question or reschedules them. Anything urgent comes straight to you.', 'And after every call, you get a summary text. Nothing slips through.', 'Want to hear one built for your business? Send me a DM.'] };
+  const wmClean = (j, want) => {
+    const t = (x, n) => str(String(x == null ? '' : x).replace(/[—–]/g, ',').trim(), n);
+    const amt = (x) => Math.max(0, Math.min(1e6, Math.round(+String(x == null ? 0 : x).replace(/[^0-9.]/g, '') || 0)));
+    if (!j || typeof j !== 'object') return null;
+    const kind = j.kind === 'compare' || j.kind === 'flow' ? j.kind : (Array.isArray(j.costs) ? 'compare' : Array.isArray(j.nodes) ? 'flow' : null);
+    if (!kind || (want && want !== 'auto' && want !== kind)) return null;
+    const base = { kind, kicker: t(j.kicker, 50), title: t(j.title, 50) || (kind === 'compare' ? 'What you pay now vs.' : 'How it works,'), highlight: t(j.highlight, 30), note: t(j.note, 90) || (kind === 'compare' ? 'Example numbers. Every business is different.' : 'Example flow. Built around how your business runs.') };
+    if (kind === 'compare') {
+      const costs = (Array.isArray(j.costs) ? j.costs : []).slice(0, 10).map((c) => ({ item: t(c.item || c.name, 40), monthly: amt(c.monthly || c.amount) })).filter((c) => c.item && c.monthly);
+      const systems = (Array.isArray(j.systems) ? j.systems : []).slice(0, 5).map((c) => ({ name: t(c.name || c.item, 34), replaces: t(c.replaces, 46), setup: amt(c.setup) })).filter((c) => c.name);
+      const running = (Array.isArray(j.running) ? j.running : []).slice(0, 5).map((c) => ({ item: t(c.item || c.name, 30), monthly: amt(c.monthly || c.amount) })).filter((c) => c.item && c.monthly);
+      if (costs.length < 3 || systems.length < 2 || !running.length) return null;
+      return Object.assign(base, { root: t(j.root, 30) || 'Monthly expenses', left_title: t(j.left_title, 26) || 'What you pay now', right_title: t(j.right_title, 26) || 'One custom system', costs, systems, running });
+    }
+    const raw = (Array.isArray(j.nodes) ? j.nodes : []).slice(0, 15);
+    const ids = new Set(); const nodes = [];
+    raw.forEach((n, i) => { let id = t(n.id, 12).replace(/[^A-Za-z0-9_]/g, '') || 'n' + i; while (ids.has(id)) id += 'x'; ids.add(id);
+      nodes.push({ id, tag: t(n.tag, 18), label: t(n.label, 40), sub: t(n.sub, 60), lane: ['left', 'center', 'right'].includes(n.lane) ? n.lane : 'center', kind: ['start', 'step', 'gate', 'good', 'bad', 'final'].includes(n.kind) ? n.kind : 'step', from: (Array.isArray(n.from) ? n.from : n.from ? [n.from] : []).map((x) => t(x, 12)) }); });
+    const seen = new Set(); nodes.forEach((n) => { n.from = n.from.filter((x) => seen.has(x)); seen.add(n.id); });
+    if (nodes.filter((n) => n.label).length < 5) return null;
+    if (!nodes.some((n) => !n.from.length)) nodes[0].from = [];
+    return Object.assign(base, { nodes: nodes.filter((n) => n.label) });
+  };
+  if (path === '/maps/make' && method === 'POST') {
+    need(user, 'admin');
+    const want = ['compare', 'flow'].includes(body.kind) ? body.kind : 'auto';
+    const ask = str(body.ask, 1200).trim();
+    if (!ask) bad('Describe the map you want first');
+    const sys = 'You design detailed vertical web map graphics (1080x1920) for Marquise, founder of Reekon Systems in LA, who builds custom AI systems (AI receptionists, custom CRMs, lead follow-up, booking and reminders, review requests, missed-call text-back) for business owners, mainly window tint, PPF and auto detailing shops. ' +
+      'The maps are shown behind him on green screen and posted to social media. They must be VERY detailed, specific, realistic and value packed, written for business owners in plain words. Never invent clients or results. Numbers must be realistic examples. No em dashes or en dashes. Keep every label short so it fits in a box. ' +
+      'There are two layouts. Pick "compare" for anything about costs, pricing, money or before vs after. Pick "flow" for anything about how a system works, a process, a sequence or steps. ' +
+      'Reply ONLY with JSON in one of these shapes. ' +
+      'COMPARE: {"kind":"compare","kicker":"3 to 6 word line, all about the topic","title":"first part of headline, under 24 chars","highlight":"second part, under 18 chars","root":"under 22 chars, e.g. Monthly expenses","left_title":"under 22 chars","right_title":"under 22 chars","costs":[7 to 9 items {"item":"under 30 chars","monthly":number in USD}],"systems":[3 to 5 items {"name":"under 26 chars","replaces":"replaces ... under 36 chars","setup":one-time setup number}],"running":[3 or 4 items {"item":"under 22 chars","monthly":number}],"note":"Example numbers. Every business is different.","script":[6 to 9 short spoken lines]}. ' +
+      'FLOW: {"kind":"flow","kicker":"3 to 6 words","title":"under 22 chars","highlight":"under 14 chars","nodes":[11 to 14 nodes, in order from top to bottom, each {"id":"short id","tag":"optional 1 to 3 word label like Step 1, Filter, Good fit","label":"under 30 chars","sub":"detail under 45 chars","lane":"left|center|right","kind":"start|step|gate|good|bad|final","from":[ids of earlier nodes it comes from]}],"note":"Example flow. Built around how your business runs.","script":[6 to 9 short spoken lines]}. ' +
+      'FLOW rules: exactly one start node first, the main path stays in center, branches go left (bad outcomes like spam, not a fit) and right (other paths), use gate for decision points, good for the win step, and end with exactly one final node that the main branches flow into. Give real branching with 2 or 3 decision points. ' +
+      'The script is what he says on camera walking through the map, casual and natural like talking to one owner, not salesy, ends with a soft ask like comment or DM.';
+    const usr = 'Make this web map: ' + ask + (want !== 'auto' ? '\nUse the "' + want + '" layout.' : '') + '\n(variation ' + Math.random().toString(36).slice(2, 7) + ')';
+    let j = await c3AI(sys, usr, 2600, 0.75);
+    let map = wmClean(j, want);
+    if (!map && j) { j = await c3AI(sys, usr + '\nReturn valid JSON exactly in the shape described.', 2600, 0.6); map = wmClean(j, want); }
+    const script = map && Array.isArray(j.script) ? j.script.slice(0, 12).map((x) => str(String(x).replace(/[—–]/g, ','), 300)).filter(Boolean) : null;
+    if (!map) { const k = want === 'auto' ? (/price|cost|pay|money|vs|compare|save|fee|\$/i.test(ask) ? 'compare' : 'flow') : want; return json({ map: WM_EX[k], script: WM_SCRIPT[k], ai: false }); }
+    return json({ map, script: script && script.length ? script : WM_SCRIPT[map.kind], ai: true });
+  }
+  if (path === '/maps/examples' && method === 'GET') { need(user, 'admin'); return json({ compare: { map: WM_EX.compare, script: WM_SCRIPT.compare }, flow: { map: WM_EX.flow, script: WM_SCRIPT.flow } }); }
+  if (path === '/maps' && method === 'GET') {
+    need(user, 'admin');
+    const rows = (await env.DB.prepare("SELECT id, title, map, created_at FROM content_items WHERE kind = 'webmap' ORDER BY id DESC LIMIT 40").all()).results;
+    return json({ maps: rows.map((r) => { let m = {}; try { m = JSON.parse(r.map || '{}'); } catch { m = {}; } return { id: r.id, title: r.title, created_at: r.created_at, map: m.map || null, script: m.script || [] }; }).filter((x) => x.map) });
+  }
+  if (path === '/maps' && method === 'POST') {
+    need(user, 'admin');
+    const map = wmClean(body.map, 'auto'); if (!map) bad('That map could not be saved');
+    const script = (Array.isArray(body.script) ? body.script : []).slice(0, 12).map((x) => str(x, 300));
+    const title = str(((map.title || '') + ' ' + (map.highlight || '')).trim() || 'Web map', 90);
+    if (body.id) {
+      const row = await env.DB.prepare("SELECT id FROM content_items WHERE id = ? AND kind = 'webmap'").bind(+body.id).first();
+      if (row) { await env.DB.prepare('UPDATE content_items SET title = ?, body = ?, map = ? WHERE id = ?').bind(title, map.kind, JSON.stringify({ map, script }), row.id).run(); return json({ id: row.id }); }
+    }
+    const r = await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at, posted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(user.id, 'webmap', 'draft', title, map.kind, '[]', null, JSON.stringify({ map, script }), 'ai', now(), null).run();
+    return json({ id: r.meta.last_row_id });
+  }
+  if ((m = path.match(/^\/maps\/(\d+)$/)) && method === 'DELETE') {
+    need(user, 'admin');
+    await env.DB.prepare("DELETE FROM content_items WHERE id = ? AND kind = 'webmap'").bind(+m[1]).run();
+    return json({ ok: true });
+  }
   if (path === '/videos/idea' && method === 'POST') {
     need(user, 'admin');
     const platform = POST_PLAT[body.platform] ? body.platform : 'instagram';

@@ -307,7 +307,8 @@
         h('a', { href: '#/home', class: 'cm-link' + (page === 'home' ? ' on' : ''), 'aria-current': page === 'home' ? 'page' : null }, icon('home'), h('span', null, 'Home')),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Content'),
-          h('a', { href: '#/content/post', class: 'cm-link' + (page === 'content' ? ' on' : ''), 'aria-current': page === 'content' ? 'page' : null }, icon('spark'), h('span', null, 'Post content'))),
+          h('a', { href: '#/content/post', class: 'cm-link' + (active === 'content:post' ? ' on' : ''), 'aria-current': active === 'content:post' ? 'page' : null }, icon('spark'), h('span', null, 'Post content')),
+          h('a', { href: '#/content/maps', class: 'cm-link' + (active === 'content:maps' ? ' on' : ''), 'aria-current': active === 'content:maps' ? 'page' : null }, icon('social'), h('span', null, 'Web maps'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
           h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
@@ -485,6 +486,7 @@
     const parts = location.hash.replace(/^#\/?/, '').split('/');   // content / post|scheduled / platform / type
     const where = parts[1] || 'post', plat = parts[2], type = (parts[3] || '').split('?')[0];
     if (where === 'scheduled') return viewPostScheduled(plat);
+    if (where === 'maps') return viewMaps();
     if (!plat) {
       const r = await api('GET', '/posts').catch(() => ({ posts: [], counts: {} }));
       const per = {}; r.posts.forEach((x) => { const c = per[x.platform] = per[x.platform] || { draft: 0, scheduled: 0, posted: 0, video: 0 }; c[x.status]++; if (x.kind === 'video') c.video++; });
@@ -698,6 +700,216 @@
       mine.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Video drafts and scheduled'), h('div', { class: 'pc-items' }, mine.map((p) => pcItem(p, redraw)))) : null,
       done.length ? h('div', { class: 'pc-block' }, h('div', { class: 'pc-sep' }, 'Recently posted videos'), h('div', { class: 'pc-items' }, done.map((p) => pcItem(p, redraw)))) : null]);
     if (editId) { const it = vids.find((p) => p.id === editId); if (it && it.pkg) { pkg = it.pkg; savedId = it.id; await fill(); out.scrollIntoView({ block: 'start' }); } }
+  }
+  /* ===== Content > Web maps: draw detailed maps (compare + flow) on a 1080x1920 canvas ===== */
+  const WMC = { acc: '#a78bfa', acc2: '#c4b5fd', ink: '#f1eefb', mute: '#b4a9d6', dimInk: '#cfc9da', dimSub: '#8f889e' };
+  const WMMONO = '"Courier New", ui-monospace, monospace';
+  const wmMoney = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+  function wmSpaced(ctx, text, x, y, sp, align) {
+    const ch = [...String(text)]; const w = ch.reduce((a, c) => a + ctx.measureText(c).width, 0) + sp * Math.max(0, ch.length - 1);
+    let cx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x; const prev = ctx.textAlign; ctx.textAlign = 'left';
+    ch.forEach((c) => { ctx.fillText(c, cx, y); cx += ctx.measureText(c).width + sp; }); ctx.textAlign = prev; return w;
+  }
+  function wmLines(ctx, text, font, maxW, max) {
+    ctx.font = font; let ls = c3Wrap(ctx, String(text || ''), maxW);
+    if (ls.length > max) { ls = ls.slice(0, max); let l = ls[max - 1]; while (l.length > 1 && ctx.measureText(l + '…').width > maxW) l = l.slice(0, -1); ls[max - 1] = l.replace(/[\s,.]+$/, '') + '…'; }
+    return ls;
+  }
+  function wmBg(ctx, W, H) {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#17151d'); g.addColorStop(0.7, '#121117'); g.addColorStop(1, '#0f0e13'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const r1 = ctx.createRadialGradient(W * 0.75, H * 0.27, 0, W * 0.75, H * 0.27, 760); r1.addColorStop(0, 'rgba(167,139,250,.2)'); r1.addColorStop(1, 'rgba(167,139,250,0)'); ctx.fillStyle = r1; ctx.fillRect(0, 0, W, H);
+    const r2 = ctx.createRadialGradient(W * 0.05, H * 0.52, 0, W * 0.05, H * 0.52, 600); r2.addColorStop(0, 'rgba(167,139,250,.07)'); r2.addColorStop(1, 'rgba(167,139,250,0)'); ctx.fillStyle = r2; ctx.fillRect(0, 0, W, H);
+    for (let y = 17; y < H; y += 34) { const a = y < H * 0.74 ? 1 : Math.max(0, 1 - (y - H * 0.74) / (H * 0.12)); if (!a) break; ctx.fillStyle = 'rgba(236,230,255,' + (0.085 * a).toFixed(3) + ')'; for (let x = 17; x < W; x += 34) { ctx.beginPath(); ctx.arc(x, y, 1.5, 0, 6.283); ctx.fill(); } }
+  }
+  function wmBox(ctx, x, y, w, hh, st, r) {
+    r = r || 18; ctx.save();
+    const S = { normal: ['rgba(36,30,54,.95)', 'rgba(167,139,250,.5)', 1.5, 0], dim: ['rgba(26,24,32,.95)', 'rgba(236,230,255,.14)', 1.5, 0], start: ['#1d1a26', 'rgba(196,181,253,.6)', 2, 26], gate: [['#2a2240', '#1d1a2b'], '#a78bfa', 2, 28],
+      fit: [['#3b2f63', '#251f3b'], '#c4b5fd', 2, 32], final: [['#3b2f63', '#251f3b'], '#c4b5fd', 2, 44], dash: ['#251f38', '#a78bfa', 2, 0], sub: ['#211d27', 'rgba(236,230,255,.25)', 2, 0], suba: ['#2c2443', '#a78bfa', 2, 14] }[st] || ['rgba(36,30,54,.95)', 'rgba(167,139,250,.5)', 1.5, 0];
+    c3Round(ctx, x, y, w, hh, r);
+    if (Array.isArray(S[0])) { const g = ctx.createLinearGradient(x, y, x + w, y + hh); g.addColorStop(0, S[0][0]); g.addColorStop(1, S[0][1]); ctx.fillStyle = g; } else ctx.fillStyle = S[0];
+    if (S[3]) { ctx.shadowColor = 'rgba(167,139,250,.6)'; ctx.shadowBlur = S[3]; }
+    ctx.fill(); ctx.shadowBlur = 0;
+    if (st === 'final' || st === 'start') { ctx.strokeStyle = 'rgba(167,139,250,.1)'; ctx.lineWidth = 16; c3Round(ctx, x - 5, y - 5, w + 10, hh + 10, r + 5); ctx.stroke(); c3Round(ctx, x, y, w, hh, r); }
+    if (st === 'dash') ctx.setLineDash([8, 7]);
+    ctx.strokeStyle = S[1]; ctx.lineWidth = S[2]; ctx.stroke(); ctx.restore();
+  }
+  function wmPath(ctx, pts, on) {
+    ctx.save(); ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (on) { ctx.strokeStyle = WMC.acc; ctx.lineWidth = 3; ctx.shadowColor = 'rgba(167,139,250,.9)'; ctx.shadowBlur = 10; }
+    else { ctx.strokeStyle = 'rgba(236,230,255,.3)'; ctx.lineWidth = 2.5; ctx.setLineDash([2, 8]); }
+    ctx.stroke(); ctx.restore();
+  }
+  function wmDot(ctx, x, y, on) { ctx.save(); ctx.fillStyle = on ? WMC.acc : '#4a4558'; if (on) { ctx.shadowColor = 'rgba(167,139,250,.9)'; ctx.shadowBlur = 8; } ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.283); ctx.fill(); ctx.restore(); }
+  function wmTag(ctx, text, x, y, color, align, size) { ctx.font = '700 ' + (size || 13) + 'px ' + WMMONO; ctx.fillStyle = color; wmSpaced(ctx, String(text).toUpperCase(), x, y, (size || 13) * 0.2, align); }
+  function wmHeader(ctx, m, W) {
+    ctx.textBaseline = 'alphabetic';
+    if (m.kicker) wmTag(ctx, m.kicker, W / 2, 82, WMC.acc, 'center', 20);
+    ctx.font = '900 54px ' + C3F; const t = (m.title || '').trim(), hl = (m.highlight || '').trim();
+    const wt = ctx.measureText(t + (hl ? ' ' : '')).width, wh = ctx.measureText(hl).width; let y = 150;
+    if (wt + wh <= W - 100) { let x = W / 2 - (wt + wh) / 2; ctx.textAlign = 'left'; ctx.fillStyle = WMC.ink; ctx.fillText(t + (hl ? ' ' : ''), x, y); ctx.fillStyle = WMC.acc2; ctx.fillText(hl, x + wt, y); }
+    else { ctx.textAlign = 'center'; wmLines(ctx, t, '900 54px ' + C3F, W - 100, 2).forEach((l) => { ctx.fillStyle = WMC.ink; ctx.fillText(l, W / 2, y); y += 58; }); if (hl) { ctx.fillStyle = WMC.acc2; ctx.fillText(hl, W / 2, y); } else y -= 58; }
+    ctx.textAlign = 'left'; return y + 30;
+  }
+  function wmTotals(m) {
+    const now = m.costs.reduce((a, c) => a + c.monthly, 0), setup = m.systems.reduce((a, c) => a + c.setup, 0), run = m.running.reduce((a, c) => a + c.monthly, 0);
+    return { now, setup, run, yearNow: now * 12, year1: setup + run * 12, keep1: now * 12 - (setup + run * 12), keep2: (now - run) * 12 };
+  }
+  function wmCompare(ctx, m, top) {
+    const W = 1080, L = 56, CW = 462, R = L + CW + 44, T = wmTotals(m), ops = [], lines = [];
+    const root = { x: 340, y: top + 6, w: 400, h: 76 }; ops.push(() => { wmBox(ctx, root.x, root.y, root.w, root.h, 'start', 20); ctx.font = '800 28px ' + C3F; ctx.fillStyle = WMC.ink; ctx.textAlign = 'center'; ctx.fillText(m.root, W / 2, root.y + 48); ctx.textAlign = 'left'; });
+    const by = root.y + root.h + 40;
+    const branch = (x, tag, label, on) => { ops.push(() => { wmBox(ctx, x, by, CW, 84, on ? 'gate' : 'sub', 20); wmTag(ctx, tag, x + 20, by + 30, on ? WMC.acc2 : 'rgba(236,230,255,.6)', 'left', 14); ctx.font = '800 23px ' + C3F; ctx.fillStyle = WMC.ink; ctx.fillText(wmLines(ctx, label, '800 23px ' + C3F, CW - 40, 1)[0], x + 20, by + 62); }); return { x, y: by, w: CW, h: 84 }; };
+    const bl = branch(L, 'Now', m.left_title, false), br = branch(R, 'Your AI', m.right_title, true);
+    const jy = root.y + root.h + 20; lines.push([[[W / 2, root.y + root.h], [W / 2, jy], [L + CW / 2, jy], [L + CW / 2, by]], false], [[[W / 2, jy], [R + CW / 2, jy], [R + CW / 2, by]], true]);
+    // left column
+    let y = by + 84 + 14; const lk = [];
+    m.costs.forEach((c) => { ctx.font = '800 22px ' + C3F; const aw = ctx.measureText(wmMoney(c.monthly)).width; const ls = wmLines(ctx, c.item, '650 22px ' + C3F, CW - 40 - aw - 12, 2); const hh = ls.length > 1 ? 84 : 58; const yy = y;
+      ops.push(() => { wmBox(ctx, L, yy, CW, hh, 'dim', 16); ctx.font = '650 22px ' + C3F; ctx.fillStyle = WMC.dimInk; ls.forEach((l, k) => ctx.fillText(l, L + 18, yy + (ls.length > 1 ? 36 + k * 27 : 37))); ctx.font = '800 22px ' + C3F; ctx.fillStyle = '#ece7f6'; ctx.textAlign = 'right'; ctx.fillText(wmMoney(c.monthly), L + CW - 18, yy + hh / 2 + 8); ctx.textAlign = 'left'; });
+      lk.push(yy + hh / 2); y += hh + 10; });
+    const ls = { y: y + 6, h: 66 }; ops.push(() => { wmBox(ctx, L, ls.y, CW, 66, 'sub', 18); ctx.font = '800 21px ' + C3F; ctx.fillStyle = WMC.ink; ctx.fillText('Per month', L + 18, ls.y + 41); ctx.font = '900 36px ' + C3F; ctx.textAlign = 'right'; ctx.fillText(wmMoney(T.now), L + CW - 18, ls.y + 46); ctx.textAlign = 'left'; });
+    lk.push(ls.y + 33); const lBottom = ls.y + 66;
+    // right column
+    y = by + 84 + 14; const rk = [];
+    m.systems.forEach((sy) => { ctx.font = '900 24px ' + C3F; const aw = Math.max(ctx.measureText(wmMoney(sy.setup)).width, 52); const nl = wmLines(ctx, sy.name, '800 22px ' + C3F, CW - 40 - aw - 12, 2), rl = sy.replaces ? wmLines(ctx, sy.replaces, '600 15px ' + C3F, CW - 40 - aw - 12, 2) : []; const hh = Math.max(70, 18 + nl.length * 26 + rl.length * 19 + 12); const yy = y;
+      ops.push(() => { wmBox(ctx, R, yy, CW, hh, 'normal', 16); let ty = yy + 18 + 20; ctx.font = '800 22px ' + C3F; ctx.fillStyle = '#ece6ff'; nl.forEach((l) => { ctx.fillText(l, R + 18, ty); ty += 26; }); ctx.font = '600 15px ' + C3F; ctx.fillStyle = '#a99fc8'; ty -= 4; rl.forEach((l) => { ctx.fillText(l, R + 18, ty); ty += 19; });
+        ctx.font = '900 24px ' + C3F; ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(wmMoney(sy.setup), R + CW - 18, yy + hh / 2 + 2); ctx.textAlign = 'left'; wmTag(ctx, 'Setup', R + CW - 18, yy + hh / 2 + 22, WMC.acc2, 'right', 12); });
+      rk.push(yy + hh / 2); y += hh + 10; });
+    const st = y; ops.push(() => { wmBox(ctx, R, st, CW, 66, 'dash', 18); ctx.font = '800 21px ' + C3F; ctx.fillStyle = WMC.ink; ctx.fillText('One-time setup', R + 18, st + 30); ctx.font = '600 15px ' + C3F; ctx.fillStyle = '#b8acdc'; ctx.fillText('paid once, you own it', R + 18, st + 52); ctx.font = '900 34px ' + C3F; ctx.fillStyle = WMC.ink; ctx.textAlign = 'right'; ctx.fillText(wmMoney(T.setup), R + CW - 18, st + 45); ctx.textAlign = 'left'; });
+    rk.push(st + 33); y += 76;
+    const rh = 38 + m.running.length * 29 + 10, ry = y; ops.push(() => { wmBox(ctx, R, ry, CW, rh, 'normal', 16); wmTag(ctx, 'Monthly running cost', R + 18, ry + 26, WMC.acc2, 'left', 14); m.running.forEach((c, k) => { const yy = ry + 58 + k * 29; ctx.font = '500 19px ' + C3F; ctx.fillStyle = '#d6cff0'; ctx.fillText(wmLines(ctx, c.item, '500 19px ' + C3F, CW - 140, 1)[0], R + 18, yy); ctx.font = '800 19px ' + C3F; ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(wmMoney(c.monthly), R + CW - 18, yy); ctx.textAlign = 'left'; }); });
+    rk.push(ry + rh / 2); y += rh + 16;
+    const pm = y; ops.push(() => { wmBox(ctx, R, pm, CW, 66, 'suba', 18); ctx.font = '800 21px ' + C3F; ctx.fillStyle = WMC.ink; ctx.fillText('Per month', R + 18, pm + 30); ctx.font = '600 15px ' + C3F; ctx.fillStyle = '#b8acdc'; ctx.fillText('after setup', R + 18, pm + 52); ctx.font = '900 36px ' + C3F; ctx.fillStyle = WMC.ink; ctx.textAlign = 'right'; ctx.fillText(wmMoney(T.run), R + CW - 18, pm + 46); ctx.textAlign = 'left'; });
+    rk.push(pm + 33); const rBottom = pm + 66;
+    // spines
+    const sl = L - 22, sr = R + CW + 22;
+    lines.push([[[L, by + 42], [sl, by + 42], [sl, lk[lk.length - 1]]], false]); lk.forEach((yy) => lines.push([[[sl, yy], [L, yy]], false]));
+    lines.push([[[R + CW, by + 42], [sr, by + 42], [sr, rk[rk.length - 1]]], true]); rk.forEach((yy) => lines.push([[[sr, yy], [R + CW, yy]], true]));
+    // yearly
+    const yy = Math.max(lBottom, rBottom) + 56, yh = 128;
+    lines.push([[[L + CW / 2, lBottom], [L + CW / 2, yy]], false], [[[R + CW / 2, rBottom], [R + CW / 2, yy]], true]);
+    ops.push(() => { wmBox(ctx, L, yy, CW, yh, 'sub', 20); wmTag(ctx, 'Yearly cost now', L + 22, yy + 32, 'rgba(236,230,255,.75)', 'left', 14); ctx.font = '900 52px ' + C3F; ctx.fillStyle = '#d5cfe2'; const t = wmMoney(T.yearNow); ctx.fillText(t, L + 22, yy + 88); const tw = ctx.measureText(t).width; ctx.fillStyle = WMC.acc; ctx.fillRect(L + 20, yy + 70, tw + 4, 4); ctx.font = '500 16px ' + C3F; ctx.fillStyle = '#a9a3b8'; ctx.fillText(wmMoney(T.now) + ' × 12 months', L + 22, yy + 114); });
+    ops.push(() => { wmBox(ctx, R, yy, CW, yh, 'gate', 20); wmTag(ctx, 'Year 1 with AI', R + 22, yy + 32, WMC.acc2, 'left', 14); ctx.font = '900 52px ' + C3F; ctx.fillStyle = '#fff'; ctx.fillText(wmMoney(T.year1), R + 22, yy + 88); ctx.font = '500 16px ' + C3F; ctx.fillStyle = '#b8acdc'; ctx.fillText(wmMoney(T.setup) + ' setup + ' + wmMoney(T.run) + ' × 12', R + 22, yy + 114); });
+    const ky = yy + yh + 56, kh = 124, kyMid = yy + yh + 28;
+    lines.push([[[L + CW / 2, yy + yh], [L + CW / 2, kyMid], [W / 2, kyMid]], false], [[[R + CW / 2, yy + yh], [R + CW / 2, kyMid], [W / 2, kyMid], [W / 2, ky]], true]);
+    ops.push(() => { wmDot(ctx, W / 2, kyMid, true); wmDot(ctx, W / 2, jy, true); wmDot(ctx, sl, by + 42, false); wmDot(ctx, sr, by + 42, true);
+      wmBox(ctx, 160, ky, 760, kh, 'final', 24); ctx.font = '800 27px ' + C3F; ctx.fillStyle = WMC.ink; ctx.fillText(T.keep1 >= 0 ? 'You keep in year 1' : 'Year 1 difference', 190, ky + 54); ctx.font = '600 17px ' + C3F; ctx.fillStyle = '#cbbff0'; ctx.fillText('Year 2 and on: ' + wmMoney(T.keep2) + ' a year', 190, ky + 84); ctx.font = '900 64px ' + C3F; ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(wmMoney(T.keep1), 890, ky + 84); ctx.textAlign = 'left'; });
+    return { lines, ops, bottom: ky + kh };
+  }
+  function wmFlow(ctx, m, top) {
+    const W = 1080, LX = { left: 40, center: 390, right: 740 }, NW = 300, ops = [], lines = [];
+    const by = {}; m.nodes.forEach((n) => { by[n.id] = n; });
+    const occ = {}; let maxRow = 0;
+    m.nodes.forEach((n) => { let row = n.from.length ? Math.max(...n.from.map((f) => (by[f] && by[f].row != null ? by[f].row + 1 : 0))) : 0; if (n.kind === 'final') row = Math.max(row, maxRow + 1);
+      const free = (r) => (n.kind === 'final' ? !['left', 'center', 'right'].some((l) => occ[r + l]) : !occ[r + n.lane] && !occ[r + 'full']);
+      while (!free(row)) row++; n.row = row; maxRow = Math.max(maxRow, row); if (n.kind === 'final') occ[row + 'full'] = 1; else occ[row + n.lane] = 1; });
+    const meas = (n) => { const fin = n.kind === 'final', w = fin ? 600 : NW, iw = w - 36;
+      const lf = '800 ' + (fin ? 32 : 23) + 'px ' + C3F, sf = '600 ' + (fin ? 19 : 16) + 'px ' + C3F;
+      const ll = wmLines(ctx, n.label, lf, iw, 3), sl = n.sub ? wmLines(ctx, n.sub, sf, iw, 3) : [];
+      const lh = fin ? 38 : 28, sh = fin ? 25 : 21;
+      n.L = { w, x: fin ? 240 : LX[n.lane], lf, sf, ll, sl, lh, sh, h: (fin ? 44 : 30) + (n.tag ? 22 : 0) + ll.length * lh + (sl.length ? 6 + sl.length * sh : 0) }; };
+    m.nodes.forEach(meas);
+    const rowH = []; m.nodes.forEach((n) => { rowH[n.row] = Math.max(rowH[n.row] || 0, n.L.h); });
+    const rowY = []; let y = top + 10; for (let r = 0; r <= maxRow; r++) { rowY[r] = y; y += (rowH[r] || 0) + (r < maxRow && (rowH[r + 1] || 0) ? 44 : 0) + (rowH[r] ? 0 : 0); if (rowH[r + 1] && m.nodes.some((n) => n.row === r + 1 && n.kind === 'final')) y += 10; }
+    m.nodes.forEach((n) => { n.L.y = rowY[n.row]; });
+    const bad = (n) => n.kind === 'bad';
+    m.nodes.forEach((c) => { const cx = c.L.x + c.L.w / 2; c.from.forEach((fid) => { const p = by[fid]; if (!p) return; const px = p.L.x + p.L.w / 2, pb = p.L.y + p.L.h, on = !bad(c) && !bad(p);
+      if (c.kind === 'final') { const my = c.L.y - 22; const tx = Math.abs(px - cx) < 5 ? cx : Math.max(c.L.x + 60, Math.min(c.L.x + c.L.w - 60, px)); lines.push([Math.abs(px - tx) < 3 ? [[px, pb], [px, c.L.y]] : [[px, pb], [px, my], [tx, my], [tx, c.L.y]], on]); return; }
+      const skip = c.row - p.row > 1, my = skip ? c.L.y - 22 : pb + (c.L.y - pb) / 2;
+      if (Math.abs(px - cx) < 3) lines.push([[[px, pb], [px, c.L.y]], on]); else { lines.push([[[px, pb], [px, my], [cx, my], [cx, c.L.y]], on]); ops.unshift(() => wmDot(ctx, px, my, on)); } }); });
+    m.nodes.forEach((n) => { const st = n.kind === 'final' ? 'final' : n.kind === 'start' ? 'start' : n.kind === 'gate' ? 'gate' : n.kind === 'good' ? 'fit' : n.kind === 'bad' ? 'dim' : 'normal'; const N = n.L;
+      const center = ['final', 'start', 'gate'].includes(n.kind), tx = center ? N.x + N.w / 2 : N.x + 18;
+      ops.push(() => { wmBox(ctx, N.x, N.y, N.w, N.h, st, n.kind === 'final' ? 24 : 18); ctx.textAlign = center ? 'center' : 'left'; let ty = N.y + (n.kind === 'final' ? 22 : 15);
+        if (n.tag) { wmTag(ctx, n.tag, tx, ty + 13, n.kind === 'bad' ? WMC.dimSub : WMC.acc2, center ? 'center' : 'left', 13); ty += 22; ctx.textAlign = center ? 'center' : 'left'; }
+        ctx.font = N.lf; ctx.fillStyle = n.kind === 'bad' ? WMC.dimInk : WMC.ink; N.ll.forEach((l) => { ty += N.lh; ctx.fillText(l, tx, ty - (N.lh - (n.kind === 'final' ? 30 : 22)) / 2 - 2); });
+        if (N.sl.length) { ty += 6; ctx.font = N.sf; ctx.fillStyle = n.kind === 'bad' ? WMC.dimSub : n.kind === 'final' ? '#cbbff0' : WMC.mute; N.sl.forEach((l) => { ty += N.sh; ctx.fillText(l, tx, ty - 4); }); }
+        ctx.textAlign = 'left'; }); });
+    const bottom = Math.max(...m.nodes.map((n) => n.L.y + n.L.h));
+    return { lines, ops, bottom };
+  }
+  function wmRender(canvas, m, opts) {
+    opts = opts || {}; const W = 1080, H = 1920, ctx = canvas.getContext('2d'); canvas.width = W; canvas.height = H;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); wmBg(ctx, W, H);
+    const build = () => { const top = wmHeader(ctx, m, W); const L = m.kind === 'compare' ? wmCompare(ctx, m, top) : wmFlow(ctx, m, top); return L; };
+    // measure pass on a scratch canvas so the real one isn't touched
+    const scratch = document.createElement('canvas').getContext('2d'); const realCtx = ctx;
+    const meas = (() => { const c = scratch; c.canvas.width = W; c.canvas.height = H; const top = wmHeaderMeasure(c, m, W); return m.kind === 'compare' ? wmCompare(c, m, top) : wmFlow(c, m, top); })();
+    const noteH = 46, limit = opts.greenscreen === false ? 1820 : 1500, need = meas.bottom + noteH;
+    const s = Math.min(1, limit / need);
+    realCtx.save(); if (s < 1) realCtx.setTransform(s, 0, 0, s, (W - W * s) / 2, 0);
+    const L = build(); L.lines.forEach(([pts, on]) => wmPath(realCtx, pts, on)); L.ops.forEach((f) => f());
+    if (m.note) { realCtx.font = '500 18px ' + C3F; realCtx.fillStyle = 'rgba(236,230,255,.45)'; realCtx.textAlign = 'center'; realCtx.fillText(m.note, W / 2, L.bottom + 36); realCtx.textAlign = 'left'; }
+    realCtx.restore();
+    wmTag(realCtx, 'Reekon Systems', W / 2, H - 56, 'rgba(196,181,253,.5)', 'center', 22);
+  }
+  function wmHeaderMeasure(ctx, m, W) { ctx.save(); const y = wmHeader(ctx, m, W); ctx.restore(); return y; }
+
+  const WM_TYPES = [['auto', 'Let AI pick'], ['compare', 'Price comparison'], ['flow', 'How it works']];
+  const WM_IDEAS = ['What a tint shop pays now vs a custom AI system, with setup fees and yearly totals', 'How an AI receptionist books calls, filters out bad leads and blocks spam', 'How a quote request turns into a booked job with automatic follow-up', 'What missed calls really cost a shop in a year vs having AI answer', 'How automatic Google review requests work after every job', 'Hiring a front desk person vs an AI receptionist, every cost included'];
+  async function viewMaps() {
+    let cur = null, script = [], savedId = 0, kind = 'auto', gs = true;
+    try { gs = localStorage.getItem('wm-gs') !== '0'; } catch { /* ok */ }
+    const typeBox = h('div', { class: 'cx-filters' });
+    const drawTypes = () => typeBox.replaceChildren(...WM_TYPES.map(([k, t]) => h('button', { type: 'button', class: 'cx-chip' + (kind === k ? ' on' : ''), onclick: () => { kind = k; drawTypes(); } }, t)));
+    drawTypes();
+    const ask = h('textarea', { rows: 4, maxlength: 1200, placeholder: 'Describe it like you would to me. e.g. "what a detail shop pays for a front desk, answering service and 5 apps vs one custom AI system, with setup fees and what they keep in a year"' });
+    const ideas = h('div', { class: 'wm-ideas' }, h('span', null, 'Ideas'), WM_IDEAS.map((t) => h('button', { type: 'button', onclick: () => { ask.value = t; ask.focus(); } }, t)));
+    const canvas = h('canvas', { class: 'wm-canvas', width: 1080, height: 1920, 'aria-label': 'Web map preview' });
+    const out = h('div', { class: 'wm-out', hidden: true });
+    const scriptList = h('ol', { class: 'wm-script' });
+    const editor = h('div', { class: 'wm-edit' });
+    const gsBox = h('input', { type: 'checkbox', checked: gs, onchange: () => { gs = gsBox.checked; try { localStorage.setItem('wm-gs', gs ? '1' : '0'); } catch { /* ok */ } draw(); } });
+    const draw = () => { if (cur) wmRender(canvas, cur, { greenscreen: gs }); };
+    const num = (v, on) => h('input', { type: 'number', min: 0, step: 1, value: v, inputmode: 'numeric', oninput: (e) => { on(Math.max(0, Math.round(+e.target.value || 0))); draw(); } });
+    const txt = (v, on, ph) => h('input', { type: 'text', value: v || '', placeholder: ph || '', oninput: (e) => { on(e.target.value); draw(); } });
+    const buildEditor = () => {
+      const rows = [h('div', { class: 'wm-er two' }, h('label', null, 'Headline', txt(cur.title, (v) => { cur.title = v; })), h('label', null, 'Purple part', txt(cur.highlight, (v) => { cur.highlight = v; })))];
+      if (cur.kind === 'compare') {
+        rows.push(h('div', { class: 'pc-sep' }, 'What they pay now (per month)'), ...cur.costs.map((c) => h('div', { class: 'wm-er' }, txt(c.item, (v) => { c.item = v; }), num(c.monthly, (v) => { c.monthly = v; }))));
+        rows.push(h('div', { class: 'pc-sep' }, 'Your systems (setup fee)'), ...cur.systems.map((c) => h('div', { class: 'wm-er' }, txt(c.name, (v) => { c.name = v; }), num(c.setup, (v) => { c.setup = v; }))));
+        rows.push(h('div', { class: 'pc-sep' }, 'Monthly running cost'), ...cur.running.map((c) => h('div', { class: 'wm-er' }, txt(c.item, (v) => { c.item = v; }), num(c.monthly, (v) => { c.monthly = v; }))));
+      } else {
+        rows.push(h('div', { class: 'pc-sep' }, 'Boxes'), ...cur.nodes.map((n) => h('div', { class: 'wm-er two' }, txt(n.label, (v) => { n.label = v; }, 'Title'), txt(n.sub, (v) => { n.sub = v; }, 'Detail'))));
+      }
+      editor.replaceChildren(...rows);
+    };
+    const show = (r) => {
+      cur = JSON.parse(JSON.stringify(r.map)); script = r.script || []; savedId = r.id || 0;
+      scriptList.replaceChildren(...script.map((l) => h('li', null, l)));
+      buildEditor(); draw(); out.hidden = false;
+    };
+    const make = async (btn) => {
+      if (!ask.value.trim()) { toast('Describe the map first, or tap an idea', true); ask.focus(); return; }
+      btn.disabled = true; const t0 = btn.innerHTML; btn.textContent = 'Planning your map… (about 20s)';
+      try { const r = await api('POST', '/maps/make', { ask: ask.value.trim(), kind }); show(r); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); if (!r.ai) toast('The AI is busy, so here’s an example map. Try again in a minute.', true); }
+      catch (e) { fail(e); }
+      btn.disabled = false; btn.innerHTML = t0;
+    };
+    const ex = await api('GET', '/maps/examples').catch(() => null);
+    const saved = await api('GET', '/maps').catch(() => ({ maps: [] }));
+    const savedBox = h('div', { class: 'wm-saved' });
+    const drawSaved = (list) => savedBox.replaceChildren(...(list.length ? [h('div', { class: 'pc-sep' }, 'Saved maps'), h('div', { class: 'wm-grid' }, list.map((x) => {
+      const c = h('canvas', { class: 'wm-thumb', width: 1080, height: 1920 }); setTimeout(() => wmRender(c, x.map, { greenscreen: false }), 0);
+      return h('div', { class: 'wm-card' }, h('button', { type: 'button', class: 'wm-card-img', 'aria-label': 'Open ' + x.title, onclick: () => { show(x); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, c),
+        h('div', { class: 'wm-card-b' }, h('b', null, x.title), h('small', null, (x.map.kind === 'compare' ? 'Price comparison' : 'How it works') + ' · ' + new Date(x.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+          h('button', { type: 'button', class: 'btn ghost small', onclick: async () => { try { await api('DELETE', '/maps/' + x.id); drawSaved(list.filter((y) => y.id !== x.id)); toast('Deleted'); } catch (e) { fail(e); } } }, 'Delete')));
+    }))] : []));
+    drawSaved(saved.maps);
+    out.append(h('div', { class: 'wm-res' },
+      h('div', { class: 'pc-card wm-prev' }, h('div', { class: 'wm-frame' }, canvas),
+        h('label', { class: 'wm-gs' }, gsBox, h('span', null, 'Leave space at the bottom for green screen')),
+        h('div', { class: 'pc-acts' },
+          h('button', { class: 'btn primary', onclick: () => canvas.toBlob((b) => b && c3Save(b, 'web-map-' + Date.now() + '.png'), 'image/png') }, icon('spark'), 'Download image'),
+          h('button', { class: 'btn', onclick: async (e) => { const b = e.currentTarget; b.disabled = true; try { savedId = (await api('POST', '/maps', { id: savedId || undefined, map: cur, script })).id; toast('Saved ✓'); const r = await api('GET', '/maps'); drawSaved(r.maps); } catch (x) { fail(x); } b.disabled = false; } }, 'Save'))),
+      h('div', { class: 'wm-side' },
+        h('div', { class: 'pc-card' }, h('div', { class: 'pc-card-h' }, h('b', null, 'What to say'), h('button', { class: 'btn small', onclick: () => pcCopy(script.join('\n\n')) }, icon('copy'), 'Copy script')),
+          h('p', { class: 'dim small' }, 'Talk it through like you’re explaining it to one owner.'), scriptList),
+        h('details', { class: 'pc-card wm-det' }, h('summary', null, h('b', null, 'Change the words or numbers'), h('small', { class: 'dim' }, 'Totals update on their own')), editor))));
+    crmShell('content:maps', [pcHead('Content', 'Web maps', 'Describe it and get a detailed web map in your style. Use it behind you on green screen or post it.'),
+      h('div', { class: 'pc-card pc-start' }, h('label', { class: 'lbl' }, 'What kind of map?'), typeBox, ask,
+        h('div', { class: 'row' }, h('button', { class: 'btn primary pc-big', onclick: (e) => make(e.currentTarget) }, icon('spark'), 'Make my web map')), ideas,
+        ex ? h('div', { class: 'wm-ex' }, h('span', null, 'Or open an example'), h('button', { type: 'button', class: 'cx-chip', onclick: () => { show(ex.compare); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Price comparison'), h('button', { type: 'button', class: 'cx-chip', onclick: () => { show(ex.flow); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'AI receptionist flow')) : null),
+      out, savedBox]);
   }
   function pcItem(p, redraw) {
     const body = h('p', { class: 'pc-item-b' + (p.kind === 'video' ? ' clip' : '') }, p.body);
