@@ -153,7 +153,7 @@
   // bottom tabs on phones
   function tabsFor(role) {
     if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['more', 'System']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['studio', 'Demo Studio'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
@@ -288,7 +288,7 @@
   const LEAD_SECTIONS = [['email', 'Email', 'mail'], ['sms', 'SMS', 'sms'], ['social', 'Social media', 'social'], ['calls', 'Cold calls', 'phone'], ['sales', 'Sales', 'sales'], ['script', 'Script', 'script']];
   let CRM_SUB = 'calls';
   function crmShell(active, content) {
-    active = ({ deals: 'leads:sales', script: 'leads:script', leads: 'leads:' + CRM_SUB, studio: 'leads:' + CRM_SUB })[active] || active;
+    active = ({ deals: 'leads:sales', script: 'leads:script', leads: 'leads:' + CRM_SUB, })[active] || active;
     document.documentElement.classList.remove('nonav');
     document.querySelectorAll('.orb').forEach((o) => o.remove());
     const [page, sub] = String(active).split(':');
@@ -309,6 +309,8 @@
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Content'),
           h('a', { href: '#/content/post', class: 'cm-link' + (active === 'content:post' ? ' on' : ''), 'aria-current': active === 'content:post' ? 'page' : null }, icon('spark'), h('span', null, 'Post content')),
           h('a', { href: '#/content/maps', class: 'cm-link' + (active === 'content:maps' ? ' on' : ''), 'aria-current': active === 'content:maps' ? 'page' : null }, icon('social'), h('span', null, 'Web maps'))),
+        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Demos'),
+          h('a', { href: '#/studio', class: 'cm-link' + (page === 'studio' ? ' on' : ''), 'aria-current': page === 'studio' ? 'page' : null }, icon('demos'), h('span', null, 'Demo Studio'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
           h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
@@ -2837,7 +2839,7 @@
   }
   function viewStudioHome() {
     shell('studio', h('div', { class: 'sh' },
-      h('a', { class: 'crumb', href: '#/create' }, icon('chev'), 'Create'),
+      h('a', { class: 'crumb', href: '#/home' }, icon('chev'), 'Home'),
       pitchNowCard(),
       h('div', { class: 'sh-hero' }, h('p', { class: 'sh-kick' }, 'Demo Studio'), h('h1', null, 'What do you want to demo today?'),
         h('p', { class: 'sh-sub' }, 'Pick an offer. Then connect the lead who asked for it and send them a live demo.')),
