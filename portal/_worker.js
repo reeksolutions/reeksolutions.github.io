@@ -5786,7 +5786,7 @@ async function elevenSpeak(env, text, voiceId) {
   const key = String(env.ELEVENLABS_API_KEY || '').trim().replace(/^["']|["']$/g, '');
   const r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId || env.ELEVENLABS_VOICE_ID) + '?output_format=mp3_44100_64', {
     method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.4, similarity_boost: 0.8, speed: 1.04 } }), signal: AbortSignal.timeout(15000) });
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5', voice_settings: { stability: 0.32, similarity_boost: 0.78, style: 0.3, use_speaker_boost: true, speed: 1.0 } }), signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('eleven ' + r.status);
   return r.arrayBuffer();
 }
@@ -5856,7 +5856,7 @@ function kitPrompt(k, mode) {
   return k.rules ? base + '\nSHOP INSTRUCTIONS from the owner. Follow these where they differ from the rules above, but keep the length rules and always reply in the JSON format above:\n' + k.rules : base;
 }
 function kitPromptBase(k, mode) {
-  const style = mode === 'voice' ? 'You are on a live phone call. Sound like a real, friendly person at the front desk: use contractions, short everyday sentences, one thought at a time. Open with a quick natural acknowledgment when it fits (Got it. Sure thing. Okay.). At most 2 short sentences, under 28 words. Never read lists, never say symbols, say prices in words like "about four to nine hundred dollars".'
+  const style = mode === 'voice' ? 'You are on a live phone call. Sound like a real, friendly person at the front desk: use contractions, short everyday sentences, one thought at a time. Open with a quick natural acknowledgment when it fits (Got it. Sure thing. Okay.). Now and then, not every turn, use a small filler a real person would (Yeah, Gotcha, Okay so, Oh nice). Vary how you start sentences. Never sound scripted or formal. At most 2 short sentences, under 28 words. Never read lists, never say symbols, say prices in words like "about four to nine hundred dollars".'
     : mode === 'sms' ? 'You are texting: under 220 characters, one question at a time, no emojis.' : 'You are in a website chat: under 60 words, friendly and plain.';
   const role = mode === 'voice' ? 'phone receptionist' : mode === 'sms' ? 'text-message assistant' : 'website chat assistant';
   if (k.niche === 'medspa') {
@@ -5953,12 +5953,10 @@ async function handleKitApi(request, env, url) {
       } catch (e) { console.error('kit eleven', e); }
     }
     if (!env.AI) return null;
-    try {
-      const r = await env.AI.run('@cf/deepgram/aura-1', { text, speaker: k.speaker, encoding: 'mp3' }, { returnRawResponse: true });
-      const buf = await r.arrayBuffer();
-      if (buf.byteLength < 1500) throw new Error('empty audio');
-      return { audio: b64buf(buf), mime: 'audio/mpeg', engine: 'aura' };
-    } catch (e) { console.error('kit aura', e); return null; }
+    // Aura 2 sounds much more like a person than Aura 1; Aura 1 stays as the backup
+    const say = async (model, speaker) => { const r = await env.AI.run(model, { text, speaker, encoding: 'mp3' }, { returnRawResponse: true }); const buf = await r.arrayBuffer(); if (buf.byteLength < 1500) throw new Error('empty audio'); return buf; };
+    try { return { audio: b64buf(await say('@cf/deepgram/aura-2-en', { stella: 'thalia', perseus: 'apollo' }[k.speaker] || k.speaker)), mime: 'audio/mpeg', engine: 'aura' }; } catch (e) { console.error('kit aura2', e); }
+    try { return { audio: b64buf(await say('@cf/deepgram/aura-1', k.speaker)), mime: 'audio/mpeg', engine: 'aura' }; } catch (e) { console.error('kit aura', e); return null; }
   }
   if (op === 'turn') {
     // one round trip for a live call: the caller's clip in, the words heard + the reply + the reply's audio out
