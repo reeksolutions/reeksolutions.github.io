@@ -153,7 +153,7 @@
   // bottom tabs on phones
   function tabsFor(role) {
     if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['more', 'System']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['studio', 'Demo Studio'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
