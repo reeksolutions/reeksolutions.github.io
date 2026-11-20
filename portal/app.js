@@ -153,13 +153,13 @@
   // bottom tabs on phones
   function tabsFor(role) {
     if (role === 'admin') return [['home', 'Home'], ['sell', 'Sell'], ['create', 'Create'], ['more', 'System']];
-    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['studio', 'Demo'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
+    if (role === 'rep') return [['home', 'Home'], ['leads', 'My Leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings']];
     return [['studio', 'Studio'], ['demos', 'Demo Queue'], ['account', 'Account']];
   }
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [[null, [['home', 'Home']]]].concat(['sell', 'create', 'more'].flatMap((k) => CATS[k][2].map(([label, items]) => [CATS[k][0] + ' · ' + label, items.map((i) => [i[0], i[1]])])));
-    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings'], ['studio', 'Demo Studio']]]];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]], ['Create · Demos', [['studio', 'Demo Studio']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
