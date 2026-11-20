@@ -174,6 +174,7 @@ async function ensureSchema(env) {
   ]);
   try { await env.DB.prepare('ALTER TABLE finder_log ADD COLUMN provider TEXT').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+  try { await env.DB.prepare('ALTER TABLE content_items ADD COLUMN stats TEXT').run(); } catch { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE cal_events ADD COLUMN done INTEGER NOT NULL DEFAULT 0').run(); }
   catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
   const tcols = new Set((await env.DB.prepare('PRAGMA table_info(tracker_days)').all()).results.map((c) => c.name));
@@ -3239,7 +3240,9 @@ async function api(request, env, url) {
     'a common mistake ("Most shops do X. Here is why it costs them.")', 'myth vs fact', '"If I owned a tint shop tomorrow, the first thing I would do is..."', 'a bold one-sentence truth'];
   const POST_FORMATS = ['3 to 4 numbered tips', 'a short checklist with checkmarks', 'before vs after', 'a mini story with a clear lesson', 'myth vs fact pairs', 'an exact script or text message they can copy', 'a simple math breakdown labeled as an example', 'do this / not that'];
   const pickOne = (arr, avoid) => { const pool = arr.filter((x) => !(avoid || []).includes(x)); const list = pool.length ? pool : arr; return list[Math.floor(Math.random() * list.length)]; };
-  const postRow = (r) => ({ id: r.id, kind: r.kind === 'video' ? 'video' : 'text', pkg: r.kind === 'video' ? (() => { try { return JSON.parse(r.map || '{}').pkg || null; } catch { return null; } })() : null, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
+  const postStats = (r) => { try { const x = JSON.parse(r.stats || 'null'); return x && typeof x === 'object' ? x : null; } catch { return null; } };
+  const postScore = (x) => x ? (x.reactions || 0) + 3 * (x.comments || 0) + 4 * (x.shares || 0) + 10 * (x.leads || 0) + Math.floor((x.views || 0) / 100) : 0;
+  const postRow = (r) => ({ stats: postStats(r), score: postScore(postStats(r)), id: r.id, kind: r.kind === 'video' ? 'video' : 'text', pkg: r.kind === 'video' ? (() => { try { return JSON.parse(r.map || '{}').pkg || null; } catch { return null; } })() : null, platform: (() => { try { return JSON.parse(r.platforms)[0]; } catch { return r.platforms; } })(), body: r.body || '', status: r.status, scheduled_at: r.day, posted_at: r.posted_at, created_at: r.created_at, source: r.source });
   const vidPkg = (x) => { const t = JSON.stringify(x); if (t.length > 60000) bad('That video is too big to save'); return JSON.parse(t); };
   async function postCal(row, platform, when, body, extra) {
     // keep one calendar reminder per scheduled post
@@ -3277,7 +3280,23 @@ async function api(request, env, url) {
     const r = await env.DB.prepare('INSERT INTO content_items (user_id, kind, status, title, body, platforms, day, map, source, created_at, posted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
       .bind(user.id, isVid ? 'video' : 'textpost', status, str(text.split('\n')[0], 120), text, JSON.stringify([platform]), when, meta, body.source === 'ai' ? 'ai' : 'manual', now(), status === 'posted' ? now() : null).run();
     if (status === 'posted') await trkBump(env, user.id, { posts: 1 }).catch(() => {});
+    if (body.stats && typeof body.stats === 'object') { const n = (k) => Math.max(0, Math.min(1e7, Math.round(+body.stats[k] || 0))); await env.DB.prepare('UPDATE content_items SET stats = ? WHERE id = ?').bind(JSON.stringify({ reactions: n('reactions'), comments: n('comments'), shares: n('shares'), views: n('views'), leads: n('leads'), at: now() }), r.meta.last_row_id).run(); }
     return json(postRow(await env.DB.prepare('SELECT * FROM content_items WHERE id = ?').bind(r.meta.last_row_id).first()));
+  }
+  if ((m = path.match(/^\/posts\/(\d+)\/stats$/)) && method === 'POST') {
+    need(user, 'admin');
+    const row = await env.DB.prepare("SELECT id FROM content_items WHERE id = ? AND kind IN ('textpost','video')").bind(+m[1]).first(); if (!row) bad('That post is gone');
+    const n = (k) => Math.max(0, Math.min(1e7, Math.round(+body[k] || 0)));
+    const st = { reactions: n('reactions'), comments: n('comments'), shares: n('shares'), views: n('views'), leads: n('leads'), at: now() };
+    await env.DB.prepare("UPDATE content_items SET stats = ?, status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").bind(JSON.stringify(st), now(), row.id).run();
+    return json({ ok: true, stats: st, score: postScore(st) });
+  }
+  if (path === '/posts/insights' && method === 'GET') {
+    need(user, 'admin');
+    const rows = (await env.DB.prepare("SELECT * FROM content_items WHERE kind IN ('textpost','video') AND status = 'posted' ORDER BY id DESC LIMIT 300").all()).results.map(postRow);
+    const logged = rows.filter((r) => r.stats), need2 = rows.filter((r) => !r.stats).length;
+    const plat = {}; logged.forEach((r) => { const p = plat[r.platform] = plat[r.platform] || { posts: 0, score: 0, reactions: 0, comments: 0, shares: 0, leads: 0 }; p.posts++; p.score += r.score; ['reactions', 'comments', 'shares', 'leads'].forEach((k) => { p[k] += r.stats[k] || 0; }); });
+    return json({ logged: logged.length, missing: need2, top: logged.slice().sort((a, b) => b.score - a.score).slice(0, 3), platforms: plat });
   }
   if ((m = path.match(/^\/posts\/(\d+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
     need(user, 'admin');
@@ -3478,13 +3497,20 @@ async function api(request, env, url) {
       : 'Write a brand new post. Topic: ' + angle + '. Open with ' + hook + '. Format: ' + format + '.') +
       '\nMake it unique: a different first line, different examples and different wording than anything recent. Do not start with "I used to work in a tint shop" unless the hook calls for a personal story.' +
       (recent.length ? '\nRecent posts started like this, so do NOT reuse these openings or topics: ' + recent.join(' | ') : '') + '\n(variation id ' + Math.random().toString(36).slice(2, 8) + ')';
-    const j = await c3AI(sys, usr, 1100, 0.95);
+    const graded = (await env.DB.prepare("SELECT * FROM content_items WHERE kind = 'textpost' AND status = 'posted' AND stats IS NOT NULL ORDER BY id DESC LIMIT 120").all()).results.map((r) => Object.assign(postRow(r), { body: r.body || '' }));
+    const samePlat = graded.filter((r) => r.platform === platform), pool = samePlat.length >= 3 ? samePlat : graded;
+    const best = pool.filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+    const worst = pool.length >= 5 ? pool.slice().sort((a, b) => a.score - b.score).slice(0, 2).filter((r) => !best.includes(r)) : [];
+    const learn = best.length ? '\n\nLEARN FROM HIS RESULTS. These are his best performing posts (most reactions, comments, shares and leads). Figure out what made them work (topic, first line, length, tone, structure) and lean into that, but write something new, never copy them:\n' +
+      best.map((r, i) => (i + 1) + ') [' + (r.stats.reactions || 0) + ' reactions, ' + (r.stats.comments || 0) + ' comments, ' + (r.stats.shares || 0) + ' shares' + (r.stats.leads ? ', ' + r.stats.leads + ' leads' : '') + '] ' + r.body.slice(0, 700).replace(/\s+/g, ' ')).join('\n') +
+      (worst.length ? '\nThese got the least engagement, so avoid what they did:\n' + worst.map((r) => '- ' + r.body.slice(0, 300).replace(/\s+/g, ' ')).join('\n') : '') : '';
+    const j = await c3AI(sys, usr + learn, 1100, 0.95);
     let text = j && typeof j.post === 'string' ? j.post.replace(/[—–]/g, ',').trim() : '';
     const tags = j && Array.isArray(j.hashtags) ? j.hashtags.map((x) => String(x).replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8) : [];
     let ai = true;
     if (!text) { ai = false; const fresh = POST_FALLBACK.filter((x) => !recent.includes(x.split('\n')[0])); text = pickOne(fresh.length ? fresh : POST_FALLBACK); }
     if (text.length > P.max) text = text.slice(0, P.max - 1).replace(/\s+\S*$/, '') + '…';
-    return json({ post: text, hashtags: tags, ai, max: P.max });
+    return json({ post: text, hashtags: tags, ai, max: P.max, learned: best.length });
   }
   if (path === '/content3' && method === 'GET') {
     need(user, 'admin');

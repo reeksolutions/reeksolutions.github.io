@@ -506,8 +506,10 @@
         h('div', { class: 'pc-tile-top' }, pcBadge(k), h('i', { class: 'pc-go' }, icon('chev'))),
         h('span', { class: 'pc-row-t' }, h('b', null, t), h('small', null, d)),
         h('div', { class: 'pc-foot' }, stats(k)));
+      const ins = await api('GET', '/posts/insights').catch(() => null);
+      const missing = r.posts.filter((x) => x.status === 'posted' && !x.stats);
       return crmShell('content:post', [pcHead('Content', 'Post content', 'Pick a platform, then write a text post or make a video.'),
-        strip,
+        strip, pcInsights(ins, missing, () => viewPostContent()),
         h('div', { class: 'pc-list tiles' }, PC_PLAT.map(([k, t, d]) => tile(k, t, d))),
         h('a', { class: 'pc-banner', href: '#/content/scheduled' }, h('span', { class: 'pc-badge sch' }, icon('calendar')),
           h('span', { class: 'pc-row-t' }, h('b', null, 'Scheduled content'), h('small', null, 'Everything waiting to go out, for every platform. Each one is on your calendar too.')),
@@ -548,7 +550,7 @@
       try {
         const r = await api('POST', '/posts/write', { platform: plat, ask: useAsk ? ask.value.trim() : '' });
         editor.value = r.post + (r.hashtags && r.hashtags.length ? '\n\n' + r.hashtags.map((x) => '#' + x).join(' ') : '');
-        tagsEl.replaceChildren(r.ai ? null : h('p', { class: 'dim small' }, 'The AI writer is busy, so here’s one of your saved posts. Try again in a minute for a new one.'));
+        tagsEl.replaceChildren(r.ai ? (r.learned ? h('p', { class: 'pc-learn small' }, 'Written using what worked in your top ' + r.learned + ' post' + (r.learned > 1 ? 's' : '')) : null) : h('p', { class: 'dim small' }, 'The AI writer is busy, so here’s one of your saved posts. Try again in a minute for a new one.'));
         lastSource = 'ai'; out.hidden = false; recount(); out.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) { fail(e); }
       btn.disabled = false; btn.textContent = t0;
@@ -911,6 +913,40 @@
         ex ? h('div', { class: 'wm-ex' }, h('span', null, 'Or open an example'), h('button', { type: 'button', class: 'cx-chip', onclick: () => { show(ex.compare); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Price comparison'), h('button', { type: 'button', class: 'cx-chip', onclick: () => { show(ex.flow); out.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'AI receptionist flow')) : null),
       out, savedBox]);
   }
+  const PC_STATS = [['reactions', 'Reactions'], ['comments', 'Comments'], ['shares', 'Shares'], ['views', 'Views'], ['leads', 'Leads / DMs']];
+  function pcStatForm(init, onSave, onCancel) {
+    const ins = {}; const f = h('div', { class: 'pc-statf' }, h('div', { class: 'pc-statg' }, PC_STATS.map(([k, t]) => h('label', null, h('span', null, t), ins[k] = h('input', { type: 'number', min: 0, inputmode: 'numeric', placeholder: '0', value: init && init[k] ? init[k] : '' })))),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn small primary', onclick: (e) => onSave(Object.fromEntries(PC_STATS.map(([k]) => [k, +ins[k].value || 0])), e.currentTarget) }, 'Save results'), onCancel ? h('button', { type: 'button', class: 'btn small ghost', onclick: onCancel }, 'Cancel') : null));
+    setTimeout(() => ins.reactions && ins.reactions.focus(), 0); return f;
+  }
+  const pcStatLine = (x) => h('span', { class: 'pc-statl' }, h('em', null, '👍 ' + (x.reactions || 0)), h('em', null, '💬 ' + (x.comments || 0)), x.shares ? h('em', null, '↗ ' + x.shares) : null, x.views ? h('em', null, '👁 ' + x.views.toLocaleString('en-US')) : null, x.leads ? h('em', { class: 'lead' }, x.leads + ' lead' + (x.leads > 1 ? 's' : '')) : null);
+  function pcResults(p, redraw) {
+    const box = h('div', { class: 'pc-res' });
+    const show = () => box.replaceChildren(...(p.stats ? [h('span', { class: 'pc-res-l' }, 'Results'), pcStatLine(p.stats), h('button', { type: 'button', class: 'btn small ghost', onclick: edit }, 'Edit')]
+      : [h('span', { class: 'pc-res-l' }, 'How did it do?'), h('span', { class: 'dim small' }, 'Add the numbers so the AI learns what works.'), h('button', { type: 'button', class: 'btn small primary', onclick: edit }, 'Add results')]));
+    function edit() { box.replaceChildren(pcStatForm(p.stats, async (v, b) => { b.disabled = true; try { const r = await api('POST', '/posts/' + p.id + '/stats', v); p.stats = r.stats; p.score = r.score; toast('Saved ✓ The AI will learn from this one.'); show(); } catch (e) { fail(e); b.disabled = false; } }, show)); }
+    show(); return box;
+  }
+  function pcInsights(ins, missing, redraw) {
+    const card = h('div', { class: 'pc-card pc-ins' });
+    const logBox = h('div', { class: 'pc-log', hidden: true });
+    const plat = h('select', { class: 'pc-sel', 'aria-label': 'Platform' }, PC_PLAT.map(([k, t]) => h('option', { value: k }, t)));
+    const txt = h('textarea', { rows: 5, placeholder: 'Paste the post you already made' });
+    logBox.append(h('label', { class: 'lbl' }, 'Log a post you already made'), h('div', { class: 'row' }, plat), txt,
+      pcStatForm(null, async (v, b) => { if (!txt.value.trim()) { toast('Paste the post text first', true); txt.focus(); return; } b.disabled = true;
+        try { await api('POST', '/posts', { platform: plat.value, body: txt.value.trim(), status: 'posted', stats: v, source: 'manual' }); toast('Logged ✓ The AI will learn from it.'); redraw(); } catch (e) { fail(e); b.disabled = false; } }, () => { logBox.hidden = true; }));
+    const missBox = h('div', { class: 'pc-items', hidden: true }, missing.slice(0, 6).map((p) => pcItem(p, redraw)));
+    const top = ins && ins.top || [];
+    card.append(h('div', { class: 'pc-card-h' }, h('span', { class: 'pc-card-t' }, h('span', { class: 'pc-badge sch' }, icon('chart')), h('b', null, 'What’s working')),
+        ins && ins.logged ? h('span', { class: 'pc-learn' }, 'AI is learning from ' + ins.logged + ' post' + (ins.logged > 1 ? 's' : '')) : null),
+      top.length ? h('div', { class: 'pc-top' }, top.map((p, i) => h('div', { class: 'pc-top-i' }, h('b', { class: 'pc-rank' }, '#' + (i + 1)), pcBadge(p.platform), h('span', { class: 'pc-top-t' }, h('span', null, (p.body || '').replace(/^VIDEO:\s*/, '').split('\n')[0].slice(0, 90)), pcStatLine(p.stats)))))
+        : h('p', { class: 'dim' }, 'Facebook doesn’t share stats from personal profiles, so tap in the results yourself. Log your posts with their reactions, comments and DMs, and every new post the AI writes leans toward what your audience actually likes.'),
+      h('div', { class: 'pc-acts' },
+        h('button', { type: 'button', class: 'btn small primary', onclick: () => { logBox.hidden = !logBox.hidden; if (!logBox.hidden) txt.focus(); } }, '+ Log a post you made'),
+        missing.length ? h('button', { type: 'button', class: 'btn small', onclick: () => { missBox.hidden = !missBox.hidden; } }, 'Add results (' + missing.length + ' waiting)') : null),
+      logBox, missBox);
+    return card;
+  }
   function pcItem(p, redraw) {
     const body = h('p', { class: 'pc-item-b' + (p.kind === 'video' ? ' clip' : '') }, p.body);
     const edit = h('textarea', { class: 'pc-editor', rows: 8, hidden: true, maxlength: PC_MAX[p.platform] || 3000 }); edit.value = p.body;
@@ -921,7 +957,7 @@
     const saveWhen = h('button', { class: 'btn small primary', hidden: true, onclick: () => patch({ status: 'scheduled', scheduled_at: new Date(when.value).toISOString() }, 'Scheduled ✓') }, 'Set time');
     return h('article', { class: 'pc-item' },
       h('div', { class: 'pc-item-h' }, h('span', { class: 'pc-card-t' }, pcBadge(p.platform), pcName(p.platform), p.kind === 'video' ? h('em', { class: 'pc-vtag' }, 'Video') : null), st),
-      body, edit, when,
+      body, edit, when, p.status === 'posted' ? pcResults(p, redraw) : null,
       h('div', { class: 'pc-acts' },
         p.kind === 'video' && p.pkg ? h('a', { class: 'btn small primary', href: '#/content/post/' + p.platform + '/video?id=' + p.id }, 'Open video') : null,
         h('button', { class: 'btn small' + (p.kind === 'video' ? '' : ' primary'), onclick: () => pcCopy(p.body) }, icon('copy'), 'Copy'),
