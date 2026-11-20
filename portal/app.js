@@ -159,7 +159,7 @@
   // sidebar on desktop: grouped
   function navFor(role) {
     if (role === 'admin') return [[null, [['home', 'Home']]]].concat(['sell', 'create', 'more'].flatMap((k) => CATS[k][2].map(([label, items]) => [CATS[k][0] + ' · ' + label, items.map((i) => [i[0], i[1]])])));
-    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]], ['Create · Demos', [['studio', 'Demo Studio']]]];
+    if (role === 'rep') return [[null, [['home', 'Home'], ['leads', 'My leads'], ['callbacks', 'Callbacks'], ['calendar', 'Calendar'], ['earnings', 'Earnings'], ['recordings', 'My recordings']]], [null, [['studio', 'Demo Studio']]]];
     return [[null, [['studio', 'Demo Studio'], ['demos', 'Demo queue']]]];
   }
   const home = () => (S.me.role === 'dev' ? 'studio' : 'home');
