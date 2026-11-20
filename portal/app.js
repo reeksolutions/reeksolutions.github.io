@@ -310,7 +310,8 @@
           h('a', { href: '#/content/post', class: 'cm-link' + (active === 'content:post' ? ' on' : ''), 'aria-current': active === 'content:post' ? 'page' : null }, icon('spark'), h('span', null, 'Post content')),
           h('a', { href: '#/content/maps', class: 'cm-link' + (active === 'content:maps' ? ' on' : ''), 'aria-current': active === 'content:maps' ? 'page' : null }, icon('social'), h('span', null, 'Web maps'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Demos'),
-          h('a', { href: '#/studio', class: 'cm-link' + (page === 'studio' ? ' on' : ''), 'aria-current': page === 'studio' ? 'page' : null }, icon('demos'), h('span', null, 'Demo Studio'))),
+          h('a', { href: '#/studio', class: 'cm-link' + (page === 'studio' && sub !== 'made' ? ' on' : ''), 'aria-current': page === 'studio' && sub !== 'made' ? 'page' : null }, icon('demos'), h('span', null, 'Demo Studio')),
+          h('div', { class: 'cm-sub' }, h('a', { href: '#/studio/made', class: 'cm-link cm-sublink' + (page === 'studio' && sub === 'made' ? ' on' : ''), 'aria-current': page === 'studio' && sub === 'made' ? 'page' : null }, icon('phone'), h('span', null, 'My demos')))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
           h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
         h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
@@ -326,6 +327,31 @@
     document.documentElement.classList.add('crm2');
     window.scrollTo(0, 0);
     return main;
+  }
+
+  /* ===== Demos > My demos: every demo already made, try it, send it, change what the receptionist says ===== */
+  async function viewMyDemos() {
+    const r = await api('GET', '/kits');
+    const copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
+    const ago = (iso) => { const d = Math.round((Date.now() - new Date(iso)) / 864e5); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago'; };
+    const card = (k) => {
+      const voice = k.link + '#voice';
+      const ta = h('textarea', { class: 'md-rules', rows: 8, maxlength: 3000, placeholder: 'Optional. How this receptionist should greet callers, what to ask, how to sound. Leave empty to use the standard script.' });
+      ta.value = k.rules || '';
+      const save = h('button', { type: 'button', class: 'btn small primary', onclick: async () => { save.disabled = true; try { await api('PATCH', '/kits/' + k.id, { rules: ta.value }); k.rules = ta.value; toast('Saved. The receptionist uses it on the next call.'); } catch (e) { fail(e); } save.disabled = false; } }, 'Save instructions');
+      return h('section', { class: 'sp-card md-card' },
+        h('div', { class: 'md-top' }, h('div', { class: 'md-name' }, h('b', null, k.business), h('small', null, [k.city, 'made ' + ago(k.created_at)].filter(Boolean).join(' · '))),
+          h('div', { class: 'md-stats' }, h('span', null, h('b', null, String(k.views || 0)), ' views'), h('span', null, h('b', null, String(k.talks || 0)), ' talks'))),
+        h('div', { class: 'md-acts' },
+          h('a', { class: 'btn primary', href: voice, target: '_blank', rel: 'noopener' }, icon('phone'), 'Talk to the receptionist'),
+          h('button', { type: 'button', class: 'btn', onclick: () => copy(voice, 'Link copied') }, 'Copy link'),
+          k.lead_id ? h('a', { class: 'btn', href: '#/lead/' + k.lead_id }, 'Open lead') : null),
+        h('details', { class: 'md-more' }, h('summary', null, k.rules ? 'Receptionist instructions (custom)' : 'Receptionist instructions'), ta, h('div', { class: 'md-acts' }, save)));
+    };
+    const kits = r.kits || [];
+    crmShell('studio:made', [pcHead('Demos', 'My demos', 'Every demo you made. Talk to its receptionist, screen record it for your video, then send the link.'),
+      kits.length ? h('div', { class: 'md-list' }, kits.map(card))
+        : h('div', { class: 'empty' }, h('b', null, 'No demos yet'), 'Build one in Demo Studio.', h('a', { class: 'btn primary', href: '#/studio', style: 'margin-top:10px' }, 'Open Demo Studio'))]);
   }
   /* ===== Home dashboard (new CRM) ===== */
   const hxMoney = (n) => '$' + Math.round(+n || 0).toLocaleString();
@@ -1092,7 +1118,7 @@
         if (route === 'deals') { location.hash = '#/leads/sales'; return; }
         if (route === 'script') { location.hash = '#/leads/script'; return; }
         if (route === 'callbacks') { LV.by = LV.by || {}; LV.by.calls = 'callback'; location.hash = '#/leads/calls'; return; }
-        if (route === 'studio') { if (+arg) return await viewStudio(+arg); if (arg === 'build') return await viewStudio(null); return viewStudioHome(); }
+        if (route === 'studio') { if (arg === 'made') return await viewMyDemos(); if (+arg) return await viewStudio(+arg); if (arg === 'build') return await viewStudio(null); return viewStudioHome(); }
         if (route === 'account') return viewAccount();
       } catch (e) { return crmShell(route, h('div', { class: 'empty' }, h('b', null, 'Could not load this page'), e.message)); }
       location.hash = '#/home'; return;

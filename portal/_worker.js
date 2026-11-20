@@ -5740,6 +5740,7 @@ function cleanKit(b, prev) {
     business, owner: oneLine(b.owner ?? p.owner, 40), city, phone: oneLine(b.phone ?? p.phone, 30) || '(310) 555-0123', services,
     hours: oneLine(b.hours ?? p.hours, 80) || (med ? 'Tue to Sat, 10am to 7pm' : cus ? 'Mon to Sat, 8am to 6pm' : KIT_HOURS), niche, custom, tagline, look, agent_ix: agentIx, avg_job: avg,
     voice: (b.voice ?? p.voice) === 'aura' && b.voice === 'aura' ? 'aura' : 'eleven',
+    rules: String((b.rules !== undefined ? b.rules : p.rules) || '').replace(/\r/g, '').slice(0, 3000).trim(),
   };
 }
 function kitPublic(row) {
@@ -5851,6 +5852,10 @@ const b64buf = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i 
 
 const kitFacts = (k) => [k.address ? 'ADDRESS: ' + k.address + '.' : '', k.phone ? 'PHONE: ' + k.phone + '.' : '', k.rating ? 'GOOGLE RATING: ' + k.rating + ' stars' + (k.reviews ? ' from ' + k.reviews + ' reviews' : '') + '. Only mention it if asked about reviews.' : ''].filter(Boolean).join('\n');
 function kitPrompt(k, mode) {
+  const base = kitPromptBase(k, mode);
+  return k.rules ? base + '\nSHOP INSTRUCTIONS from the owner. Follow these where they differ from the rules above, but keep the length rules and always reply in the JSON format above:\n' + k.rules : base;
+}
+function kitPromptBase(k, mode) {
   const style = mode === 'voice' ? 'You are on a live phone call. Sound like a real, friendly person at the front desk: use contractions, short everyday sentences, one thought at a time. Open with a quick natural acknowledgment when it fits (Got it. Sure thing. Okay.). At most 2 short sentences, under 28 words. Never read lists, never say symbols, say prices in words like "about four to nine hundred dollars".'
     : mode === 'sms' ? 'You are texting: under 220 characters, one question at a time, no emojis.' : 'You are in a website chat: under 60 words, friendly and plain.';
   const role = mode === 'voice' ? 'phone receptionist' : mode === 'sms' ? 'text-message assistant' : 'website chat assistant';
@@ -6003,7 +6008,7 @@ async function handleKitApi(request, env, url) {
     const hist = (Array.isArray(body.history) ? body.history : []).slice(-12).map((x) => ({ role: x && x.r === 'a' ? 'assistant' : 'user', content: oneLine(x && x.t, 400) })).filter((x) => x.content);
     let out;
     try {
-      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: kitPrompt(k, mode) }, ...hist, { role: 'user', content: text }], max_tokens: 220, temperature: 0.5, response_format: { type: 'json_object' } });
+      const r = await env.AI.run(STUDIO_MODEL, { messages: [{ role: 'system', content: kitPrompt({ ...k, rules: JSON.parse(row.data || '{}').rules || '' }, mode) }, ...hist, { role: 'user', content: text }], max_tokens: 220, temperature: 0.5, response_format: { type: 'json_object' } });
       out = kitParseAI(r);
     } catch (e) {
       console.error('kit talk', e);
@@ -6140,9 +6145,10 @@ async function kitAdmin(env, user, path, method, body, url) {
   need(user, 'admin');
   let m;
   if (path === '/kits' && method === 'GET') {
+    try { await seedDemos1120(env, user, url); } catch (e) { console.error('demo seed', e && e.message || e); }
     const rows = (await env.DB.prepare('SELECT id, slug, lead_id, data, views, talks, last_view_at, created_at FROM demo_kits ORDER BY id DESC LIMIT 100').all()).results;
     const tabs = (await env.DB.prepare("SELECT kit_id, detail, COUNT(*) AS n FROM kit_events WHERE kind = 'tab' GROUP BY kit_id, detail").all()).results;
-    return json({ kits: rows.map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, niche: d.niche || 'contractor', business: d.business, owner: d.owner, city: d.city, look: d.look, views: r.views, talks: r.talks, last_view_at: r.last_view_at, created_at: r.created_at, tabs: tabs.filter((t) => t.kit_id === r.id).map((t) => t.detail) }; }),
+    return json({ kits: rows.map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, niche: d.niche || 'contractor', business: d.business, owner: d.owner, city: d.city, look: d.look, rules: d.rules || '', link: url.origin + '/k/' + r.slug, views: r.views, talks: r.talks, last_view_at: r.last_view_at, created_at: r.created_at, tabs: tabs.filter((t) => t.kit_id === r.id).map((t) => t.detail) }; }),
       services: Object.entries(KIT_SERVICES).map(([id, s]) => ({ id, name: s.name })), services_med: Object.entries(KIT_SERVICES_MED).map(([id, s]) => ({ id, name: s.name })), looks: Object.entries(KIT_LOOKS).map(([id, l]) => ({ id, name: l.name, accent: l.accent, bg: l.bg })),
       eleven: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), origin: url.origin });
   }
@@ -6302,6 +6308,60 @@ async function kitAdmin(env, user, path, method, body, url) {
     }
   }
   return null;
+}
+
+// One-time (Nov 20 2026): voice demos for the 3 tint shops that asked for one, each with its own receptionist instructions.
+const DEMO_SEED_1120 = [
+  { phone: '3234069091', type: 'window tint and vinyl wrap shop', rules: `Greet callers with: "Thanks for calling Finish Line Custom Films, how can I help you?"
+The shop does window tint and vinyl wraps at 4611 W Imperial Hwy in Inglewood.
+For every caller, get their name, their vehicle (year, make and model), what they want done, the best callback number, and when they want to come in. Then offer a time or a callback, and confirm the details back in one sentence.
+If it's a robocall, a sales pitch or a solicitation, say "We're not interested, thanks," and end the call. If it's a vendor, take their name and company and say the owner will follow up.
+Never make up a price, time or policy. For exact pricing, warranties or a job in progress, say the owner will follow up.
+Friendly and professional. One question at a time. Don't read lists. If asked what you offer, name two or three things and ask what they're interested in.
+If the caller asks whether you're a real person, say honestly that you're an AI assistant for the shop, then keep helping.` },
+  { phone: '2139259186', type: 'window tint shop', rules: `Greet callers with: "Thanks for calling Socal Intuitive Tinting, this is the assistant. How can I help you today?"
+The shop does window tint and tint consulting in Gardena.
+Ask what they're looking for and whether they're planning to get it done soon. Get their name, vehicle, what they need, the best callback number and their timing.
+Good lead: they have a vehicle, a specific service in mind and want it done within about two weeks. Book them a consultation.
+Early lead: they're just researching. Take their info, offer to send details, and say the owner will follow up.
+Not a fit: they want something the shop doesn't do. Say so politely and mention what the shop does do.
+Robocalls, cold sales pitches and software or marketing vendors: say "We're not interested, thanks," and end the call. Partnership or vendor questions: take their name, company and number, and say the owner will follow up.
+Never make up a price, time or policy. For exact prices, warranties or a specific job, say the owner will follow up.
+Short, friendly, confident sentences. One question per turn.
+If asked whether you're human, say honestly that you're an AI assistant for the shop, then keep helping.` },
+  { phone: '7147141933', type: 'window tint and paint protection film shop', rules: `You are the front desk at Pronto Tinting in Torrance. Sound like a friendly, relaxed person answering the phone, not a robot. Make callers feel heard.
+Greet callers with: "Hey, thanks for calling Pronto Tinting, what can I do for you?"
+Use casual, warm phrasing like "Got it," "Sounds good," "Let me grab that for you," "Oh nice, what kind of car is it?" Use contractions. Never say stiff things like "I can assist you with that."
+React to what they say before asking the next thing. If they say they just got a new car, say "Congrats! What are you thinking for the tint?"
+Ask one question at a time: their name, the vehicle (year, make and model), what they want done, and a good number to reach them. Then offer a consultation or a callback, and recap in one sentence: "Perfect, you're all set. Thanks for calling, have a great one."
+Don't list services unless they ask. Ask what they're thinking about instead.
+Spam, robocalls and cold sales pitches: "Not interested, have a good one," and end the call. Vendors or partners: take their name and company and say the owner will reach out.
+For exact pricing, warranty details or a current job: "Good question, I'll have the owner get back to you on that." Never guess or make anything up.
+If someone asks whether you're a real person, say you're an AI assistant for Pronto Tinting, then keep helping. Never pretend to be human.` },
+];
+async function seedDemos1120(env, user, url) {
+  const st = await getSetting(env, 'demo_seed_1120');
+  if (st && !(st.startsWith('running:') && Date.now() - Date.parse(st.slice(8)) > 5 * 60e3)) return;   // done, or another request is on it
+  await setSetting(env, 'demo_seed_1120', 'running:' + now());
+  const done = [];
+  for (const d of DEMO_SEED_1120) {
+    try {
+      const lead = await env.DB.prepare('SELECT id, business FROM leads WHERE phone_norm = ? ORDER BY id LIMIT 1').bind(d.phone).first();
+      if (!lead) { done.push(d.phone + ': no lead'); continue; }
+      const kit = await env.DB.prepare('SELECT id, data FROM demo_kits WHERE lead_id = ? ORDER BY id DESC LIMIT 1').bind(lead.id).first();
+      if (kit) {
+        const data = JSON.parse(kit.data || '{}'); data.rules = d.rules;
+        await env.DB.prepare('UPDATE demo_kits SET data = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(data), now(), kit.id).run();
+        done.push(lead.business + ': updated');
+      } else {
+        const r = await kitAdmin(env, user, '/kits', 'POST', { lead_id: lead.id, biz_type: d.type, rules: d.rules }, url);
+        if (!r.ok) throw new Error((await r.json()).error || 'build failed');
+        await env.DB.prepare("UPDATE leads SET status = CASE WHEN status IN ('new','called','demo_needed') THEN 'demo_ready' ELSE status END, updated_at = ? WHERE id = ?").bind(now(), lead.id).run();
+        done.push(lead.business + ': built');
+      }
+    } catch (e) { done.push(d.phone + ': ' + String(e && e.message || e).slice(0, 80)); }
+  }
+  await setSetting(env, 'demo_seed_1120', 'done ' + now() + ' · ' + done.join(' | '));
 }
 
 // One-time (Nov 18 2026): fill the CRM with 30+ tint & PPF shops that have few reviews, using your own Lead Finder.
