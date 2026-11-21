@@ -1856,6 +1856,7 @@ async function api(request, env, url, ctx) {
     if (step === 'closed') status = v ? 'won' : (st.audit ? 'booked' : (st.interest === 'no' ? 'not_interested' : 'new'));
     if (step === 'interest' && v === 'yes') await env.DB.prepare("UPDATE leads SET heat = 'hot' WHERE id = ?").bind(lead.id).run();
     await env.DB.prepare('UPDATE leads SET social_steps = ?, status = ?, booked_at = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(st), status, booked, now(), lead.id).run();
+    if (v) await stageUp(env, lead.id, step === 'closed' ? 'closed' : step === 'audit' ? 'booked' : step === 'interest' && v === 'yes' ? 'applied' : '', user.id).catch(() => {});
     return json({ steps: st, status });
   }
   if ((m = path.match(/^\/leads\/(\d+)\/meta$/)) && method === 'POST') {
@@ -2073,6 +2074,8 @@ async function api(request, env, url, ctx) {
     if (live || lead.call_notes) stmts.push(env.DB.prepare('UPDATE leads SET call_notes = NULL WHERE id = ?').bind(lead.id));
     if (outcome === 'dnc' && lead.phone_norm) stmts.push(env.DB.prepare('INSERT OR IGNORE INTO dnc (phone_norm, lead_id, user_id, created_at) VALUES (?,?,?,?)').bind(lead.phone_norm, lead.id, user.id, t));
     await env.DB.batch(stmts);
+    if (outcome === 'booked') await stageUp(env, lead.id, 'booked', user.id).catch(() => {});
+    if (outcome === 'demo_sent') await stageUp(env, lead.id, 'applied', user.id).catch(() => {});
     if (user.role === 'admin' && outcome !== 'demo_sent') {
       await trkBump(env, user.id, { dials: 1, talks: ['no_answer', 'voicemail'].includes(outcome) ? 0 : 1, demos: outcome === 'booked' ? 1 : 0 });
     }
@@ -2514,6 +2517,7 @@ async function api(request, env, url, ctx) {
       if (lead.status === 'dnc' && lead.phone_norm) stmts.push(env.DB.prepare('DELETE FROM dnc WHERE phone_norm = ?').bind(lead.phone_norm));
     }
     await env.DB.batch(stmts);
+    await stageUp(env, lead.id, 'closed', user.id).catch(() => {});
     return json({ ok: true });
   }
 
@@ -3118,6 +3122,8 @@ async function api(request, env, url, ctx) {
     const res = await importRows(env, { batchId: b.meta.last_row_id, rows, startStatus: body.start_status, assign: body.assign || 'auto', skipWithSite: false, source: 'finder' });
     return json({ ...res, batch_id: b.meta.last_row_id, batch: name });
   }
+
+  if (path.startsWith('/v2/')) return await v2Api(env, user, path, method, body, url);
 
   /* ---- Stage 4C: Demo Studio ---- */
   if (path === '/kits' || path.startsWith('/kits/') || path === '/voices' || path === '/voices/preview' || path === '/quickdemo' || path === '/studio/from-google' || path === '/studio/nosite-leads') { const kr = await kitAdmin(env, user, path, method, body, url); if (kr) return kr; }
@@ -6064,6 +6070,7 @@ async function handleKitApi(request, env, url) {
       }
     }
     await kitLog(env, row.id, 'lead', vid, name);
+    await stageUp(env, leadId, 'applied', null).catch(() => {});
     discordNotify(env, `🔥 **${name} (${k.business}) wants the real thing.**\n**Phone:** ${phone}${note ? '\n**Note:** ' + note : ''}\nCall them now. They just played with their demo.`).catch(() => {});
     return json({ ok: true });
   }
@@ -6306,6 +6313,290 @@ async function kitAdmin(env, user, path, method, body, url) {
     }
   }
   return null;
+}
+
+/* ================= CRM v2 (Nov 21 2026): home, analytics, inbox, pipeline, clients, deals, contracts, tasks, landing pages =================
+   Funnel stages live on the lead (leads.stage) and every step reached is logged in stage_log, so "reached this step in the last N days" is exact. */
+const V2_STAGES = ['applied', 'booked', 'showed', 'contract_sent', 'signed', 'closed', 'active'];
+const V2_STAGE_NAME = { applied: 'Applied', booked: 'Booked', showed: 'Showed', contract_sent: 'Contract sent', signed: 'Signed', closed: 'Closed (first payment)', active: 'Active client' };
+const v2Rank = (s) => V2_STAGES.indexOf(s);
+let v2Ready = false;
+async function v2Schema(env) {
+  if (v2Ready) return;
+  await env.DB.batch([
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS stage_log (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER NOT NULL, stage TEXT NOT NULL, user_id INTEGER, created_at TEXT NOT NULL)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS stage_log_time ON stage_log(created_at)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, amount_cents INTEGER NOT NULL, fee_cents INTEGER NOT NULL DEFAULT 0, method TEXT, note TEXT, paid_at TEXT NOT NULL, user_id INTEGER, created_at TEXT NOT NULL)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS payments_time ON payments(paid_at)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, amount_cents INTEGER NOT NULL, category TEXT, note TEXT, spent_at TEXT NOT NULL, created_at TEXT NOT NULL)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER NOT NULL, title TEXT, setup_cents INTEGER NOT NULL DEFAULT 0, mrr_cents INTEGER NOT NULL DEFAULT 0,
+      terms TEXT, status TEXT NOT NULL DEFAULT 'draft', sent_at TEXT, signed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS inbox_items (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, channel TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'in', who TEXT, body TEXT, user_id INTEGER, created_at TEXT NOT NULL)`),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS inbox_seen (k TEXT PRIMARY KEY, at TEXT NOT NULL)'),
+  ]);
+  for (const [c, t] of [['stage', 'TEXT'], ['stage_at', 'TEXT'], ['mrr_cents', 'INTEGER NOT NULL DEFAULT 0'], ['client_since', 'TEXT']]) {
+    try { await env.DB.prepare(`ALTER TABLE leads ADD COLUMN ${c} ${t}`).run(); } catch { /* already there */ }
+  }
+  v2Ready = true;
+}
+// move a lead forward in the funnel (never backward), logging every step it passes so the funnel counts stay honest
+async function stageUp(env, leadId, stage, userId, at) {
+  if (!leadId || v2Rank(stage) < 0) return;
+  await v2Schema(env);
+  const l = await env.DB.prepare('SELECT id, stage FROM leads WHERE id = ?').bind(+leadId).first();
+  if (!l) return;
+  const from = v2Rank(l.stage), to = v2Rank(stage);
+  if (to <= from) return;
+  const t = at || now(), stmts = [];
+  // skipped steps count as reached (a closed deal was also booked), except "showed" and "contract sent", which only count when they happened
+  for (let i = from + 1; i <= to; i++) if (i === to || ['applied', 'booked', 'signed'].includes(V2_STAGES[i])) stmts.push(env.DB.prepare('INSERT INTO stage_log (lead_id, stage, user_id, created_at) VALUES (?,?,?,?)').bind(l.id, V2_STAGES[i], userId || null, t));
+  stmts.push(env.DB.prepare('UPDATE leads SET stage = ?, stage_at = ?, client_since = CASE WHEN ? IN (\'closed\',\'active\') THEN COALESCE(client_since, ?) ELSE client_since END WHERE id = ?').bind(stage, t, stage, t, l.id));
+  await env.DB.batch(stmts);
+}
+// one time: put leads that are already booked, won or interested into the funnel
+async function v2Backfill(env) {
+  if (await getSetting(env, 'v2_backfill')) return;
+  await setSetting(env, 'v2_backfill', 'running ' + now());
+  const rows = (await env.DB.prepare(`SELECT id, status, heat, booked_at, updated_at FROM leads WHERE (stage IS NULL OR stage = '') AND (status IN ('booked','call2','won','demo_ready') OR heat = 'hot')`).all()).results;
+  for (const l of rows) {
+    const s = l.status === 'won' ? 'closed' : ['booked', 'call2'].includes(l.status) ? 'booked' : 'applied';
+    await stageUp(env, l.id, s, null, (s === 'booked' && l.booked_at) || l.updated_at);
+  }
+  await setSetting(env, 'v2_backfill', 'done ' + now() + ' · ' + rows.length);
+}
+function v2Since(range) {
+  const mid = Date.parse(ptMidnightIso());
+  const n = { today: 1, 7: 7, 30: 30, 90: 90 }[range] || 7;
+  return new Date(mid - (n - 1) * 864e5).toISOString();
+}
+const v2Money = (c) => '$' + Math.round((c || 0) / 100).toLocaleString('en-US');
+
+async function v2Funnel(env, since) {
+  const rows = (await env.DB.prepare('SELECT stage, COUNT(DISTINCT lead_id) AS n FROM stage_log WHERE created_at >= ? GROUP BY stage').bind(since).all()).results;
+  const by = Object.fromEntries(rows.map((r) => [r.stage, r.n]));
+  const steps = V2_STAGES.map((s) => ({ stage: s, name: V2_STAGE_NAME[s], n: by[s] || 0 }));
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+  return { steps, show_rate: pct(by.showed || 0, by.booked || 0), close_rate: pct(by.closed || 0, by.showed || 0) };
+}
+async function v2Cash(env, since) {
+  const r = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents),0) AS gross, COALESCE(SUM(fee_cents),0) AS fees, COUNT(*) AS n FROM payments WHERE paid_at >= ?').bind(since).first();
+  return { gross: r.gross, fees: r.fees, net: r.gross - r.fees, payments: r.n };
+}
+async function v2Inbox(env, user, filter) {
+  const since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const em = (await env.DB.prepare(`SELECT e.id, e.lead_id, e.kind, e.subject, e.detail, e.created_at, l.business, l.owner, l.assigned_to FROM email_log e LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.kind IN ('replied','opted_out') AND e.created_at >= ? ORDER BY e.id DESC LIMIT 150`).bind(since).all()).results
+    .map((e) => ({ k: 'em' + e.id, channel: 'email', direction: 'in', lead_id: e.lead_id, business: e.business, who: e.owner || e.business || 'Unknown sender', assigned_to: e.assigned_to, title: e.kind === 'opted_out' ? 'Asked to stop emails' : (e.subject || 'Email reply'), body: e.detail || '', at: e.created_at }));
+  const kits = (await env.DB.prepare(`SELECT ev.id, ev.detail, ev.created_at, k.lead_id, l.business, l.owner, l.assigned_to FROM kit_events ev JOIN demo_kits k ON k.id = ev.kit_id LEFT JOIN leads l ON l.id = k.lead_id
+    WHERE ev.kind = 'lead' AND ev.created_at >= ? ORDER BY ev.id DESC LIMIT 100`).bind(since).all()).results
+    .map((e) => ({ k: 'kl' + e.id, channel: 'demo', direction: 'in', lead_id: e.lead_id, business: e.business, who: e.detail || e.owner || 'Someone', assigned_to: e.assigned_to, title: 'Wants the real thing after trying their demo', body: '', at: e.created_at }));
+  const calls = (await env.DB.prepare(`SELECT d.id, d.lead_id, d.duration, d.status, d.created_at, l.business, l.owner, l.assigned_to FROM dial_calls d LEFT JOIN leads l ON l.id = d.lead_id
+    WHERE d.created_at >= ? AND COALESCE(d.duration,0) >= 20 ORDER BY d.id DESC LIMIT 100`).bind(since).all()).results
+    .map((d) => ({ k: 'dc' + d.id, channel: 'call', direction: 'out', lead_id: d.lead_id, business: d.business, who: d.owner || d.business || 'Unknown number', assigned_to: d.assigned_to, title: 'Call · ' + Math.round((d.duration || 0) / 60) + ' min', body: '', at: d.created_at }));
+  const own = (await env.DB.prepare(`SELECT i.*, l.business, l.owner, l.assigned_to FROM inbox_items i LEFT JOIN leads l ON l.id = i.lead_id WHERE i.created_at >= ? ORDER BY i.id DESC LIMIT 200`).bind(since).all()).results
+    .map((i) => ({ k: 'ib' + i.id, id: i.id, channel: i.channel, direction: i.direction, lead_id: i.lead_id, business: i.business, who: i.who || i.owner || i.business || 'Unknown sender', assigned_to: i.assigned_to, title: String(i.body || '').replace(/\s+/g, ' ').slice(0, 140) || 'Message', body: String(i.body || '').length > 140 ? i.body : '', at: i.created_at }));
+  let items = [...em, ...kits, ...calls, ...own].sort((a, b) => (a.at < b.at ? 1 : -1));
+  const seen = new Set((await env.DB.prepare('SELECT k FROM inbox_seen WHERE at >= ?').bind(new Date(Date.now() - 70 * 864e5).toISOString()).all()).results.map((r) => r.k));
+  items = items.map((x) => ({ ...x, unread: x.direction === 'in' && !seen.has(x.k) }));
+  const unread = items.filter((x) => x.unread).length;
+  if (filter === 'unread') items = items.filter((x) => x.unread);
+  else if (filter === 'mine') items = items.filter((x) => x.lead_id && (x.assigned_to === user.id || !x.assigned_to));
+  else if (filter === 'unknown') items = items.filter((x) => !x.lead_id);
+  return { items: items.slice(0, 200), unread };
+}
+
+async function v2Api(env, user, path, method, body, url) {
+  need(user, 'admin');
+  await v2Schema(env);
+  await v2Backfill(env);
+  const q = url.searchParams, range = q.get('range') || '7';
+  let m;
+
+  if (path === '/v2/home' && method === 'GET') {
+    const since = v2Since(range), mid = ptMidnightIso(), end = new Date(Date.parse(mid) + 864e5).toISOString(), t = now();
+    const cash = await v2Cash(env, since);
+    const closed = (await env.DB.prepare("SELECT COUNT(DISTINCT lead_id) AS n FROM stage_log WHERE stage = 'closed' AND created_at >= ?").bind(since).first()).n;
+    const booked = (await env.DB.prepare("SELECT COUNT(DISTINCT lead_id) AS n FROM stage_log WHERE stage = 'booked' AND created_at >= ?").bind(since).first()).n;
+    const ev = (await env.DB.prepare(`SELECT e.id, e.title, e.kind, e.starts_at, e.lead_id, e.link, l.business FROM cal_events e LEFT JOIN leads l ON l.id = e.lead_id
+      WHERE e.starts_at >= ? AND e.starts_at < ? AND e.kind NOT IN ('todo','note','posted') ORDER BY e.starts_at`).bind(mid, end).all()).results;
+    const bk = (await env.DB.prepare(`SELECT id, business, owner, phone, booked_at FROM leads WHERE status IN ('booked','call2') AND booked_at >= ? AND booked_at < ? ORDER BY booked_at`).bind(mid, end).all()).results;
+    const meetings = [...bk.filter((l) => !ev.some((e) => e.lead_id === l.id || String(e.title || '').toLowerCase().includes(String(l.business || '').toLowerCase().split(' ').slice(0, 2).join(' ')))).map((l) => ({ title: 'Audit · ' + l.business, at: l.booked_at, lead_id: l.id, kind: 'audit', phone: l.phone })),
+      ...ev.map((e) => ({ title: e.title, at: e.starts_at, lead_id: e.lead_id, kind: e.kind, link: e.link }))].sort((a, b) => (a.at < b.at ? -1 : 1));
+    const audits = meetings.filter((x) => ['audit', 'demo', 'closing', 'meeting', 'call'].includes(x.kind)).length;
+    // things that need you
+    const att = [];
+    const cb = (await env.DB.prepare("SELECT COUNT(*) AS n FROM leads WHERE status = 'callback' AND callback_at < ?").bind(end).first()).n;
+    if (cb) att.push({ tone: 'warn', text: cb + ' callback' + (cb > 1 ? 's' : '') + ' due today', href: '#/callbacks' });
+    const ib = await v2Inbox(env, user, 'unread');
+    if (ib.unread) att.push({ tone: 'info', text: ib.unread + ' unread message' + (ib.unread > 1 ? 's' : '') + ' in your inbox', href: '#/inbox' });
+    const applied = (await env.DB.prepare(`SELECT id, business, stage_at FROM leads WHERE stage = 'applied' AND status NOT IN ('lost','not_interested','dnc') ORDER BY stage_at ASC LIMIT 6`).all()).results;
+    for (const l of applied) att.push({ tone: 'hot', text: l.business + ' is interested. Send the demo and book the audit.', href: '#/lead/' + l.id });
+    const noshow = (await env.DB.prepare(`SELECT id, business FROM leads WHERE stage = 'booked' AND booked_at IS NOT NULL AND booked_at < ? ORDER BY booked_at DESC LIMIT 5`).bind(t).all()).results;
+    for (const l of noshow) att.push({ tone: 'warn', text: 'Did ' + l.business + ' show up to their audit? Mark it in Pipeline.', href: '#/pipeline' });
+    const cs = (await env.DB.prepare(`SELECT c.id, l.business FROM contracts c JOIN leads l ON l.id = c.lead_id WHERE c.status = 'sent' AND c.sent_at < ? LIMIT 5`).bind(new Date(Date.now() - 2 * 864e5).toISOString()).all()).results;
+    for (const c of cs) att.push({ tone: 'warn', text: 'Contract for ' + c.business + ' is still unsigned. Follow up.', href: '#/contracts' });
+    const unpaid = (await env.DB.prepare(`SELECT id, business FROM leads WHERE stage = 'signed' LIMIT 5`).all()).results;
+    for (const l of unpaid) att.push({ tone: 'hot', text: l.business + ' signed. Collect the first payment.', href: '#/deals' });
+    const tasks = (await env.DB.prepare("SELECT COUNT(*) AS n FROM cal_events WHERE kind = 'todo' AND done = 0 AND starts_at < ?").bind(end).first()).n;
+    if (tasks) att.push({ tone: 'info', text: tasks + ' task' + (tasks > 1 ? 's' : '') + ' for today', href: '#/tasks' });
+    return json({ name: user.name, cash, closed, booked, meetings, audits, attention: att.slice(0, 12), funnel: await v2Funnel(env, since) });
+  }
+
+  if (path === '/v2/analytics' && method === 'GET') {
+    const since = v2Since(range), tab = q.get('tab') || 'overview';
+    const cash = await v2Cash(env, since), funnel = await v2Funnel(env, since);
+    const closes = funnel.steps.find((s) => s.stage === 'closed').n;
+    const out = { tab, cash, funnel, closes };
+    if (tab === 'revenue' || tab === 'overview' || tab === 'pnl') {
+      out.by_day = (await env.DB.prepare("SELECT substr(paid_at,1,10) AS day, SUM(amount_cents) AS c FROM payments WHERE paid_at >= ? GROUP BY day ORDER BY day").bind(since).all()).results;
+      out.mrr = (await env.DB.prepare("SELECT COALESCE(SUM(mrr_cents),0) AS c, COUNT(*) AS n FROM leads WHERE stage IN ('closed','active')").first());
+      out.payments = (await env.DB.prepare('SELECT p.*, l.business FROM payments p LEFT JOIN leads l ON l.id = p.lead_id WHERE p.paid_at >= ? ORDER BY p.paid_at DESC LIMIT 100').bind(since).all()).results;
+    }
+    if (tab === 'pnl') {
+      out.expenses = (await env.DB.prepare('SELECT * FROM expenses WHERE spent_at >= ? ORDER BY spent_at DESC LIMIT 200').bind(since).all()).results;
+      out.expense_total = out.expenses.reduce((a, e) => a + e.amount_cents, 0);
+    }
+    if (tab === 'marketing') {
+      const c = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n || 0;
+      out.sources = (await env.DB.prepare("SELECT COALESCE(NULLIF(source,''),'import') AS source, COUNT(*) AS n FROM leads WHERE created_at >= ? GROUP BY 1 ORDER BY n DESC").bind(since).all()).results;
+      out.site = { views: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'view' AND created_at >= ?", since), clicks: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'cta' AND created_at >= ?", since), leads: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'lead' AND created_at >= ?", since) };
+      out.demos = { views: await c("SELECT COUNT(*) AS n FROM kit_events WHERE kind = 'view' AND created_at >= ?", since), talks: await c("SELECT COUNT(*) AS n FROM kit_events WHERE kind = 'talk' AND created_at >= ?", since), made: await c('SELECT COUNT(*) AS n FROM demo_kits WHERE created_at >= ?', since) };
+      out.posts = await c("SELECT COUNT(*) AS n FROM content_items WHERE status = 'posted' AND COALESCE(posted_at, created_at) >= ?", since);
+      out.outreach = (await env.DB.prepare("SELECT outcome, COUNT(*) AS n FROM calls WHERE created_at >= ? AND outcome IN ('emailed','texted','dmed','demo_sent') GROUP BY outcome").bind(since).all()).results;
+    }
+    if (tab === 'mine') {
+      out.mine = (await env.DB.prepare(`SELECT outcome, COUNT(*) AS n FROM calls WHERE user_id = ? AND created_at >= ? GROUP BY outcome`).bind(user.id, since).all()).results;
+    }
+    return json(out);
+  }
+
+  if (path === '/v2/inbox' && method === 'GET') return json(await v2Inbox(env, user, q.get('filter') || 'all'));
+  if (path === '/v2/inbox' && method === 'POST') {
+    const channel = ['text', 'email', 'call', 'dm'].includes(body.channel) ? body.channel : 'text';
+    const txt = str(body.body, 4000); if (!txt) bad('Write what they said');
+    const leadId = +body.lead_id || null;
+    await env.DB.prepare('INSERT INTO inbox_items (lead_id, channel, direction, who, body, user_id, created_at) VALUES (?,?,?,?,?,?,?)').bind(leadId, channel, body.direction === 'out' ? 'out' : 'in', str(body.who, 80) || null, txt, user.id, now()).run();
+    return json({ ok: true });
+  }
+  if (path === '/v2/inbox/read' && method === 'POST') {
+    const keys = (Array.isArray(body.keys) ? body.keys : []).map((k) => str(k, 30)).filter((k) => /^[a-z]{2}\d+$/.test(k)).slice(0, 300);
+    const t = now();
+    for (let i = 0; i < keys.length; i += 50) await env.DB.batch(keys.slice(i, i + 50).map((k) => env.DB.prepare('INSERT OR REPLACE INTO inbox_seen (k, at) VALUES (?,?)').bind(k, t)));
+    return json({ ok: true });
+  }
+
+  if (path === '/v2/pipeline' && method === 'GET') {
+    const deals = (await env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.city, l.stage, l.stage_at, l.booked_at, l.mrr_cents, l.heat,
+      (SELECT COALESCE(SUM(amount_cents),0) FROM payments p WHERE p.lead_id = l.id) AS paid_cents,
+      (SELECT setup_cents + mrr_cents FROM contracts c WHERE c.lead_id = l.id ORDER BY c.id DESC LIMIT 1) AS value_cents
+      FROM leads l WHERE l.stage IS NOT NULL AND l.stage != '' AND l.status NOT IN ('lost','dnc','not_interested') ORDER BY l.stage_at DESC LIMIT 500`).all()).results;
+    const leads = (await env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.city, l.status, l.heat, l.last_call_at, l.callback_at FROM leads l
+      WHERE (l.stage IS NULL OR l.stage = '') AND l.status IN ('called','callback','demo_needed','demo_ready','demo_sent') ORDER BY CASE l.status WHEN 'callback' THEN 0 ELSE 1 END, COALESCE(l.last_call_at, l.updated_at) DESC LIMIT 60`).all()).results;
+    const leadCount = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM leads WHERE (stage IS NULL OR stage = '') AND status NOT IN ('lost','dnc','not_interested','won')`).first()).n;
+    return json({ stages: V2_STAGES.map((s) => ({ stage: s, name: V2_STAGE_NAME[s] })), deals, leads, lead_count: leadCount });
+  }
+  if (path === '/v2/stage' && method === 'POST') {
+    const lead = await env.DB.prepare('SELECT id, stage, status FROM leads WHERE id = ?').bind(+body.lead_id).first();
+    if (!lead) bad('Lead not found');
+    if (body.stage === 'lost') { await env.DB.prepare("UPDATE leads SET status = 'lost', updated_at = ? WHERE id = ?").bind(now(), lead.id).run(); return json({ ok: true }); }
+    if (body.stage === 'lead') { await env.DB.prepare("UPDATE leads SET stage = NULL, stage_at = NULL, updated_at = ? WHERE id = ?").bind(now(), lead.id).run(); return json({ ok: true }); }
+    if (v2Rank(body.stage) < 0) bad('Pick a stage');
+    if (v2Rank(body.stage) > v2Rank(lead.stage)) await stageUp(env, lead.id, body.stage, user.id);
+    else await env.DB.prepare('UPDATE leads SET stage = ?, stage_at = ? WHERE id = ?').bind(body.stage, now(), lead.id).run();
+    const st = { booked: 'booked', closed: 'won', active: 'won', signed: 'won' }[body.stage];
+    if (st && lead.status !== st && !(st === 'booked' && lead.status === 'won')) await env.DB.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').bind(st, now(), lead.id).run();
+    if (body.mrr !== undefined && body.mrr !== '') await env.DB.prepare('UPDATE leads SET mrr_cents = ? WHERE id = ?').bind(centsVal(body.mrr), lead.id).run();
+    return json({ ok: true });
+  }
+
+  if (path === '/v2/clients' && method === 'GET') {
+    const rows = (await env.DB.prepare(`SELECT l.id, l.business, l.owner, l.phone, l.email, l.city, l.stage, l.client_since, l.mrr_cents,
+      (SELECT COALESCE(SUM(amount_cents),0) FROM payments p WHERE p.lead_id = l.id) AS paid_cents, (SELECT MAX(paid_at) FROM payments p WHERE p.lead_id = l.id) AS last_paid
+      FROM leads l WHERE l.stage IN ('closed','active') OR l.status = 'won' ORDER BY COALESCE(l.client_since, l.updated_at) DESC LIMIT 300`).all()).results;
+    return json({ clients: rows });
+  }
+  if ((m = path.match(/^\/v2\/clients\/(\d+)$/)) && method === 'PATCH') {
+    if (body.mrr !== undefined) await env.DB.prepare('UPDATE leads SET mrr_cents = ? WHERE id = ?').bind(body.mrr === '' ? 0 : centsVal(body.mrr), +m[1]).run();
+    return json({ ok: true });
+  }
+
+  if (path === '/v2/payments' && method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT p.*, l.business FROM payments p LEFT JOIN leads l ON l.id = p.lead_id ORDER BY p.paid_at DESC LIMIT 300').all()).results;
+    const open = (await env.DB.prepare(`SELECT l.id, l.business, l.stage, (SELECT setup_cents FROM contracts c WHERE c.lead_id = l.id ORDER BY c.id DESC LIMIT 1) AS setup_cents,
+      (SELECT mrr_cents FROM contracts c WHERE c.lead_id = l.id ORDER BY c.id DESC LIMIT 1) AS mrr_cents FROM leads l WHERE l.stage IN ('showed','contract_sent','signed','closed','active') OR l.status = 'won' ORDER BY l.stage_at DESC LIMIT 200`).all()).results;
+    return json({ payments: rows, leads: open });
+  }
+  if (path === '/v2/payments' && method === 'POST') {
+    const lead = await env.DB.prepare('SELECT id, stage FROM leads WHERE id = ?').bind(+body.lead_id).first();
+    if (!lead) bad('Pick who paid');
+    const amount = centsVal(body.amount); if (!amount) bad('Enter the amount they paid');
+    const fee = body.fee ? centsVal(body.fee) : 0, at = body.paid_at ? validIso(body.paid_at) : now();
+    await env.DB.prepare('INSERT INTO payments (lead_id, amount_cents, fee_cents, method, note, paid_at, user_id, created_at) VALUES (?,?,?,?,?,?,?,?)').bind(lead.id, amount, fee, str(body.method, 30) || null, str(body.note, 300) || null, at, user.id, now()).run();
+    await stageUp(env, lead.id, 'closed', user.id, at);
+    await env.DB.prepare("UPDATE leads SET status = 'won', updated_at = ? WHERE id = ? AND status != 'won'").bind(now(), lead.id).run();
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/v2\/payments\/(\d+)$/)) && method === 'DELETE') { await env.DB.prepare('DELETE FROM payments WHERE id = ?').bind(+m[1]).run(); return json({ ok: true }); }
+  if (path === '/v2/expenses' && method === 'POST') {
+    const amount = centsVal(body.amount); if (!amount) bad('Enter the amount');
+    await env.DB.prepare('INSERT INTO expenses (amount_cents, category, note, spent_at, created_at) VALUES (?,?,?,?,?)').bind(amount, str(body.category, 40) || 'Other', str(body.note, 200) || null, body.spent_at ? validIso(body.spent_at) : now(), now()).run();
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/v2\/expenses\/(\d+)$/)) && method === 'DELETE') { await env.DB.prepare('DELETE FROM expenses WHERE id = ?').bind(+m[1]).run(); return json({ ok: true }); }
+
+  if (path === '/v2/contracts' && method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT c.*, l.business, l.owner, l.email, l.phone, l.city FROM contracts c JOIN leads l ON l.id = c.lead_id ORDER BY c.id DESC LIMIT 200').all()).results;
+    const leads = (await env.DB.prepare(`SELECT id, business, owner, stage FROM leads WHERE stage IN ('booked','showed','contract_sent','signed','closed','active') ORDER BY stage_at DESC LIMIT 200`).all()).results;
+    return json({ contracts: rows, leads, me: user.name });
+  }
+  if (path === '/v2/contracts' && method === 'POST') {
+    const lead = await env.DB.prepare('SELECT id, business FROM leads WHERE id = ?').bind(+body.lead_id).first();
+    if (!lead) bad('Pick the client');
+    const t = now();
+    const r = await env.DB.prepare('INSERT INTO contracts (lead_id, title, setup_cents, mrr_cents, terms, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .bind(lead.id, str(body.title, 120) || 'AI receptionist agreement', body.setup ? centsVal(body.setup) : 0, body.mrr ? centsVal(body.mrr) : 0, str(body.terms, 20000) || null, 'draft', t, t).run();
+    return json({ ok: true, id: r.meta.last_row_id });
+  }
+  if ((m = path.match(/^\/v2\/contracts\/(\d+)$/))) {
+    const c = await env.DB.prepare('SELECT * FROM contracts WHERE id = ?').bind(+m[1]).first();
+    if (!c) throw new HttpError(404, 'Contract not found');
+    if (method === 'DELETE') { await env.DB.prepare('DELETE FROM contracts WHERE id = ?').bind(c.id).run(); return json({ ok: true }); }
+    if (method === 'PATCH') {
+      const t = now(), sets = ['updated_at = ?'], args = [t];
+      if (body.title !== undefined) { sets.push('title = ?'); args.push(str(body.title, 120)); }
+      if (body.setup !== undefined) { sets.push('setup_cents = ?'); args.push(body.setup === '' ? 0 : centsVal(body.setup)); }
+      if (body.mrr !== undefined) { sets.push('mrr_cents = ?'); args.push(body.mrr === '' ? 0 : centsVal(body.mrr)); }
+      if (body.terms !== undefined) { sets.push('terms = ?'); args.push(str(body.terms, 20000)); }
+      if (body.status === 'sent') { sets.push("status = 'sent'", 'sent_at = COALESCE(sent_at, ?)'); args.push(t); }
+      if (body.status === 'signed') { sets.push("status = 'signed'", 'signed_at = COALESCE(signed_at, ?)', 'sent_at = COALESCE(sent_at, ?)'); args.push(t, t); }
+      if (body.status === 'draft') { sets.push("status = 'draft'"); }
+      await env.DB.prepare(`UPDATE contracts SET ${sets.join(', ')} WHERE id = ?`).bind(...args, c.id).run();
+      if (body.status === 'sent') await stageUp(env, c.lead_id, 'contract_sent', user.id);
+      if (body.status === 'signed') {
+        await stageUp(env, c.lead_id, 'contract_sent', user.id);
+        await stageUp(env, c.lead_id, 'signed', user.id);
+        const fresh = await env.DB.prepare('SELECT mrr_cents FROM contracts WHERE id = ?').bind(c.id).first();
+        if (fresh.mrr_cents) await env.DB.prepare('UPDATE leads SET mrr_cents = ? WHERE id = ?').bind(fresh.mrr_cents, c.lead_id).run();
+      }
+      return json({ ok: true });
+    }
+  }
+
+  if (path === '/v2/tasks' && method === 'GET') {
+    const rows = (await env.DB.prepare(`SELECT e.id, e.title, e.starts_at, e.done, e.notes, e.lead_id, l.business FROM cal_events e LEFT JOIN leads l ON l.id = e.lead_id
+      WHERE e.kind = 'todo' AND (e.done = 0 OR e.starts_at >= ?) ORDER BY e.done ASC, e.starts_at ASC LIMIT 300`).bind(new Date(Date.now() - 7 * 864e5).toISOString()).all()).results;
+    return json({ tasks: rows });
+  }
+
+  if (path === '/v2/landing' && method === 'GET') {
+    const since = v2Since('30');
+    const c = async (sql, ...a) => (await env.DB.prepare(sql).bind(...a).first()).n || 0;
+    const site = { views: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'view' AND created_at >= ?", since), clicks: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'cta' AND created_at >= ?", since), leads: await c("SELECT COUNT(*) AS n FROM site_events WHERE kind = 'lead' AND created_at >= ?", since) };
+    const kits = (await env.DB.prepare('SELECT id, slug, lead_id, data, views, talks, created_at FROM demo_kits ORDER BY id DESC LIMIT 100').all()).results
+      .map((r) => { const d = JSON.parse(r.data || '{}'); return { id: r.id, slug: r.slug, lead_id: r.lead_id, business: d.business, city: d.city, views: r.views, talks: r.talks, created_at: r.created_at, link: url.origin + '/k/' + r.slug }; });
+    return json({ site, kits, origin: url.origin });
+  }
+  return json({ error: 'Not found' }, 404);
 }
 
 // One-time (Nov 20 2026): voice demos for the 3 tint shops that asked for one, each with its own receptionist instructions.

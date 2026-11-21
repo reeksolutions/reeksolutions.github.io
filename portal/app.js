@@ -287,8 +287,18 @@
   /* ===== new CRM (Nov 2026): side menu only. Lead Finder works; the Leads sections are empty for now ===== */
   const LEAD_SECTIONS = [['email', 'Email', 'mail'], ['sms', 'SMS', 'sms'], ['social', 'Social media', 'social'], ['calls', 'Cold calls', 'phone'], ['sales', 'Sales', 'sales'], ['script', 'Script', 'script']];
   let CRM_SUB = 'calls';
+  const V2_NAV = [['home', 'Home', 'home'], ['analytics', 'Analytics', 'chart'], ['inbox', 'Inbox', 'mail'], ['pipeline', 'Pipeline', 'sales'], ['calendar', 'Calendar', 'calendar'], ['clients', 'Clients', 'users'],
+    ['deals', 'Deals', 'deals'], ['landing', 'Landing pages', 'link'], ['contracts', 'Contracts', 'script'], ['tasks', 'Tasks', 'flag'], ['workflows', 'Workflows', 'bolt'], ['settings', 'Settings', 'account']];
+  let v2BadgeAt = 0, v2BadgeN = 0;
+  async function v2Badge(force) {
+    const paint = () => document.querySelectorAll('.v2-unread').forEach((el) => { el.textContent = v2BadgeN; el.hidden = !v2BadgeN; });
+    if (!force && Date.now() - v2BadgeAt < 60e3) return paint();
+    v2BadgeAt = Date.now();
+    try { v2BadgeN = (await api('GET', '/v2/inbox?filter=unread')).unread || 0; } catch { /* ok */ }
+    paint();
+  }
   function crmShell(active, content) {
-    active = ({ deals: 'leads:sales', script: 'leads:script', leads: 'leads:' + CRM_SUB, })[active] || active;
+    active = ({ script: 'leads:script', leads: 'leads:' + CRM_SUB })[active] || active;
     document.documentElement.classList.remove('nonav');
     document.querySelectorAll('.orb').forEach((o) => o.remove());
     const [page, sub] = String(active).split(':');
@@ -300,22 +310,27 @@
       try { localStorage.setItem('crm-leads-open', open ? '1' : '0'); } catch { /* ok */ }
     } }, icon('leads'), h('span', null, 'Leads'), h('i', { class: 'cm-caret' }, icon('chev')));
     const closeMenu = () => document.documentElement.classList.remove('cm-open');
+    const onTool = ['leads', 'content', 'finder', 'studio', 'callbacks', 'script'].includes(page);
+    const toolsOpen = onTool || (() => { try { return localStorage.getItem('crm-tools-open') === '1'; } catch { return false; } })();
+    const toolsBtn = h('button', { type: 'button', class: 'cm-link cm-group' + (onTool ? ' in' : ''), 'aria-expanded': String(toolsOpen), 'aria-controls': 'cm-tools', onclick: (e) => {
+      const box = document.getElementById('cm-tools'); const open = box.hidden; box.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem('crm-tools-open', open ? '1' : '0'); } catch { /* ok */ }
+    } }, icon('more'), h('span', null, 'Tools'), h('i', { class: 'cm-caret' }, icon('chev')));
     const menu = h('aside', { class: 'cm-side', 'aria-label': 'Menu' },
       h('div', { class: 'cm-brand' }, h('a', { href: '#/home', class: 'cm-logo', onclick: closeMenu }, icon('logo'), h('span', null, 'Reekon')),
         h('button', { type: 'button', class: 'cm-x', 'aria-label': 'Close menu', onclick: closeMenu }, icon('close'))),
       h('nav', { class: 'cm-nav', onclick: (e) => { if (e.target.closest('a')) closeMenu(); } },
-        h('a', { href: '#/home', class: 'cm-link' + (page === 'home' ? ' on' : ''), 'aria-current': page === 'home' ? 'page' : null }, icon('home'), h('span', null, 'Home')),
-        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList),
-        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Content'),
-          h('a', { href: '#/content/post', class: 'cm-link' + (active === 'content:post' ? ' on' : ''), 'aria-current': active === 'content:post' ? 'page' : null }, icon('spark'), h('span', null, 'Post content')),
-          h('a', { href: '#/content/maps', class: 'cm-link' + (active === 'content:maps' ? ' on' : ''), 'aria-current': active === 'content:maps' ? 'page' : null }, icon('social'), h('span', null, 'Web maps'))),
-        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Demos'),
-          h('a', { href: '#/studio', class: 'cm-link' + (page === 'studio' && sub !== 'made' ? ' on' : ''), 'aria-current': page === 'studio' && sub !== 'made' ? 'page' : null }, icon('demos'), h('span', null, 'Demo Studio')),
-          h('div', { class: 'cm-sub' }, h('a', { href: '#/studio/made', class: 'cm-link cm-sublink' + (page === 'studio' && sub === 'made' ? ' on' : ''), 'aria-current': page === 'studio' && sub === 'made' ? 'page' : null }, icon('phone'), h('span', null, 'My demos')))),
-        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Find leads'),
-          h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : ''), 'aria-current': page === 'finder' ? 'page' : null }, icon('search'), h('span', null, 'Lead Finder'))),
-        h('div', { class: 'cm-sec' }, h('small', { class: 'cm-label' }, 'Schedule'),
-          h('a', { href: '#/calendar', class: 'cm-link' + (page === 'calendar' ? ' on' : ''), 'aria-current': page === 'calendar' ? 'page' : null }, icon('calendar'), h('span', null, 'Calendar')))),
+        V2_NAV.map(([k, label, ic]) => h('a', { href: '#/' + k, class: 'cm-link' + (page === k ? ' on' : ''), 'aria-current': page === k ? 'page' : null }, icon(ic), h('span', null, label),
+          k === 'inbox' ? h('span', { class: 'count v2-unread', hidden: true }) : null)),
+        h('div', { class: 'cm-sec' }, toolsBtn, h('div', { class: 'cm-sub cm-tools', id: 'cm-tools', hidden: !toolsOpen },
+          h('small', { class: 'cm-label' }, 'Leads'), leadsBtn, subList,
+          h('small', { class: 'cm-label' }, 'Content'),
+          h('a', { href: '#/content/post', class: 'cm-link' + (active === 'content:post' ? ' on' : '') }, icon('spark'), h('span', null, 'Post content')),
+          h('a', { href: '#/content/maps', class: 'cm-link' + (active === 'content:maps' ? ' on' : '') }, icon('social'), h('span', null, 'Web maps')),
+          h('small', { class: 'cm-label' }, 'Find & demo'),
+          h('a', { href: '#/finder', class: 'cm-link' + (page === 'finder' ? ' on' : '') }, icon('search'), h('span', null, 'Lead Finder')),
+          h('a', { href: '#/studio', class: 'cm-link' + (page === 'studio' && sub !== 'made' ? ' on' : '') }, icon('demos'), h('span', null, 'Demo Studio')),
+          h('a', { href: '#/studio/made', class: 'cm-link' + (page === 'studio' && sub === 'made' ? ' on' : '') }, icon('phone'), h('span', null, 'My demos'))))),
       h('a', { href: '#/account', class: 'cm-me' + (page === 'account' ? ' on' : ''), onclick: closeMenu }, h('span', { class: 'cm-av' }, initials(S.me.name)),
         h('span', { class: 'cm-who' }, h('b', null, S.me.name), h('small', null, 'Account'))));
     const bar = h('header', { class: 'cm-bar' },
@@ -326,6 +341,7 @@
     $app.replaceChildren(menu, h('div', { class: 'cm-scrim', onclick: closeMenu }), h('div', { class: 'cm-frame' }, bar, main));
     document.documentElement.classList.add('crm2');
     window.scrollTo(0, 0);
+    v2Badge(page === 'inbox');
     return main;
   }
 
@@ -352,6 +368,315 @@
     crmShell('studio:made', [pcHead('Demos', 'My demos', 'Every demo you made. Talk to its receptionist, screen record it for your video, then send the link.'),
       kits.length ? h('div', { class: 'md-list' }, kits.map(card))
         : h('div', { class: 'empty' }, h('b', null, 'No demos yet'), 'Build one in Demo Studio.', h('a', { class: 'btn primary', href: '#/studio', style: 'margin-top:10px' }, 'Open Demo Studio'))]);
+  }
+
+  /* ================= CRM v2: Home, Analytics, Inbox, Pipeline, Clients, Deals, Landing pages, Contracts, Tasks, Workflows ================= */
+  const V2_RANGES = [['today', 'Today'], ['7', '7 days'], ['30', '30 days'], ['90', '90 days']];
+  const v2R = () => { try { return localStorage.getItem('v2-range') || '7'; } catch { return '7'; } };
+  const v2SetR = (r) => { try { localStorage.setItem('v2-range', r); } catch { /* ok */ } };
+  const v2$ = (c) => '$' + Math.round((+c || 0) / 100).toLocaleString();
+  const v2Time = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const v2Day = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const v2Ago = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 6e4); if (m < 60) return Math.max(1, m) + 'm ago'; const hr = Math.round(m / 60); if (hr < 24) return hr + 'h ago'; const d = Math.round(hr / 24); return d === 1 ? 'yesterday' : d + 'd ago'; };
+  const v2RangeName = (r) => ({ today: 'today', 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days' }[r] || '');
+  const v2Copy = async (t, m) => { try { await navigator.clipboard.writeText(t); toast(m || 'Copied'); } catch { prompt('Copy this:', t); } };
+  function v2Seg(items, cur, pick, cls) {
+    return h('div', { class: 'v2-seg ' + (cls || ''), role: 'tablist' }, items.map(([k, label]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === cur), class: k === cur ? 'on' : '', onclick: () => pick(k) }, label)));
+  }
+  const v2Stat = (label, value, sub, ic, tone) => h('div', { class: 'v2-stat' + (tone ? ' ' + tone : '') }, h('div', { class: 'v2-stat-h' }, h('span', null, label), ic ? h('i', null, icon(ic)) : null), h('b', null, value), sub ? h('small', null, sub) : null);
+  const v2Card = (title, right, ...body) => h('section', { class: 'v2-card' }, title ? h('div', { class: 'v2-card-h' }, h('h3', null, title), right || null) : null, ...body);
+  const v2Head = (kicker, title, sub, right) => h('div', { class: 'v2-head' }, h('div', null, h('span', { class: 'eyebrow' }, kicker), h('h1', null, title), sub ? h('p', null, sub) : null), right || null);
+  function v2FunnelCard(f, opts = {}) {
+    const max = Math.max(1, ...f.steps.map((s) => s.n));
+    const rows = f.steps.map((s, i) => {
+      const prev = i ? f.steps[i - 1].n : 0, conv = i && prev ? Math.round((s.n / prev) * 100) : null;
+      return h('div', { class: 'v2-fun-row' }, h('span', { class: 'v2-fun-name' }, s.name),
+        h('span', { class: 'v2-fun-bar' }, h('i', { style: 'width:' + Math.max(s.n ? 4 : 0, (s.n / max) * 100) + '%' })),
+        opts.conv ? h('span', { class: 'v2-fun-conv' }, conv === null ? '' : conv + '%') : null,
+        h('b', { class: 'v2-fun-n' }, String(s.n)));
+    });
+    return v2Card('Funnel', h('span', { class: 'v2-dim' }, 'Deals reaching each step · ' + v2RangeName(opts.range || v2R())),
+      h('div', { class: 'v2-fun' + (opts.conv ? ' conv' : '') }, rows),
+      h('div', { class: 'v2-rates' }, h('div', null, h('small', null, 'Show rate'), h('b', null, f.show_rate === null ? '—' : f.show_rate + '%')), h('div', null, h('small', null, 'Close rate'), h('b', null, f.close_rate === null ? '—' : f.close_rate + '%'))));
+  }
+  function v2Bars(byDay, range) {
+    const n = { today: 1, 7: 7, 30: 30, 90: 90 }[range] || 7, days = [];
+    for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
+    const map = Object.fromEntries((byDay || []).map((r) => [r.day, r.c])), max = Math.max(1, ...days.map((d) => map[d] || 0));
+    return h('div', { class: 'v2-bars', role: 'img', 'aria-label': 'Cash collected per day' }, days.map((d) => h('span', { title: v2Day(d + 'T12:00') + ': ' + v2$(map[d] || 0), style: '--v:' + ((map[d] || 0) / max) })));
+  }
+
+  /* ---- Home ---- */
+  async function viewHomeV2() {
+    const R = v2R(), d = await api('GET', '/v2/home?range=' + R);
+    const hr = new Date().getHours(), hi = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+    const pick = (r) => { v2SetR(r); viewHomeV2(); };
+    const meetings = d.meetings.length ? h('div', { class: 'v2-list' }, d.meetings.map((x) => h(x.lead_id ? 'a' : 'div', { class: 'v2-item', href: x.lead_id ? '#/lead/' + x.lead_id : null },
+      h('span', { class: 'v2-time' }, v2Time(x.at)), h('span', { class: 'v2-item-t' }, x.title), x.phone ? h('small', null, x.phone) : null)))
+      : h('p', { class: 'v2-empty' }, 'No calls on the calendar today.');
+    const att = d.attention.length ? h('div', { class: 'v2-list' }, d.attention.map((a) => h('a', { class: 'v2-item v2-att t-' + a.tone, href: a.href }, h('i', { class: 'v2-dot' }), h('span', { class: 'v2-item-t' }, a.text), icon('chev'))))
+      : h('p', { class: 'v2-empty ok' }, '✓ Nothing needs you right now');
+    crmShell('home', [
+      v2Head(new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }), hi + ', ' + first(d.name || S.me.name) + '.', null, v2Seg(V2_RANGES, R, pick)),
+      h('div', { class: 'v2-stats3' },
+        v2Stat('Cash collected', v2$(d.cash.gross), d.cash.payments + ' payment' + (d.cash.payments === 1 ? '' : 's') + ' · ' + v2RangeName(R), 'deals', 'good'),
+        v2Stat('Deals closed', String(d.closed), v2RangeName(R), 'trophy'),
+        v2Stat('Audits booked', String(d.booked), v2RangeName(R), 'calendar')),
+      h('div', { class: 'v2-grid2' },
+        v2Card("Today's calls", h('a', { class: 'v2-link', href: '#/calendar' }, 'Calendar ›'), h('div', { class: 'v2-big' }, h('b', null, String(d.audits)), h('small', null, 'audits today')), meetings),
+        v2Card('Needs attention', null, att)),
+      v2FunnelCard(d.funnel, { range: R }),
+    ]);
+  }
+
+  /* ---- Analytics ---- */
+  const V2_TABS = [['overview', 'Overview'], ['funnel', 'Funnel'], ['revenue', 'Revenue'], ['marketing', 'Marketing'], ['pnl', 'P&L'], ['mine', 'My numbers']];
+  async function viewAnalytics(tab) {
+    tab = V2_TABS.some(([k]) => k === tab) ? tab : 'overview';
+    const R = v2R(), d = await api('GET', '/v2/analytics?tab=' + tab + '&range=' + R);
+    const rn = v2RangeName(R), body = [];
+    if (tab === 'overview') {
+      body.push(h('div', { class: 'v2-stats4' },
+        v2Stat('Gross cash', v2$(d.cash.gross), d.cash.payments + ' payment' + (d.cash.payments === 1 ? '' : 's'), 'deals', 'good'),
+        v2Stat('Net cash', v2$(d.cash.net), 'after ' + v2$(d.cash.fees) + ' in fees', 'chart'),
+        v2Stat('Closes', String(d.closes), rn, 'trophy'),
+        v2Stat('Close rate', d.funnel.close_rate === null ? '—' : d.funnel.close_rate + '%', 'closes ÷ audits that showed', 'flag')),
+      h('div', { class: 'v2-grid2' },
+        v2Card('Cash per day', h('span', { class: 'v2-dim' }, rn), v2Bars(d.by_day, R)),
+        v2Card('Monthly recurring', null, h('div', { class: 'v2-big' }, h('b', null, v2$(d.mrr.c)), h('small', null, d.mrr.n + ' client' + (d.mrr.n === 1 ? '' : 's') + ' paying monthly')))));
+    } else if (tab === 'funnel') {
+      body.push(v2FunnelCard(d.funnel, { conv: true, range: R }), h('p', { class: 'v2-note' }, 'Each % is how many moved on from the step before. Move deals between steps in Pipeline.'));
+    } else if (tab === 'revenue') {
+      const avg = d.cash.payments ? d.cash.gross / d.cash.payments : 0;
+      body.push(h('div', { class: 'v2-stats4' }, v2Stat('Gross', v2$(d.cash.gross), rn, 'deals', 'good'), v2Stat('Net', v2$(d.cash.net), 'after fees', 'chart'), v2Stat('MRR', v2$(d.mrr.c), d.mrr.n + ' clients', 'bolt'), v2Stat('Avg payment', v2$(avg), d.cash.payments + ' payments', 'sales')),
+        v2Card('Cash per day', h('a', { class: 'v2-link', href: '#/deals' }, '+ Record a payment'), v2Bars(d.by_day, R)),
+        v2Card('Payments', null, d.payments.length ? h('div', { class: 'v2-table' }, d.payments.map((p) => h('div', { class: 'v2-tr' }, h('span', null, v2Day(p.paid_at)), h('span', { class: 'v2-grow' }, p.business || '—'), h('span', { class: 'v2-dim' }, p.method || ''), h('b', null, v2$(p.amount_cents)))))
+          : h('p', { class: 'v2-empty' }, 'No payments ' + rn + '. Record them in Deals.')));
+    } else if (tab === 'marketing') {
+      const oc = Object.fromEntries((d.outreach || []).map((r) => [r.outcome, r.n]));
+      body.push(h('div', { class: 'v2-stats4' }, v2Stat('Site visits', String(d.site.views), 'your landing page', 'link'), v2Stat('Button taps', String(d.site.clicks), 'book / call buttons', 'bolt'), v2Stat('Demo requests', String(d.site.leads), 'from your site', 'spark', 'good'), v2Stat('Posts', String(d.posts), 'marked posted', 'social')),
+        h('div', { class: 'v2-grid2' },
+          v2Card('Demos', null, h('div', { class: 'v2-kv' }, [['Demos made', d.demos.made], ['Demo opens', d.demos.views], ['Talks with the receptionist', d.demos.talks]].map(([k, v]) => h('div', null, h('span', null, k), h('b', null, String(v)))))),
+          v2Card('Outreach', null, h('div', { class: 'v2-kv' }, [['Emails', oc.emailed || 0], ['Texts', oc.texted || 0], ['DMs', oc.dmed || 0], ['Demos sent', oc.demo_sent || 0]].map(([k, v]) => h('div', null, h('span', null, k), h('b', null, String(v))))))),
+        v2Card('New leads by source', h('span', { class: 'v2-dim' }, rn), d.sources.length ? h('div', { class: 'v2-kv' }, d.sources.map((s) => h('div', null, h('span', null, ({ finder: 'Lead Finder', import: 'Imported', 'in person': 'In person', demo: 'Demo page', site: 'Website', social: 'Social' })[s.source] || s.source), h('b', null, String(s.n))))) : h('p', { class: 'v2-empty' }, 'No new leads ' + rn + '.')));
+    } else if (tab === 'pnl') {
+      const profit = d.cash.net - d.expense_total;
+      const amt = h('input', { type: 'text', inputmode: 'decimal', placeholder: '$ amount' }), cat = h('select', null, ['Software', 'Phone & dialer', 'Ads', 'Contractors', 'Gear', 'Other'].map((c) => h('option', null, c))), note = h('input', { type: 'text', placeholder: 'What for (optional)', maxlength: 200 });
+      const add = h('button', { type: 'button', class: 'btn primary', onclick: async () => { add.disabled = true; try { await api('POST', '/v2/expenses', { amount: amt.value, category: cat.value, note: note.value }); toast('Expense added'); viewAnalytics('pnl'); } catch (e) { fail(e); add.disabled = false; } } }, 'Add expense');
+      body.push(h('div', { class: 'v2-stats4' }, v2Stat('Revenue', v2$(d.cash.gross), rn, 'deals'), v2Stat('Fees', v2$(d.cash.fees), 'card / processor fees', 'chart'), v2Stat('Expenses', v2$(d.expense_total), d.expenses.length + ' items', 'flag', 'warn'), v2Stat('Profit', v2$(profit), 'revenue − fees − expenses', 'trophy', profit >= 0 ? 'good' : 'warn')),
+        v2Card('Add an expense', null, h('div', { class: 'v2-form' }, amt, cat, note, add)),
+        v2Card('Expenses', null, d.expenses.length ? h('div', { class: 'v2-table' }, d.expenses.map((e) => h('div', { class: 'v2-tr' }, h('span', null, v2Day(e.spent_at)), h('span', { class: 'v2-grow' }, e.category + (e.note ? ' · ' + e.note : '')), h('b', null, v2$(e.amount_cents)),
+          h('button', { type: 'button', class: 'v2-x', 'aria-label': 'Delete', onclick: async () => { try { await api('DELETE', '/v2/expenses/' + e.id); viewAnalytics('pnl'); } catch (x) { fail(x); } } }, '×')))) : h('p', { class: 'v2-empty' }, 'No expenses ' + rn + '.')));
+    } else if (tab === 'mine') {
+      const by = Object.fromEntries((d.mine || []).map((r) => [r.outcome, r.n]));
+      const dials = ['no_answer', 'voicemail', 'gatekeeper', 'not_interested', 'callback', 'booked', 'dnc'].reduce((a, k) => a + (by[k] || 0), 0);
+      const talks = ['gatekeeper', 'not_interested', 'callback', 'booked'].reduce((a, k) => a + (by[k] || 0), 0);
+      body.push(h('div', { class: 'v2-stats4' }, v2Stat('Calls made', String(dials), rn, 'phone'), v2Stat('Conversations', String(talks), dials ? Math.round((talks / dials) * 100) + '% of calls' : '', 'callbacks'), v2Stat('Audits booked', String(by.booked || 0), talks ? Math.round(((by.booked || 0) / talks) * 100) + '% of conversations' : '', 'calendar', 'good'), v2Stat('Demos sent', String(by.demo_sent || 0), rn, 'spark')),
+        v2Card('Outreach', null, h('div', { class: 'v2-kv' }, [['Callbacks set', by.callback || 0], ['Emails', by.emailed || 0], ['Texts', by.texted || 0], ['DMs', by.dmed || 0], ['Not interested', by.not_interested || 0]].map(([k, v]) => h('div', null, h('span', null, k), h('b', null, String(v)))))));
+    }
+    crmShell('analytics', [v2Head('Analytics', V2_TABS.find(([k]) => k === tab)[1], null, v2Seg(V2_RANGES, R, (r) => { v2SetR(r); viewAnalytics(tab); })),
+      v2Seg(V2_TABS, tab, (t) => { location.hash = '#/analytics/' + t; }, 'v2-tabs'), ...body]);
+  }
+
+  /* ---- Inbox ---- */
+  const V2_CH = { email: ['mail', 'Email'], text: ['sms', 'Text'], call: ['phone', 'Call'], dm: ['social', 'DM'], demo: ['spark', 'Demo'] };
+  async function viewInbox(filter) {
+    filter = ['unread', 'all', 'mine', 'unknown'].includes(filter) ? filter : 'unread';
+    const [d, pl] = await Promise.all([api('GET', '/v2/inbox?filter=' + filter), api('GET', '/v2/pipeline').catch(() => ({ deals: [], leads: [] }))]);
+    const markRead = async (keys) => { try { await api('POST', '/v2/inbox/read', { keys }); v2BadgeAt = 0; v2Badge(true); } catch { /* ok */ } };
+    const row = (x) => {
+      const [ic, chName] = V2_CH[x.channel] || ['mail', 'Message'];
+      const body = x.body ? h('p', { class: 'v2-msg-body', hidden: true }, x.body) : null;
+      const el = h('div', { class: 'v2-msg' + (x.unread ? ' unread' : '') },
+        h('button', { type: 'button', class: 'v2-msg-top', onclick: () => { if (body) body.hidden = !body.hidden; if (x.unread) { x.unread = false; el.classList.remove('unread'); markRead([x.k]); } } },
+          h('i', { class: 'v2-msg-ic' }, icon(ic)), h('span', { class: 'v2-msg-who' }, h('b', null, x.who), h('small', null, [x.business && x.business !== x.who ? x.business : '', chName + (x.direction === 'out' ? ' · you' : '')].filter(Boolean).join(' · '))),
+          h('span', { class: 'v2-msg-t' }, x.title), h('small', { class: 'v2-msg-at' }, v2Ago(x.at))),
+        body, x.lead_id ? h('a', { class: 'v2-link small', href: '#/lead/' + x.lead_id }, 'Open lead ›') : null);
+      return el;
+    };
+    const who = h('input', { type: 'text', placeholder: 'Who (if not a lead)', maxlength: 80 }), msg = h('textarea', { rows: 3, placeholder: 'What did they say?', maxlength: 4000 });
+    const ch = h('select', null, [['text', 'Text'], ['email', 'Email'], ['call', 'Call'], ['dm', 'DM']].map(([v, l]) => h('option', { value: v }, l)));
+    const lead = h('select', null, h('option', { value: '' }, 'Not a lead / unknown'), [...pl.deals, ...pl.leads].map((l) => h('option', { value: l.id }, l.business)));
+    const save = h('button', { type: 'button', class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('POST', '/v2/inbox', { channel: ch.value, lead_id: lead.value, who: who.value, body: msg.value }); toast('Added to inbox'); viewInbox('all'); } catch (e) { fail(e); save.disabled = false; } } }, 'Add');
+    const unreadKeys = d.items.filter((x) => x.unread).map((x) => x.k);
+    crmShell('inbox', [v2Head('Inbox', 'Inbox', 'Emails, texts and calls with clients. Newest first.', unreadKeys.length ? h('button', { type: 'button', class: 'btn', onclick: async () => { await markRead(unreadKeys); viewInbox(filter); } }, 'Mark all read') : null),
+      v2Seg([['unread', 'Unread' + (d.unread ? ' (' + d.unread + ')' : '')], ['all', 'All'], ['mine', 'Mine'], ['unknown', 'Unknown sender']], filter, (f) => { location.hash = '#/inbox/' + f; }, 'v2-tabs'),
+      d.items.length ? h('div', { class: 'v2-msgs' }, d.items.map(row)) : h('div', { class: 'v2-card v2-center' }, h('p', { class: 'v2-empty' }, filter === 'unread' ? 'Nothing unread' : 'Nothing here yet')),
+      h('details', { class: 'v2-card v2-more' }, h('summary', null, '+ Log a text, call or DM'), h('div', { class: 'v2-form col' }, h('div', { class: 'v2-form' }, ch, lead, who), msg, save))]);
+  }
+
+  /* ---- Pipeline ---- */
+  async function viewPipeline() {
+    const d = await api('GET', '/v2/pipeline');
+    const move = async (id, stage, extra) => { try { await api('POST', '/v2/stage', { lead_id: id, stage, ...(extra || {}) }); toast(stage === 'lost' ? 'Marked lost' : 'Moved'); viewPipeline(); } catch (e) { fail(e); } };
+    const mover = (L, cur) => h('select', { class: 'v2-move', 'aria-label': 'Move ' + L.business, onchange: (e) => { if (e.target.value) move(L.id, e.target.value); } },
+      h('option', { value: '' }, 'Move to…'), cur !== 'lead' ? h('option', { value: 'lead' }, 'Back to leads') : null, d.stages.filter((s) => s.stage !== cur).map((s) => h('option', { value: s.stage }, s.name)), h('option', { value: 'lost' }, 'Lost'));
+    const card = (L, cur) => h('div', { class: 'v2-deal' + (L.heat === 'hot' ? ' hot' : '') }, h('a', { href: '#/lead/' + L.id }, h('b', null, L.business)),
+      h('small', null, [L.owner, L.city].filter(Boolean).join(' · ') || L.phone || ''),
+      h('div', { class: 'v2-deal-f' }, h('span', { class: 'v2-dim' }, cur === 'lead' ? ({ callback: 'Callback', called: 'Called', demo_needed: 'Wants demo', demo_ready: 'Demo ready', demo_sent: 'Demo sent' }[L.status] || L.status) : v2Ago(L.stage_at)),
+        L.value_cents ? h('span', { class: 'v2-pill' }, v2$(L.value_cents)) : L.paid_cents ? h('span', { class: 'v2-pill good' }, v2$(L.paid_cents) + ' paid') : null),
+      mover(L, cur));
+    const cols = [['lead', 'Leads', d.leads, d.lead_count]].concat(d.stages.map((s) => [s.stage, s.name, d.deals.filter((x) => x.stage === s.stage)]));
+    const total = d.deals.length;
+    crmShell('pipeline', [v2Head('Pipeline', 'Pipeline', total + ' open deal' + (total === 1 ? '' : 's') + ' and your warm leads, by stage. Use "Move to" as things happen.'),
+      h('div', { class: 'v2-board' }, cols.map(([k, name, list, count]) => h('div', { class: 'v2-col' + (k === 'lead' ? ' leads' : '') },
+        h('div', { class: 'v2-col-h' }, h('b', null, name), h('span', null, String(count ?? list.length))),
+        list.length ? list.map((L) => card(L, k)) : h('p', { class: 'v2-empty small' }, k === 'lead' ? 'Warm leads show up here' : 'None yet'))))]);
+  }
+
+  /* ---- Clients ---- */
+  async function viewClients() {
+    const d = await api('GET', '/v2/clients');
+    const mrr = d.clients.reduce((a, c) => a + (c.mrr_cents || 0), 0), paid = d.clients.reduce((a, c) => a + (c.paid_cents || 0), 0);
+    const card = (c) => {
+      const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'v2-mrr', placeholder: '$/mo', 'aria-label': 'Monthly amount for ' + c.business });
+      inp.value = c.mrr_cents ? String(c.mrr_cents / 100) : '';
+      inp.onchange = async () => { try { await api('PATCH', '/v2/clients/' + c.id, { mrr: inp.value }); toast('Saved'); } catch (e) { fail(e); } };
+      return h('div', { class: 'v2-client' }, h('div', { class: 'v2-grow' }, h('a', { href: '#/lead/' + c.id }, h('b', null, c.business)), h('small', null, [c.owner, c.phone, c.client_since ? 'client since ' + v2Day(c.client_since) : ''].filter(Boolean).join(' · '))),
+        h('div', { class: 'v2-client-n' }, h('small', null, 'Total paid'), h('b', null, v2$(c.paid_cents))),
+        h('label', { class: 'v2-client-n' }, h('small', null, 'Monthly'), inp),
+        h('span', { class: 'v2-pill' + (c.stage === 'active' ? ' good' : '') }, c.stage === 'active' ? 'Active' : 'Onboarding'),
+        h('a', { class: 'btn small', href: '#/deals?lead=' + c.id }, '+ Payment'));
+    };
+    crmShell('clients', [v2Head('Clients', 'Clients', null),
+      h('div', { class: 'v2-stats3' }, v2Stat('Clients', String(d.clients.length), d.clients.filter((c) => c.stage === 'active').length + ' active', 'users'), v2Stat('Monthly recurring', v2$(mrr), 'from client monthly amounts', 'bolt', 'good'), v2Stat('Collected all time', v2$(paid), 'from recorded payments', 'deals')),
+      d.clients.length ? h('div', { class: 'v2-card v2-clients' }, d.clients.map(card)) : h('div', { class: 'v2-card v2-center' }, h('p', { class: 'v2-empty' }, 'No clients yet. When someone pays, record it in Deals and they show up here.'), h('a', { class: 'btn primary', href: '#/deals' }, 'Record a payment'))]);
+  }
+
+  /* ---- Deals (payments) ---- */
+  async function viewDealsV2() {
+    const d = await api('GET', '/v2/payments'), pre = +(new URLSearchParams(location.hash.split('?')[1] || '').get('lead')) || 0;
+    const who = h('select', null, h('option', { value: '' }, 'Who paid?'), d.leads.map((l) => h('option', { value: l.id, selected: l.id === pre }, l.business)));
+    const amt = h('input', { type: 'text', inputmode: 'decimal', placeholder: '$ amount' }), fee = h('input', { type: 'text', inputmode: 'decimal', placeholder: '$ fee (optional)' });
+    const meth = h('select', null, ['Stripe', 'Zelle', 'Cash App', 'Cash', 'Check', 'Other'].map((m) => h('option', null, m)));
+    const when = h('input', { type: 'date', value: new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10) });
+    const note = h('input', { type: 'text', placeholder: 'Note, e.g. setup fee or month 1', maxlength: 300 });
+    who.onchange = () => { const l = d.leads.find((x) => x.id === +who.value); if (l && !amt.value && (l.setup_cents || l.mrr_cents)) amt.value = String((l.setup_cents || l.mrr_cents) / 100); };
+    const save = h('button', { type: 'button', class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('POST', '/v2/payments', { lead_id: who.value, amount: amt.value, fee: fee.value, method: meth.value, note: note.value, paid_at: when.value ? new Date(when.value + 'T12:00').toISOString() : '' }); toast('Payment recorded'); location.hash = '#/deals'; viewDealsV2(); } catch (e) { fail(e); save.disabled = false; } } }, 'Record payment');
+    const gross = d.payments.reduce((a, p) => a + p.amount_cents, 0), fees = d.payments.reduce((a, p) => a + p.fee_cents, 0);
+    crmShell('deals', [v2Head('Deals', 'Deals', 'Record every payment here. It counts toward cash collected and moves the deal to Closed.'),
+      h('div', { class: 'v2-stats3' }, v2Stat('Collected', v2$(gross), d.payments.length + ' payments', 'deals', 'good'), v2Stat('Fees', v2$(fees), 'processor fees', 'chart'), v2Stat('Net', v2$(gross - fees), 'after fees', 'trophy')),
+      v2Card('Record a payment', null, d.leads.length ? h('div', { class: 'v2-form col' }, h('div', { class: 'v2-form' }, who, amt, fee), h('div', { class: 'v2-form' }, meth, when, note), save)
+        : h('p', { class: 'v2-empty' }, 'Deals show up here once a lead reaches Showed or later in Pipeline.')),
+      v2Card('Payments', null, d.payments.length ? h('div', { class: 'v2-table' }, d.payments.map((p) => h('div', { class: 'v2-tr' }, h('span', null, v2Day(p.paid_at)), h('span', { class: 'v2-grow' }, (p.business || '—') + (p.note ? ' · ' + p.note : '')), h('span', { class: 'v2-dim' }, p.method || ''), h('b', null, v2$(p.amount_cents)),
+        h('button', { type: 'button', class: 'v2-x', 'aria-label': 'Delete payment', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sure?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = '×'; }, 3000); return; } try { await api('DELETE', '/v2/payments/' + p.id); viewDealsV2(); } catch (x) { fail(x); } } }, '×'))))
+        : h('p', { class: 'v2-empty' }, 'No payments yet.'))]);
+  }
+
+  /* ---- Landing pages ---- */
+  async function viewLanding() {
+    const d = await api('GET', '/v2/landing'), SITE_URL = 'https://reeksolutions.github.io/';
+    crmShell('landing', [v2Head('Landing pages', 'Landing pages', 'Your site and every demo page you sent. Last 30 days.'),
+      v2Card('Your landing page', h('a', { class: 'v2-link', href: SITE_URL, target: '_blank', rel: 'noopener' }, 'Open ›'),
+        h('div', { class: 'v2-kv row' }, [['Visits', d.site.views], ['Button taps', d.site.clicks], ['Demo requests', d.site.leads]].map(([k, v]) => h('div', null, h('span', null, k), h('b', null, String(v))))),
+        h('div', { class: 'v2-acts' }, h('button', { type: 'button', class: 'btn', onclick: () => v2Copy(SITE_URL, 'Link copied') }, 'Copy link'))),
+      v2Card('Demo pages', h('a', { class: 'v2-link', href: '#/studio' }, '+ New in Demo Studio'),
+        d.kits.length ? h('div', { class: 'v2-table' }, d.kits.map((k) => h('div', { class: 'v2-tr wrap' }, h('span', { class: 'v2-grow' }, h('b', null, k.business), h('small', { class: 'v2-dim' }, ' ' + [k.city, k.views + ' opens', k.talks + ' talks'].filter(Boolean).join(' · '))),
+          h('a', { class: 'btn small', href: k.link + '#site', target: '_blank', rel: 'noopener' }, 'Website'), h('a', { class: 'btn small', href: k.link + '#voice', target: '_blank', rel: 'noopener' }, 'Receptionist'),
+          h('button', { type: 'button', class: 'btn small', onclick: () => v2Copy(k.link, 'Link copied') }, 'Copy'))))
+          : h('p', { class: 'v2-empty' }, 'No demo pages yet.'))]);
+  }
+
+  /* ---- Contracts ---- */
+  function v2Terms(biz, owner, me, setup, mrr) {
+    const m = (v) => '$' + (Math.round((+v || 0) * 100) / 100).toLocaleString();
+    return `AI RECEPTIONIST SERVICE AGREEMENT
+
+Between: Reekon Systems (${me}) and ${biz}${owner ? ' (' + owner + ')' : ''}.
+
+1. What we do
+Reekon Systems sets up and runs an AI receptionist for ${biz}. It answers calls, screens out spam and sales calls, asks callers what they need, and books appointments or takes messages.
+
+2. Price
+Setup fee: ${m(setup)}, paid before setup starts.
+Monthly service: ${m(mrr)} per month, starting the month the receptionist goes live.
+
+3. Term and canceling
+Month to month. Either side can cancel with 30 days written notice (email or text is fine). No refunds for months already paid.
+
+4. Your part
+You give us your services, prices, hours and how you want calls handled, and you tell us about changes.
+
+5. Calls and data
+Call recordings, messages and caller info belong to ${biz}. We only use them to run your receptionist.
+
+6. Limits
+The receptionist is software and can make mistakes. Reekon Systems isn't responsible for lost business from missed or wrong answers, and total liability is capped at the fees paid in the last 3 months.
+
+Signed for ${biz}: ______________________   Date: ________
+
+Signed for Reekon Systems: ______________________   Date: ________`;
+  }
+  async function viewContracts() {
+    const d = await api('GET', '/v2/contracts');
+    const who = h('select', null, h('option', { value: '' }, 'Who is it for?'), d.leads.map((l) => h('option', { value: l.id }, l.business)));
+    const title = h('input', { type: 'text', value: 'AI receptionist agreement', maxlength: 120 }), setup = h('input', { type: 'text', inputmode: 'decimal', placeholder: '$ setup fee' }), mrr = h('input', { type: 'text', inputmode: 'decimal', placeholder: '$ per month' });
+    const terms = h('textarea', { rows: 14, class: 'v2-terms', maxlength: 20000 });
+    const fill = () => { const l = d.leads.find((x) => x.id === +who.value); terms.value = v2Terms(l ? l.business : '[Business name]', l ? l.owner : '', d.me, setup.value.replace(/[$,]/g, ''), mrr.value.replace(/[$,]/g, '')); };
+    who.onchange = fill; setup.oninput = fill; mrr.oninput = fill; fill();
+    const save = h('button', { type: 'button', class: 'btn primary', onclick: async () => { save.disabled = true; try { await api('POST', '/v2/contracts', { lead_id: who.value, title: title.value, setup: setup.value, mrr: mrr.value, terms: terms.value }); toast('Contract saved'); viewContracts(); } catch (e) { fail(e); save.disabled = false; } } }, 'Save contract');
+    const st = (c) => ({ draft: ['Draft', ''], sent: ['Sent ' + v2Ago(c.sent_at), 'warn'], signed: ['Signed ' + v2Day(c.signed_at), 'good'] }[c.status] || [c.status, '']);
+    const act = (c, status, label) => h('button', { type: 'button', class: 'btn small' + (status === 'signed' ? ' primary' : ''), onclick: async () => { try { await api('PATCH', '/v2/contracts/' + c.id, { status }); toast(status === 'signed' ? 'Signed. Now collect the first payment in Deals.' : 'Marked sent'); viewContracts(); } catch (e) { fail(e); } } }, label);
+    const row = (c) => { const [s, tone] = st(c); return h('div', { class: 'v2-contract' }, h('div', { class: 'v2-grow' }, h('b', null, c.business), h('small', null, c.title + ' · ' + v2$(c.setup_cents) + ' setup + ' + v2$(c.mrr_cents) + '/mo')),
+      h('span', { class: 'v2-pill ' + tone }, s),
+      h('div', { class: 'v2-acts' }, h('button', { type: 'button', class: 'btn small', onclick: () => v2Copy(c.terms || '', 'Contract copied. Paste it into an email or a signing app.') }, 'Copy text'),
+        c.status === 'draft' ? act(c, 'sent', 'Mark sent') : null, c.status !== 'signed' ? act(c, 'signed', 'Mark signed') : null,
+        h('button', { type: 'button', class: 'v2-x', 'aria-label': 'Delete contract', onclick: async (e) => { const b = e.currentTarget; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sure?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = '×'; }, 3000); return; } try { await api('DELETE', '/v2/contracts/' + c.id); viewContracts(); } catch (x) { fail(x); } } }, '×'))); };
+    crmShell('contracts', [v2Head('Contracts', 'Contracts', 'Write it, copy it into an email or a signing app, then mark it sent and signed. The deal moves in Pipeline on its own.'),
+      v2Card('Contracts', null, d.contracts.length ? h('div', { class: 'v2-list' }, d.contracts.map(row)) : h('p', { class: 'v2-empty' }, 'No contracts yet.')),
+      h('details', { class: 'v2-card v2-more', open: !d.contracts.length }, h('summary', null, '+ New contract'),
+        d.leads.length ? h('div', { class: 'v2-form col' }, h('div', { class: 'v2-form' }, who, title), h('div', { class: 'v2-form' }, setup, mrr), terms,
+          h('p', { class: 'v2-note' }, 'This is a starting template, not legal advice. Have someone you trust read it before you use it for real.'), save)
+          : h('p', { class: 'v2-empty' }, 'Move a lead to Booked or later in Pipeline first.'))]);
+  }
+
+  /* ---- Tasks ---- */
+  async function viewTasks() {
+    const d = await api('GET', '/v2/tasks');
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    const title = h('input', { type: 'text', placeholder: 'What needs doing?', maxlength: 120 }), due = h('input', { type: 'date', value: today });
+    const add = async () => { if (!title.value.trim()) return; try { await api('POST', '/calendar', { title: title.value.trim(), kind: 'todo', starts_at: new Date(due.value + 'T09:00').toISOString() }); viewTasks(); } catch (e) { fail(e); } };
+    title.onkeydown = (e) => { if (e.key === 'Enter') add(); };
+    const late = (t) => !t.done && t.starts_at.slice(0, 10) < today;
+    const row = (t) => h('div', { class: 'v2-task' + (t.done ? ' done' : '') + (late(t) ? ' late' : '') },
+      h('input', { type: 'checkbox', checked: !!t.done, 'aria-label': 'Done: ' + t.title, onchange: async (e) => { try { await api('PATCH', '/calendar/' + t.id, { done: e.target.checked }); viewTasks(); } catch (x) { fail(x); } } }),
+      h('span', { class: 'v2-grow' }, t.title, t.business ? h('small', { class: 'v2-dim' }, ' · ' + t.business) : null),
+      h('small', { class: 'v2-dim' }, late(t) ? 'late · ' + v2Day(t.starts_at) : v2Day(t.starts_at)),
+      h('button', { type: 'button', class: 'v2-x', 'aria-label': 'Delete task', onclick: async () => { try { await api('DELETE', '/calendar/' + t.id); viewTasks(); } catch (x) { fail(x); } } }, '×'));
+    const open = d.tasks.filter((t) => !t.done), done = d.tasks.filter((t) => t.done);
+    crmShell('tasks', [v2Head('Tasks', 'Tasks', open.length ? open.length + ' to do' : 'All done'),
+      v2Card(null, null, h('div', { class: 'v2-form' }, title, due, h('button', { type: 'button', class: 'btn primary', onclick: add }, 'Add'))),
+      v2Card('To do', null, open.length ? h('div', { class: 'v2-list' }, open.map(row)) : h('p', { class: 'v2-empty ok' }, '✓ Nothing to do')),
+      done.length ? v2Card('Done this week', null, h('div', { class: 'v2-list' }, done.map(row))) : null]);
+  }
+
+  /* ---- Workflows: the whole sales process, one step at a time ---- */
+  function viewWorkflows() {
+    const me = first(S.me.name);
+    const T = {
+      demo: `Hey [Name], thanks for talking with me. Here's a quick video of the AI receptionist answering calls for [Shop]: [video link]\n\nIt answers every call, filters out spam and cold calls, and books the real jobs so you can stay on the work.\n\nIf you like it, grab 10 minutes here: [booking link]\n\n${me}`,
+      follow: `Hey [Name], it's ${me}. Did you get a chance to watch the demo I sent for [Shop]? Happy to walk you through it in 10 minutes this week.`,
+      noshow: `Hey [Name], it's ${me}. Looks like we missed each other today. Want to pick another time? Here's my calendar: [booking link]`,
+      contract: `Hey [Name], here's the agreement for [Shop]'s AI receptionist. Once it's signed I'll get your setup started this week. Any questions, just text me.`,
+      pay: `Hey [Name], thanks for signing! Here's the link for the setup payment: [payment link]. As soon as it goes through I'll start building your receptionist.`,
+    };
+    const steps = [
+      ['Find leads', 'Pull tint, PPF and detail shops in your area.', '#/finder', 'Lead Finder', null],
+      ['Call', 'Work your cold call list. Log every call: no answer, callback, not interested or interested.', '#/leads/calls', 'Cold calls', null],
+      ['Interested → Applied', 'They want to see it. Move them to Applied in Pipeline and build their demo.', '#/studio/made', 'My demos', null],
+      ['Send the demo', 'Same day. Record a short video of their receptionist and send it with your booking link.', '#/pipeline', 'Pipeline', T.demo],
+      ['Follow up', 'No reply in 2 days? Send one short follow-up.', '#/inbox', 'Inbox', T.follow],
+      ['Book the audit', 'Put the 10-minute call on the calendar and move them to Booked.', '#/calendar', 'Calendar', null],
+      ['Audit call', 'They showed? Move to Showed. No-show? Send the reschedule text.', '#/pipeline', 'Pipeline', T.noshow],
+      ['Send the contract', 'Make it in Contracts, send it, and mark it sent.', '#/contracts', 'Contracts', T.contract],
+      ['Get paid', 'Signed? Send the payment link. When it comes in, record it in Deals.', '#/deals', 'Deals', T.pay],
+      ['Active client', 'Set it live, then mark them Active in Pipeline. Their monthly amount counts toward MRR.', '#/clients', 'Clients', null],
+    ];
+    crmShell('workflows', [v2Head('Workflows', 'Your sales process', 'One lead, start to finish. Do the step, tap the button, move on.'),
+      h('ol', { class: 'v2-flow' }, steps.map(([t, txt, href, btn, tpl], i) => h('li', { class: 'v2-step' }, h('span', { class: 'v2-step-n' }, String(i + 1)),
+        h('div', { class: 'v2-grow' }, h('b', null, t), h('p', null, txt),
+          tpl ? h('details', { class: 'v2-tpl' }, h('summary', null, 'Message template'), h('pre', null, tpl), h('button', { type: 'button', class: 'btn small', onclick: () => v2Copy(tpl, 'Template copied. Fill in the [brackets].') }, 'Copy')) : null),
+        h('a', { class: 'btn small', href }, btn + ' ›'))))]);
   }
   /* ===== Home dashboard (new CRM) ===== */
   const hxMoney = (n) => '$' + Math.round(+n || 0).toLocaleString();
@@ -1100,10 +1425,20 @@
       try { S.me = await api('GET', '/me'); } catch { S.me = null; }
     }
     if (!S.me) return renderAuth();
-    const [route, arg] = (location.hash.replace(/^#\/?/, '') || home()).split('/');
+    const [route, arg] = (location.hash.replace(/^#\/?/, '').split('?')[0] || home()).split('/');
     if (S.me.role === 'admin') {
       try {
-        if (route === 'home') return await viewHome2();
+        if (route === 'home') return await viewHomeV2();
+        if (route === 'analytics') return await viewAnalytics(arg);
+        if (route === 'inbox') return await viewInbox(arg);
+        if (route === 'pipeline') return await viewPipeline();
+        if (route === 'clients') return await viewClients();
+        if (route === 'deals') return await viewDealsV2();
+        if (route === 'landing') return await viewLanding();
+        if (route === 'contracts') return await viewContracts();
+        if (route === 'tasks') return await viewTasks();
+        if (route === 'workflows') return viewWorkflows();
+        if (route === 'settings') return await viewSettings();
         if (route === 'finder') return await viewFinder();
         if (route === 'calendar') return await viewCalendar();
         if (route === 'content') return await viewPostContent();
@@ -1115,7 +1450,6 @@
           location.hash = '#/leads/calls'; return;
         }
         if (route === 'lead') return await viewLead(+arg);
-        if (route === 'deals') { location.hash = '#/leads/sales'; return; }
         if (route === 'script') { location.hash = '#/leads/script'; return; }
         if (route === 'callbacks') { LV.by = LV.by || {}; LV.by.calls = 'callback'; location.hash = '#/leads/calls'; return; }
         if (route === 'studio') { if (arg === 'made') return await viewMyDemos(); if (+arg) return await viewStudio(+arg); if (arg === 'build') return await viewStudio(null); return viewStudioHome(); }
